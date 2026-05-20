@@ -5,4 +5,5 @@ export * from "./bytes";
 export * from "./analyze";
 export * from "./analyze-utils";
 export * from "./decode-source";
+export * from "./encode-avif";
 export * from "./convert";

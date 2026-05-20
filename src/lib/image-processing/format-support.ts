@@ -26,18 +26,18 @@ export function extensionForFormat(format: ImageFormat): string {
   return format === "jpeg" ? "jpg" : format;
 }
 
+/** AVIF export uses WASM (libavif), not canvas.toBlob. */
+export const AVIF_VIA_WASM = true;
+
 export async function detectFormatSupport(): Promise<Record<ImageFormat, boolean>> {
   if (typeof document === "undefined") {
     return { avif: false, webp: true, png: true, jpeg: true };
   }
 
-  const [avif, webp] = await Promise.all([
-    canEncode("image/avif"),
-    canEncode("image/webp"),
-  ]);
+  const webp = await canEncodeCanvas("image/webp");
 
   return {
-    avif,
+    avif: true,
     webp,
     png: true,
     jpeg: true,
@@ -48,7 +48,7 @@ function mimeBase(m: string): string {
   return m.split(";")[0].trim().toLowerCase();
 }
 
-async function canEncode(mime: string): Promise<boolean> {
+async function canEncodeCanvas(mime: string): Promise<boolean> {
   try {
     const canvas = document.createElement("canvas");
     canvas.width = 2;

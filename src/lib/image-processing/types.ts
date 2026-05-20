@@ -33,6 +33,8 @@ export interface ConversionResult {
   compressionRatio: number;
   processingMs: number;
   transcodedFromHeic?: boolean;
+  /** True when AVIF was produced via libavif WASM rather than canvas. */
+  encodedWithWasm?: boolean;
 }
 
 export interface ImageAnalysis {

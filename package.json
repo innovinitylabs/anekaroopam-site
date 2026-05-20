@@ -4,11 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
+    "@jsquash/avif": "^2.1.1",
     "framer-motion": "^12.39.0",
     "heic2any": "^0.0.4",
     "next": "16.2.6",

@@ -1,12 +1,15 @@
 /**
- * AVIF encoding surface — browser-native via Canvas / OffscreenCanvas.
- * Server-side sharp integration can be added here for API routes.
+ * AVIF encoding — cross-browser via libavif WebAssembly (@jsquash/avif).
+ * Canvas toBlob AVIF is only used as a decode/display path elsewhere.
  */
 
 import { detectFormatSupport, mimeForFormat } from "@/lib/image-processing/format-support";
+import { encodeAvifWasm } from "@/lib/image-processing/encode-avif";
 
-export { detectFormatSupport, mimeForFormat };
+export { detectFormatSupport, mimeForFormat, encodeAvifWasm };
 
 export function isAvifSupported(): Promise<boolean> {
-  return detectFormatSupport().then((s) => s.avif);
+  return typeof document === "undefined"
+    ? Promise.resolve(false)
+    : detectFormatSupport().then((s) => s.avif);
 }

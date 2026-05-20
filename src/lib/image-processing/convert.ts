@@ -1,3 +1,5 @@
+"use client";
+
 import type { ConversionOptions, ConversionResult, ImageFormat } from "./types";
 import { blobToDataUrl, compressionRatio } from "./bytes";
 import { buildStatsFromBlob } from "./analyze";
@@ -7,6 +9,7 @@ import {
   mimeForFormat,
 } from "./format-support";
 import { decodeImageSource } from "./decode-source";
+import { encodeAvifWasm } from "./encode-avif";
 import type { WorkerRequest, WorkerResponse } from "./conversion.worker";
 
 const WORKER_THRESHOLD_PIXELS = 1_500_000;
@@ -129,12 +132,31 @@ async function convertInWorker(
   });
 }
 
+async function encodeRaster(
+  img: HTMLImageElement,
+  options: ConversionOptions,
+): Promise<{ blob: Blob; width: number; height: number; mimeType: string }> {
+  if (options.format === "avif") {
+    return encodeAvifWasm(img, options);
+  }
+
+  const pixels = img.naturalWidth * img.naturalHeight;
+  if (pixels > WORKER_THRESHOLD_PIXELS) {
+    try {
+      return await convertInWorker(img, options);
+    } catch {
+      return encodeOnCanvas(img, options);
+    }
+  }
+  return encodeOnCanvas(img, options);
+}
+
 async function resolveOutputFormat(
   requested: ImageFormat,
   support: Record<ImageFormat, boolean>,
 ): Promise<ImageFormat> {
+  if (requested === "avif") return "avif";
   if (support[requested]) return requested;
-  if (requested === "avif" && support.webp) return "webp";
   return "png";
 }
 
@@ -153,21 +175,8 @@ export async function convertImage(
 
   const decoded = await decodeImageSource(source);
   const img = await loadImageElement(decoded.dataUrl);
-  const pixels = img.naturalWidth * img.naturalHeight;
 
-  let encoded: { blob: Blob; width: number; height: number; mimeType: string };
-  try {
-    encoded =
-      pixels > WORKER_THRESHOLD_PIXELS
-        ? await convertInWorker(img, encodeOptions)
-        : await encodeOnCanvas(img, encodeOptions);
-  } catch (workerErr) {
-    if (pixels > WORKER_THRESHOLD_PIXELS) {
-      encoded = await encodeOnCanvas(img, encodeOptions);
-    } else {
-      throw workerErr;
-    }
-  }
+  const encoded = await encodeRaster(img, encodeOptions);
 
   const actualFormat =
     formatFromMime(encoded.mimeType) ?? encodeOptions.format;
@@ -190,6 +199,7 @@ export async function convertImage(
     compressionRatio: compressionRatio(originalSize, encoded.blob.size),
     processingMs: Math.round(performance.now() - start),
     transcodedFromHeic: decoded.decodedViaTranscode,
+    encodedWithWasm: outputFormat === "avif",
   };
 }
 

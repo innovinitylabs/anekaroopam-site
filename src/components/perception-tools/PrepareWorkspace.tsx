@@ -435,14 +435,10 @@ export function PrepareWorkspace() {
                         </option>
                       ))}
                     </select>
-                    {analysis && !analysis.formatSupport.avif && (
-                      <p className="mt-2 text-[0.65rem] leading-relaxed text-[var(--muted)]">
-                        AVIF encoding is not available in this browser (Safari and
-                        Firefox often lack it). Encoding uses the canvas API, so
-                        Chromium-based browsers such as Chrome or Edge support AVIF
-                        export. WebP is used as the fallback when you pick AVIF.
-                      </p>
-                    )}
+                    <p className="mt-2 text-[0.65rem] leading-relaxed text-[var(--muted)]">
+                      AVIF uses libavif (WebAssembly) and works across Safari,
+                      Firefox, and Chromium. Large images may take longer to encode.
+                    </p>
                   </label>
                   <label className="block">
                     <span className="flex justify-between text-[0.62rem] tracking-[0.16em] uppercase text-[var(--muted)]">
@@ -581,7 +577,15 @@ export function PrepareWorkspace() {
                         ? [
                             {
                               label: "Note",
-                              value: `${converted.requestedFormat.toUpperCase()} unavailable; encoded as ${converted.format.toUpperCase()}`,
+                              value: `Requested ${converted.requestedFormat.toUpperCase()}; encoded as ${converted.format.toUpperCase()}`,
+                            },
+                          ]
+                        : []),
+                      ...(converted.encodedWithWasm
+                        ? [
+                            {
+                              label: "Encoder",
+                              value: "libavif (WASM)",
                             },
                           ]
                         : []),
