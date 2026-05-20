@@ -14,9 +14,9 @@ const HOVER_DELAY_MS = 120;
 const LATIN_ROTATE_OUT = -22;
 const TAMIL_ROTATE_IN = 24;
 
-/** Tamil only: Anek Tamil, optical size/spacing (Latin has no transform in idle state). */
+/** Tamil only: Anek Tamil, optical weight/spacing (Latin has no idle transform). */
 const tamilGlyphClass =
-  "font-anek-tamil font-medium leading-none pr-[0.12em]";
+  "font-anek-tamil font-semibold leading-none";
 
 type AnekaroopamWordmarkProps = {
   className?: string;
@@ -24,7 +24,7 @@ type AnekaroopamWordmarkProps = {
 
 /**
  * Identity wordmark: leading Latin "A" shifts to Tamil "அ" (Anek Tamil) on hover.
- * Fixed-width stack keeps Tamil metrics out of the line box; Latin reads as normal serif until transition.
+ * Hybrid stack: Latin A stays in normal text flow; Tamil appears as an overlay only during interaction.
  */
 export function AnekaroopamWordmark({ className }: AnekaroopamWordmarkProps) {
   const [hovered, setHovered] = useState(false);
@@ -80,18 +80,18 @@ export function AnekaroopamWordmark({ className }: AnekaroopamWordmarkProps) {
 
   return (
     <span
-      className={cn("inline-flex items-center leading-none", className)}
+      className={cn("inline-flex items-baseline leading-none", className)}
       onMouseEnter={onPointerEnter}
       onMouseLeave={onPointerLeave}
       onFocus={onFocus}
       onBlur={onBlur}
     >
       <span
-        className="wordmark-initial relative inline-block h-[1em] w-[1.1em] shrink-0 overflow-visible leading-none"
+        className="wordmark-initial relative inline-block shrink-0 overflow-visible leading-none"
         aria-hidden
       >
         <motion.span
-          className="latin-a absolute bottom-0 left-0 z-10 origin-bottom-left leading-none"
+          className="latin-a relative z-10 inline-block origin-bottom-left leading-none"
           initial={false}
           animate={{
             opacity: showTamil ? 0 : 1,
@@ -116,13 +116,15 @@ export function AnekaroopamWordmark({ className }: AnekaroopamWordmarkProps) {
           animate={{
             opacity: showTamil ? 1 : 0,
             rotate: reduceMotion ? 0 : showTamil ? 0 : TAMIL_ROTATE_IN,
-            scale: 1.08,
-            x: reduceMotion ? 0 : showTamil ? 0 : -2,
+            scaleX: 1.12,
+            scaleY: 1.08,
+            x: reduceMotion ? 0 : showTamil ? -0.5 : -2,
             y: 1,
           }}
           transition={{
             rotate: rotationTransition,
-            scale: rotationTransition,
+            scaleX: rotationTransition,
+            scaleY: rotationTransition,
             x: rotationTransition,
             y: rotationTransition,
             opacity: tamilOpacityTransition,
@@ -132,9 +134,15 @@ export function AnekaroopamWordmark({ className }: AnekaroopamWordmarkProps) {
         </motion.span>
       </span>
 
-      <span className="leading-none" aria-hidden>
+      <motion.span
+        className="leading-none will-change-transform"
+        aria-hidden
+        initial={false}
+        animate={{ x: reduceMotion ? 0 : showTamil ? 2 : 0 }}
+        transition={rotationTransition}
+      >
         {REST}
-      </span>
+      </motion.span>
     </span>
   );
 }
