@@ -1,36 +1,56 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Anekaroopam
 
-## Getting Started
+A contemplative digital art platform for multistable figurative emergence — archival, rotational, and participatory.
 
-First, run the development server:
+## Stack
+
+- Next.js 16 (App Router)
+- React 19
+- TypeScript
+- Tailwind CSS 4
+- Framer Motion
+
+## Development
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) for the public site.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The **Orientation System** (Perception Engine) lives at `/perceive` locally, or `perceive.anekaroopam.art` in production (subdomain rewrite via `src/middleware.ts`).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Structure
 
-## Learn More
+```
+src/
+  app/
+    (site)/          Public website pages
+    perceive/        Configurational interface
+  components/
+    perception/      Perception Engine UI
+    site/            Museum-like site chrome
+  lib/
+    perception/      Core engine (types, rotation, export)
+    content/         Archive data and writings
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Perception Engine
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- Import high-resolution artwork
+- Define perceptual states (angle, name, caption)
+- Snap-to-state or free rotation
+- Export standalone offline HTML (base64 image, embedded behavior)
+- Export JSON configuration for future integrations
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Deployment
 
-## Deploy on Vercel
+Deploy to Vercel with:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- Primary domain: `anekaroopam.art`
+- Subdomain: `perceive.anekaroopam.art` → same project (middleware handles routing)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## License
+
+Private / all rights reserved unless otherwise specified.

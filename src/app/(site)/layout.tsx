@@ -1,0 +1,17 @@
+import { SiteNav } from "@/components/site/SiteNav";
+import { SiteFooter } from "@/components/site/SiteFooter";
+
+export default function SiteLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <>
+      <div className="grain" aria-hidden />
+      <SiteNav />
+      <main className="flex-1 pt-24">{children}</main>
+      <SiteFooter />
+    </>
+  );
+}
