@@ -8,11 +8,12 @@ import { cn } from "@/lib/utils";
 
 const REST = BRAND.name.slice(1);
 const EASE = [0.33, 1, 0.38, 1] as const;
-const DURATION = 0.4;
+const DURATION = 0.42;
 const HOVER_DELAY_MS = 120;
 
+/** Optical tuning for Tamil only — Latin A has no transform. */
 const tamilGlyphClass =
-  "font-anek-tamil font-medium translate-y-[0.04em] scale-[1.1] leading-none";
+  "font-anek-tamil font-medium leading-none pr-[0.06em] -translate-y-[0.04em] scale-[1.08]";
 
 type AnekaroopamWordmarkProps = {
   className?: string;
@@ -27,7 +28,7 @@ export function AnekaroopamWordmark({ className }: AnekaroopamWordmarkProps) {
   const reduceMotion = useReducedMotion();
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const showTamil = hovered && !reduceMotion;
+  const showTamil = hovered;
 
   const clearHoverTimer = useCallback(() => {
     if (hoverTimer.current) {
@@ -58,55 +59,54 @@ export function AnekaroopamWordmark({ className }: AnekaroopamWordmarkProps) {
 
   useEffect(() => () => clearHoverTimer(), [clearHoverTimer]);
 
-  const transition = {
-    duration: DURATION,
+  const fade = {
+    duration: reduceMotion ? 0 : DURATION,
     ease: EASE,
   };
 
   return (
     <span
-      className={cn("inline-flex items-baseline", className)}
+      className={cn("inline-flex items-baseline leading-none", className)}
       onMouseEnter={onPointerEnter}
       onMouseLeave={onPointerLeave}
       onFocus={onFocus}
       onBlur={onBlur}
     >
-      <span
-        className="relative inline-flex h-[1em] w-[0.92em] shrink-0 items-center justify-center"
-        aria-hidden
-      >
+      <span className="wordmark-initial relative inline-block shrink-0 align-baseline leading-none">
+        <span
+          className={cn("invisible inline-block", tamilGlyphClass)}
+          aria-hidden
+        >
+          {BRAND.tamilInitial}
+        </span>
+
         <motion.span
-          className="absolute inset-0 flex items-center justify-center will-change-[opacity,transform]"
+          className="latin-a absolute bottom-0 left-0 leading-none"
+          aria-hidden
           initial={false}
-          animate={{
-            opacity: showTamil ? 0 : 1,
-            rotate: showTamil ? -5 : 0,
-            scale: showTamil ? 0.97 : 1,
-          }}
-          transition={transition}
+          animate={{ opacity: showTamil ? 0 : 1 }}
+          transition={fade}
         >
           {BRAND.latinInitial}
         </motion.span>
+
         <motion.span
           className={cn(
-            "absolute inset-0 flex items-center justify-center will-change-[opacity,transform]",
+            "tamil-a absolute bottom-0 left-0 leading-none will-change-[opacity]",
             tamilGlyphClass,
           )}
+          aria-hidden
           initial={false}
-          animate={{
-            opacity: showTamil ? 1 : 0,
-            rotate: showTamil ? 0 : 4,
-            scale: showTamil ? 1 : 0.94,
-          }}
-          transition={transition}
+          animate={{ opacity: showTamil ? 1 : 0 }}
+          transition={fade}
         >
           {BRAND.tamilInitial}
         </motion.span>
-        <span className={cn("invisible", tamilGlyphClass)} aria-hidden>
-          {BRAND.tamilInitial}
-        </span>
       </span>
-      <span aria-hidden>{REST}</span>
+
+      <span className="leading-none" aria-hidden>
+        {REST}
+      </span>
     </span>
   );
 }
