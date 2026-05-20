@@ -39,7 +39,7 @@ export default function ArchivePage() {
 
   return (
     <div className="mx-auto max-w-6xl px-6 pb-24 md:px-10">
-      <FadeIn>
+      <FadeIn className="paper-depth pb-8">
         <p className="text-[0.62rem] tracking-[0.28em] uppercase text-[var(--muted)]">
           Archive
         </p>

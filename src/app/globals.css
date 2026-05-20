@@ -6,13 +6,16 @@
   --ink: #1a1814;
   --muted: #8a8478;
   --border: rgba(26, 24, 20, 0.12);
-  --surface: #f8f6f1;
+  --surface: rgba(248, 244, 236, 0.62);
   --surface-elevated: #faf8f4;
   --mount: #f3efe8;
   --mount-edge: rgba(42, 38, 32, 0.09);
   --accent: #5c564c;
   --background: var(--paper);
   --foreground: var(--ink);
+  --paper-fiber-opacity: 0.024;
+  --paper-scan-opacity: 0.038;
+  --paper-tone-opacity: 0.52;
 }
 
 @theme inline {
@@ -36,7 +39,7 @@
   box-sizing: border-box;
 }
 
-/* Procedural archival paper — museum rag, ultra-low contrast */
+/* Archival paper material system — layered, museum rag */
 html {
   scroll-behavior: smooth;
   min-height: 100%;
@@ -44,7 +47,8 @@ html {
 }
 
 html::before,
-html::after {
+html::after,
+body::before {
   content: "";
   position: fixed;
   inset: 0;
@@ -52,35 +56,76 @@ html::after {
   pointer-events: none;
 }
 
-/* Diffuse gallery light + soft tonal irregularity */
+/* Cloudy tonal pooling + diffuse conservation lighting */
 html::before {
-  opacity: 0.38;
+  opacity: var(--paper-tone-opacity);
   background:
     radial-gradient(
-      ellipse 130% 95% at 14% 10%,
-      rgba(255, 251, 245, 0.38) 0%,
-      transparent 58%
+      ellipse 140% 100% at 10% 6%,
+      rgba(255, 252, 246, 0.45) 0%,
+      transparent 56%
     ),
     radial-gradient(
-      ellipse 100% 80% at 88% 82%,
-      rgba(230, 222, 208, 0.22) 0%,
-      transparent 54%
+      ellipse 110% 85% at 92% 88%,
+      rgba(224, 216, 200, 0.28) 0%,
+      transparent 52%
     ),
     radial-gradient(
-      ellipse 70% 55% at 48% 42%,
-      rgba(248, 243, 235, 0.1) 0%,
-      transparent 72%
+      ellipse 85% 65% at 62% 38%,
+      rgba(238, 232, 220, 0.18) 0%,
+      transparent 68%
+    ),
+    radial-gradient(
+      ellipse 60% 45% at 28% 72%,
+      rgba(210, 218, 222, 0.08) 0%,
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 50% 40% at 75% 25%,
+      rgba(245, 238, 228, 0.14) 0%,
+      transparent 65%
     );
 }
 
-/* Cotton-fiber grain (procedural SVG, non-directional) */
-html::after {
-  opacity: 0.013;
+/* Hybrid microtexture: organic scan tile + procedural fiber */
+body::before {
+  opacity: var(--paper-scan-opacity);
   mix-blend-mode: multiply;
   background-image:
-    url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.68' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23f)'/%3E%3C/svg%3E"),
-    url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='c'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.28' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23c)'/%3E%3C/svg%3E");
-  background-size: 460px 460px, 720px 720px;
+    url("/textures/archival-micro.svg"),
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23f)'/%3E%3C/svg%3E");
+  background-size: 420px 420px, 500px 500px;
+  -webkit-mask-image: var(--paper-material-mask);
+  mask-image: var(--paper-material-mask);
+}
+
+html::after {
+  opacity: var(--paper-fiber-opacity);
+  mix-blend-mode: multiply;
+  background-image:
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='c'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.22' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23c)'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='m'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23m)'/%3E%3C/svg%3E");
+  background-size: 640px 640px, 880px 880px;
+  -webkit-mask-image: var(--paper-material-mask);
+  mask-image: var(--paper-material-mask);
+}
+
+/* Softer material under dense text; stronger in margins and open field */
+:root {
+  --paper-material-mask:
+    radial-gradient(
+      ellipse 72% 58% at 50% 46%,
+      rgba(0, 0, 0, 0.42) 0%,
+      rgba(0, 0, 0, 0.78) 55%,
+      rgba(0, 0, 0, 1) 100%
+    ),
+    linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0.95) 0%,
+      rgba(0, 0, 0, 0.55) 18%,
+      rgba(0, 0, 0, 0.5) 82%,
+      rgba(0, 0, 0, 0.92) 100%
+    );
 }
 
 body {
@@ -91,6 +136,7 @@ body {
   font-family: var(--font-source-serif), Georgia, "Times New Roman", serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  text-shadow: 0 0.35px 0 rgba(26, 24, 20, 0.035);
 }
 
 ::selection {
@@ -109,6 +155,38 @@ body {
 
 .prose-anek p + p {
   margin-top: 1.25rem;
+}
+
+/* Extra material depth in open negative space (hero, footer) */
+.paper-depth {
+  position: relative;
+  isolation: isolate;
+}
+
+.paper-depth::before {
+  content: "";
+  position: absolute;
+  inset: -12%;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.55;
+  mix-blend-mode: multiply;
+  background:
+    radial-gradient(
+      ellipse 90% 70% at 50% 30%,
+      rgba(232, 224, 210, 0.14) 0%,
+      transparent 62%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 20% 80%,
+      rgba(218, 212, 200, 0.1) 0%,
+      transparent 58%
+    );
+}
+
+.paper-depth > * {
+  position: relative;
+  z-index: 1;
 }
 
 /* Archival mounting surface for catalogued artworks */
@@ -130,9 +208,12 @@ body {
   pointer-events: none;
   position: absolute;
   inset: 0;
-  opacity: 0.022;
+  opacity: 0.028;
   mix-blend-mode: multiply;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-image:
+    url("/textures/archival-micro.svg"),
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.88' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 320px 320px, 400px 400px;
 }
 
 /* Dark perception workspace — matte surface, minimal cool grain */
@@ -153,8 +234,8 @@ body {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  opacity: 0.012;
+  opacity: 0.018;
   mix-blend-mode: soft-light;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='d'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23d)'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='d'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23d)'/%3E%3C/svg%3E");
   background-size: 520px 520px;
 }

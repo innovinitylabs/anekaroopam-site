@@ -3,7 +3,7 @@ import { BrandLogo } from "@/components/site/BrandLogo";
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-[var(--border)] px-6 py-12 md:px-10">
+    <footer className="paper-depth border-t border-[var(--border)] px-6 py-12 md:px-10">
       <div className="mx-auto flex max-w-6xl flex-col gap-8 md:flex-row md:items-end md:justify-between">
         <div>
           <BrandLogo href="/" size="sm" showWordmark />

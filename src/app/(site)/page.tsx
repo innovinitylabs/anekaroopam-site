@@ -5,7 +5,7 @@ import { FadeIn } from "@/components/site/FadeIn";
 export default function HomePage() {
   return (
     <div className="relative min-h-[calc(100vh-6rem)]">
-      <section className="mx-auto flex min-h-[85vh] max-w-6xl flex-col justify-center px-6 pb-24 md:px-10">
+      <section className="paper-depth mx-auto flex min-h-[85vh] max-w-6xl flex-col justify-center px-6 pb-24 md:px-10">
         <FadeIn>
           <BrandLogo
             href="/"
