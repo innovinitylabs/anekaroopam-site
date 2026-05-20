@@ -113,8 +113,8 @@ export function OrientationEditor() {
   };
 
   return (
-    <div className="flex h-[100dvh] w-full flex-col lg:flex-row">
-      <div className="relative min-h-[55vh] flex-1 lg:min-h-0">
+    <div className="flex h-full min-h-0 w-full flex-col lg:flex-row">
+      <div className="relative min-h-0 flex-1">
         {artwork.imageSrc ? (
           <PerceptionCanvas
             artwork={{
@@ -135,11 +135,13 @@ export function OrientationEditor() {
       </div>
 
       <aside
-        className={`border-t border-[var(--border)] bg-[var(--surface)] transition-all duration-500 lg:w-[22rem] lg:border-t-0 lg:border-l ${
-          panelVisible ? "max-h-[45vh] opacity-100" : "max-h-0 overflow-hidden opacity-0 lg:max-h-none lg:opacity-100"
+        className={`flex flex-col border-t border-[var(--border)] bg-[var(--surface)] transition-all duration-500 lg:h-full lg:w-[22rem] lg:shrink-0 lg:overflow-hidden lg:border-t-0 lg:border-l ${
+          panelVisible
+            ? "min-h-0 flex-1 opacity-100"
+            : "max-h-0 overflow-hidden opacity-0 lg:max-h-none lg:opacity-100"
         }`}
       >
-        <div className="h-full overflow-y-auto p-6 text-sm">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6 text-sm">
           <header className="mb-8">
             <p className="text-[0.62rem] tracking-[0.24em] uppercase text-[var(--muted)]">
               Orientation System

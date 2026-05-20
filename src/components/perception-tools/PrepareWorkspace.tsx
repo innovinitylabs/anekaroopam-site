@@ -157,7 +157,7 @@ export function PrepareWorkspace() {
   };
 
   return (
-    <div className="min-h-[100dvh] pt-20 pb-16">
+    <div className="h-full min-h-0 pb-8">
       <div className="mx-auto max-w-6xl px-6 md:px-10">
         <header className="mb-12 border-b border-[var(--border)] pb-8">
           <p className="text-[0.62rem] tracking-[0.28em] uppercase text-[var(--muted)]">

@@ -13,9 +13,9 @@ export default function PerceiveLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="perceive-theme min-h-[100dvh] bg-[var(--background)] text-[var(--foreground)]">
+    <div className="perceive-theme flex h-[100dvh] flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
       <PerceiveHeader />
-      {children}
+      <div className="min-h-0 flex-1">{children}</div>
     </div>
   );
 }

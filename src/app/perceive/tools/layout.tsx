@@ -6,8 +6,8 @@ export default function ToolsLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="perceive-theme min-h-[100dvh] bg-[var(--background)] text-[var(--foreground)]">
-      <header className="fixed top-0 z-50 flex w-full items-center justify-between border-b border-[var(--border)] bg-[var(--background)]/90 px-6 py-4 backdrop-blur-sm">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <header className="flex w-full shrink-0 items-center justify-between border-b border-[var(--border)] px-6 py-3">
         <nav className="flex items-center gap-6 text-[0.62rem] tracking-[0.18em] uppercase">
           <Link href="/perceive" className="opacity-50 hover:opacity-90">
             Orient
@@ -16,11 +16,14 @@ export default function ToolsLayout({
             Prepare
           </Link>
         </nav>
-        <Link href="/" className="text-[0.62rem] tracking-[0.18em] uppercase opacity-40 hover:opacity-80">
+        <Link
+          href="/"
+          className="text-[0.62rem] tracking-[0.18em] uppercase opacity-40 hover:opacity-80"
+        >
           Anekaroopam
         </Link>
       </header>
-      {children}
+      <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
     </div>
   );
 }
