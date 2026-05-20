@@ -27,14 +27,16 @@ export const metadata: Metadata = {
     siteName: "Anekaroopam",
     locale: "en_US",
     type: "website",
-    images: [{ url: BRAND.mark, width: 1200, height: 1200, alt: "Anekaroopam" }],
+    images: [
+      { url: BRAND.markLight, width: 1200, height: 1200, alt: "Anekaroopam" },
+    ],
   },
   icons: {
     icon: [
       { url: BRAND.favicon, sizes: "any" },
       { url: BRAND.svg, type: "image/svg+xml" },
     ],
-    apple: BRAND.mark,
+    apple: BRAND.markLight,
     shortcut: BRAND.favicon,
   },
 };

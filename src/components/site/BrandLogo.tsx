@@ -1,73 +1,70 @@
-import Image from "next/image";
+"use client";
+
 import Link from "next/link";
-import { BRAND } from "@/lib/brand";
+import { RotatingBrandMark } from "@/components/site/RotatingBrandMark";
+import { BRAND, type BrandTheme } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 
 type BrandLogoProps = {
   href?: string;
   showWordmark?: boolean;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
+  theme?: BrandTheme;
+  animated?: boolean;
   className?: string;
   wordmarkClassName?: string;
   priority?: boolean;
 };
 
-const markHeights = {
-  sm: 28,
-  md: 36,
-  lg: 52,
-} as const;
-
 export function BrandLogo({
   href = "/",
   showWordmark = true,
   size = "md",
+  theme = "light",
+  animated = false,
   className,
   wordmarkClassName,
   priority = false,
 }: BrandLogoProps) {
-  const height = markHeights[size];
-  const width = Math.round(height * 1.15);
+  const wrapperClass = cn("inline-flex items-center gap-2.5", className);
 
-  const content = (
-    <>
-      <Image
-        src={BRAND.mark}
-        alt=""
-        width={width}
-        height={height}
+  return (
+    <div className={wrapperClass}>
+      <RotatingBrandMark
+        theme={theme}
+        size={size}
+        animated={animated}
         priority={priority}
-        className="h-auto w-auto shrink-0 object-contain"
-        style={{ height, width: "auto", maxWidth: width * 1.4 }}
       />
-      {showWordmark && (
-        <span
-          className={cn(
-            "font-display tracking-[0.12em] uppercase",
-            size === "sm" && "text-sm",
-            size === "md" && "text-lg",
-            size === "lg" && "text-2xl",
-            wordmarkClassName,
-          )}
-        >
-          {BRAND.name}
-        </span>
-      )}
-    </>
+      {showWordmark &&
+        (href ? (
+          <Link
+            href={href}
+            className={cn(
+              "font-display tracking-[0.12em] uppercase transition-opacity hover:opacity-85",
+              size === "sm" && "text-sm",
+              size === "md" && "text-lg",
+              size === "lg" && "text-2xl",
+              size === "xl" && "text-2xl",
+              wordmarkClassName,
+            )}
+          >
+            {BRAND.name}
+          </Link>
+        ) : (
+          <span
+            className={cn(
+              "font-display tracking-[0.12em] uppercase",
+              size === "sm" && "text-sm",
+              size === "md" && "text-lg",
+              size === "lg" && "text-2xl",
+              size === "xl" && "text-2xl",
+              wordmarkClassName,
+            )}
+          >
+            {BRAND.name}
+          </span>
+        ))}
+    </div>
   );
-
-  const wrapperClass = cn(
-    "inline-flex items-center gap-2.5 transition-opacity hover:opacity-85",
-    className,
-  );
-
-  if (href) {
-    return (
-      <Link href={href} className={wrapperClass} aria-label={`${BRAND.name} home`}>
-        {content}
-      </Link>
-    );
-  }
-
-  return <div className={wrapperClass}>{content}</div>;
 }

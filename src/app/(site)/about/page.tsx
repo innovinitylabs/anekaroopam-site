@@ -1,6 +1,5 @@
-import Image from "next/image";
 import { FadeIn } from "@/components/site/FadeIn";
-import { BRAND } from "@/lib/brand";
+import { RotatingBrandMark } from "@/components/site/RotatingBrandMark";
 
 export const metadata = { title: "About" };
 
@@ -17,16 +16,11 @@ export default function AboutPage() {
       </FadeIn>
       <FadeIn delay={0.08}>
         <div className="mt-12 flex items-center gap-6 border-y border-[var(--border)] py-10">
-          <Image
-            src={BRAND.mark}
-            alt="Valipokkann mark"
-            width={120}
-            height={104}
-            className="h-24 w-auto object-contain"
-          />
+          <RotatingBrandMark theme="light" size="xl" />
           <p className="text-[0.75rem] leading-relaxed text-[var(--muted)]">
             Studio mark of Valipokkann — line evolution, rotational discovery,
-            and the Valiroopam process behind this archive.
+            and the Valiroopam process behind this archive. Click the mark to
+            change orientation.
           </p>
         </div>
       </FadeIn>
