@@ -44,6 +44,10 @@ export async function detectFormatSupport(): Promise<Record<ImageFormat, boolean
   };
 }
 
+function mimeBase(m: string): string {
+  return m.split(";")[0].trim().toLowerCase();
+}
+
 async function canEncode(mime: string): Promise<boolean> {
   try {
     const canvas = document.createElement("canvas");
@@ -58,7 +62,7 @@ async function canEncode(mime: string): Promise<boolean> {
       canvas.toBlob(resolve, mime, 0.5),
     );
     if (!blob || blob.size === 0) return false;
-    if (blob.type && blob.type !== mime) return false;
+    if (blob.type && mimeBase(blob.type) !== mimeBase(mime)) return false;
     return true;
   } catch {
     return false;

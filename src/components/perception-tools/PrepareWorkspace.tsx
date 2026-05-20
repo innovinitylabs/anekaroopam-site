@@ -435,6 +435,14 @@ export function PrepareWorkspace() {
                         </option>
                       ))}
                     </select>
+                    {analysis && !analysis.formatSupport.avif && (
+                      <p className="mt-2 text-[0.65rem] leading-relaxed text-[var(--muted)]">
+                        AVIF encoding is not available in this browser (Safari and
+                        Firefox often lack it). Encoding uses the canvas API, so
+                        Chromium-based browsers such as Chrome or Edge support AVIF
+                        export. WebP is used as the fallback when you pick AVIF.
+                      </p>
+                    )}
                   </label>
                   <label className="block">
                     <span className="flex justify-between text-[0.62rem] tracking-[0.16em] uppercase text-[var(--muted)]">
