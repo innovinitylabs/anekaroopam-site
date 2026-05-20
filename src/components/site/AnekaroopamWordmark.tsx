@@ -78,6 +78,12 @@ export function AnekaroopamWordmark({ className }: AnekaroopamWordmarkProps) {
     ease: WHEEL_EASE,
   };
 
+  const restWeightTransition = {
+    duration: reduceMotion ? 0.08 : showTamil ? 0.32 : 0.24,
+    delay: reduceMotion || !showTamil ? 0 : 0.14,
+    ease: WHEEL_EASE,
+  };
+
   return (
     <span
       className={cn("inline-flex items-baseline leading-none", className)}
@@ -133,11 +139,20 @@ export function AnekaroopamWordmark({ className }: AnekaroopamWordmarkProps) {
       </span>
 
       <motion.span
-        className="leading-none will-change-transform"
+        className="leading-none will-change-[transform,font-weight]"
         aria-hidden
         initial={false}
-        animate={{ x: reduceMotion ? 0 : showTamil ? 3 : 0 }}
-        transition={wheelTransition}
+        animate={{
+          x: reduceMotion ? 0 : showTamil ? 3 : 0,
+          fontWeight: showTamil ? 600 : 400,
+        }}
+        transition={{
+          x: {
+            ...wheelTransition,
+            delay: reduceMotion || !showTamil ? 0 : 0.14,
+          },
+          fontWeight: restWeightTransition,
+        }}
       >
         {REST}
       </motion.span>
