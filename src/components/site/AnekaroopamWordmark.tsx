@@ -24,7 +24,7 @@ type AnekaroopamWordmarkProps = {
 /**
  * Identity wordmark: leading Latin "A" shifts to Tamil "அ" (Anek Tamil) on hover.
  * Hybrid stack: Latin A stays in normal text flow; Tamil overlays on hover with a
- * bottom-pivot in-plane rotation (wheel-like), not a front/back flip.
+ * center-pivot in-plane rotation (wheel-like), not a front/back flip.
  */
 export function AnekaroopamWordmark({ className }: AnekaroopamWordmarkProps) {
   const [hovered, setHovered] = useState(false);
@@ -91,7 +91,7 @@ export function AnekaroopamWordmark({ className }: AnekaroopamWordmarkProps) {
         aria-hidden
       >
         <motion.span
-          className="latin-a relative z-10 inline-block origin-[50%_100%] leading-none"
+          className="latin-a relative z-10 inline-block origin-center leading-none"
           initial={false}
           animate={{
             opacity: showTamil ? 0 : 1,
@@ -105,10 +105,10 @@ export function AnekaroopamWordmark({ className }: AnekaroopamWordmarkProps) {
           {BRAND.latinInitial}
         </motion.span>
 
-        <span className="tamil-a absolute bottom-0 left-1/2 z-20 -translate-x-1/2 leading-none">
+        <span className="tamil-a absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 leading-none">
           <motion.span
             className={cn(
-              "inline-block origin-[50%_100%] will-change-transform",
+              "inline-block origin-center will-change-transform",
               tamilGlyphClass,
             )}
             initial={false}
