@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
 import type { PerceptualState, PerceptionArtwork } from "@/lib/perception/types";
 import { DisplayTitle } from "@/components/site/DisplayTitle";
@@ -9,6 +10,11 @@ import {
   stateOverlayLines,
 } from "@/lib/perception/display";
 import { hasTamilScript } from "@/lib/typography/tamil";
+import {
+  advancedMetadataEntries,
+  hasAdvancedMetadata,
+  primaryOverlayDetails,
+} from "@/lib/perception/metadata";
 
 interface PerceptionMetadataProps {
   artwork: PerceptionArtwork;
@@ -23,24 +29,25 @@ export function PerceptionMetadata({
   visible,
   foreground,
 }: PerceptionMetadataProps) {
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
   const fields = artwork.overlayFields ?? {
     title: true,
     year: true,
     process: true,
     state: true,
     caption: true,
+    advanced: true,
   };
 
   const title = displayTitle(artwork.metadata.title);
   const { primary, secondary } = stateOverlayLines(activeState);
 
-  const details: string[] = [];
-  if (fields.year && artwork.metadata.year) {
-    details.push(String(artwork.metadata.year));
-  }
-  if (fields.process && artwork.metadata.process) {
-    details.push(artwork.metadata.process);
-  }
+  const details = primaryOverlayDetails(artwork.metadata, fields);
+
+  const advanced = fields.advanced !== false
+    ? advancedMetadataEntries(artwork.metadata)
+    : [];
 
   const showState = fields.state && primary;
   const showCaption =
@@ -76,6 +83,32 @@ export function PerceptionMetadata({
         <p className="mt-2 text-[0.68rem] tracking-[0.14em] uppercase opacity-55">
           {details.join(" · ")}
         </p>
+      )}
+      {advanced.length > 0 && hasAdvancedMetadata(artwork.metadata) && (
+        <div className="pointer-events-auto mt-4 max-w-md">
+          <button
+            type="button"
+            onClick={() => setAdvancedOpen((o) => !o)}
+            className="flex w-full items-center gap-2 text-[0.58rem] tracking-[0.18em] uppercase opacity-45 transition-opacity hover:opacity-70"
+          >
+            <span className="h-px flex-1 bg-current opacity-30" />
+            <span className={advancedOpen ? "rotate-180" : ""}>⌄</span>
+            <span>Archival record</span>
+            <span className="h-px flex-1 bg-current opacity-30" />
+          </button>
+          {advancedOpen && (
+            <dl className="mt-3 space-y-2 border-t border-current/10 pt-3 text-[0.72rem] leading-relaxed opacity-60">
+              {advanced.map(({ label, value }) => (
+                <div key={label}>
+                  <dt className="text-[0.58rem] tracking-[0.14em] uppercase opacity-70">
+                    {label}
+                  </dt>
+                  <dd className="mt-0.5 whitespace-pre-wrap">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </div>
       )}
     </motion.div>
   );

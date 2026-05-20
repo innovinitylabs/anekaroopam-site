@@ -1,5 +1,9 @@
 import type { ExportPayload } from "@/lib/perception/types";
 import { resolveBackground } from "@/lib/perception/backgrounds";
+import {
+  advancedMetadataEntries,
+  primaryOverlayDetails,
+} from "@/lib/perception/metadata";
 import { mimeForFormat } from "@/lib/image-processing/format-support";
 import type { EmbeddedImageAsset } from "./types";
 
@@ -60,6 +64,14 @@ export function buildStandaloneHtml(
   const { artwork } = payload;
   const imageSrc = embedded?.dataUrl ?? artwork.imageSrc;
   const bg = resolveBackground(artwork.background);
+  const overlayFields = artwork.overlayFields ?? {
+    title: true,
+    year: true,
+    process: true,
+    state: true,
+    caption: true,
+    advanced: true,
+  };
 
   const configJson = JSON.stringify({
     imageSrc,
@@ -67,15 +79,12 @@ export function buildStandaloneHtml(
     metadata: artwork.metadata,
     background: bg,
     initialAngle: artwork.initialAngle ?? 0,
-    snapToState: artwork.snapToState ?? false,
+    initialSnapToState: artwork.snapToState ?? false,
+    artworkId: artwork.id || "artwork",
     showMetadata: artwork.showMetadataOverlay ?? true,
-    overlayFields: artwork.overlayFields ?? {
-      title: true,
-      year: true,
-      process: true,
-      state: true,
-      caption: true,
-    },
+    overlayFields,
+    primaryDetails: primaryOverlayDetails(artwork.metadata, overlayFields),
+    advancedMetadata: advancedMetadataEntries(artwork.metadata),
     embedFormat: embedded?.format ?? null,
   });
 
@@ -99,16 +108,35 @@ export function buildStandaloneHtml(
   #transform { will-change: transform; transform-origin: center center; }
   #artwork, picture img { max-width: 88vmin; max-height: 88vmin; display: block; user-select: none; pointer-events: none; }
   picture { display: block; line-height: 0; }
-  #meta { position: fixed; left: 0; right: 0; bottom: 0; padding: 2rem 2.5rem; color: rgba(26,24,20,0.72); transition: opacity 0.5s; pointer-events: none; }
+  #meta { position: fixed; left: 0; right: 0; bottom: 0; padding: 2rem 2.5rem 2.25rem; color: rgba(26,24,20,0.72); transition: opacity 0.5s; pointer-events: none; max-height: 55vh; overflow-y: auto; }
   #meta.dark { color: rgba(232,228,220,0.72); }
   #meta.hidden { opacity: 0; }
+  #meta.interactive { pointer-events: auto; }
   @import url('https://fonts.googleapis.com/css2?family=Anek+Tamil:wght@100..800&display=swap');
   #meta h1 { font-size: 0.72rem; letter-spacing: 0.28em; text-transform: uppercase; font-weight: 400; }
   #meta h1.tamil-title { font-family: 'Anek Tamil', sans-serif; font-weight: 300; letter-spacing: 0.08em; text-transform: none; font-size: 0.95rem; }
   #meta .state { margin-top: 0.65rem; font-size: 0.95rem; letter-spacing: 0.06em; }
   #meta .caption { margin-top: 0.35rem; font-size: 0.82rem; font-style: italic; opacity: 0.85; max-width: 36rem; line-height: 1.55; }
   #meta .detail { margin-top: 0.5rem; font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.55; }
-  #hint { position: fixed; top: 1.25rem; left: 50%; transform: translateX(-50%); font-size: 0.62rem; letter-spacing: 0.22em; text-transform: uppercase; opacity: 0; transition: opacity 0.4s; }
+  #meta-adv-toggle { margin-top: 1rem; display: flex; align-items: center; gap: 0.5rem; width: 100%; max-width: 20rem; background: none; border: none; color: inherit; font: inherit; font-size: 0.58rem; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.42; cursor: pointer; padding: 0; }
+  #meta-adv-toggle:hover { opacity: 0.62; }
+  #meta-adv-toggle .rule { flex: 1; height: 1px; background: currentColor; opacity: 0.25; }
+  #meta-adv-toggle .chev { font-size: 0.55rem; transition: transform 0.3s; }
+  #meta-adv-toggle.open .chev { transform: rotate(180deg); }
+  #meta-adv { display: none; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid rgba(26,24,20,0.12); max-width: 36rem; }
+  #meta.dark #meta-adv { border-top-color: rgba(232,228,220,0.12); }
+  #meta-adv.open { display: block; }
+  #meta-adv dl { font-size: 0.72rem; line-height: 1.55; opacity: 0.62; }
+  #meta-adv dt { font-size: 0.58rem; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.75; margin-top: 0.65rem; }
+  #meta-adv dt:first-child { margin-top: 0; }
+  #meta-adv dd { margin-top: 0.2rem; white-space: pre-wrap; }
+  #controls { position: fixed; top: 1.25rem; right: 1.5rem; opacity: 0; transition: opacity 0.45s; pointer-events: none; font-size: 0.62rem; letter-spacing: 0.14em; color: rgba(26,24,20,0.5); }
+  #controls.dark { color: rgba(232,228,220,0.5); }
+  #controls.visible { opacity: 1; pointer-events: auto; }
+  #controls label { display: flex; align-items: center; gap: 0.45rem; cursor: pointer; user-select: none; }
+  #controls input[type="checkbox"] { width: 0.75rem; height: 0.75rem; margin: 0; accent-color: rgba(26,24,20,0.45); cursor: pointer; }
+  #controls.dark input[type="checkbox"] { accent-color: rgba(232,228,220,0.45); }
+  #hint { position: fixed; top: 1.25rem; left: 50%; transform: translateX(-50%); font-size: 0.62rem; letter-spacing: 0.22em; text-transform: uppercase; opacity: 0; transition: opacity 0.4s; pointer-events: none; }
   #hint.visible { opacity: 0.35; }
 </style>
 </head>
@@ -119,11 +147,26 @@ export function buildStandaloneHtml(
       ${artworkMarkup}
     </div>
   </div>
+  <div id="controls">
+    <label>
+      <input type="checkbox" id="snap-toggle" />
+      <span>Snap to perceptual states</span>
+    </label>
+  </div>
   <div id="meta">
     <h1></h1>
     <div class="state"></div>
     <div class="caption"></div>
     <div class="detail"></div>
+    <div id="meta-adv-wrap" style="display:none">
+      <button type="button" id="meta-adv-toggle">
+        <span class="rule"></span>
+        <span class="chev">⌄</span>
+        <span>Archival record</span>
+        <span class="rule"></span>
+      </button>
+      <div id="meta-adv"><dl></dl></div>
+    </div>
   </div>
   <div id="hint">Orientation is emergent</div>
 </div>
@@ -134,18 +177,68 @@ export function buildStandaloneHtml(
   var transformEl = document.getElementById('transform');
   var img = document.getElementById('artwork');
   var meta = document.getElementById('meta');
+  var controls = document.getElementById('controls');
+  var snapToggle = document.getElementById('snap-toggle');
   var hint = document.getElementById('hint');
+  var metaAdvWrap = document.getElementById('meta-adv-wrap');
+  var metaAdvToggle = document.getElementById('meta-adv-toggle');
+  var metaAdv = document.getElementById('meta-adv');
+  var metaAdvList = metaAdv.querySelector('dl');
   var angle = CONFIG.initialAngle || 0;
   var zoom = 1, panX = 0, panY = 0, targetAngle = angle, animStart = null, animFrom = angle;
-  var DURATION = 680, idleTimer = null;
+  var DURATION = 680, idleTimer = null, metaAdvOpen = false;
+  var SNAP_KEY = 'anek_snap_' + (CONFIG.artworkId || 'artwork');
+  var snapToState = !!CONFIG.initialSnapToState;
+  try {
+    var stored = localStorage.getItem(SNAP_KEY);
+    if (stored === '1') snapToState = true;
+    if (stored === '0') snapToState = false;
+  } catch (e) {}
   document.body.style.background = CONFIG.background;
   var hex = CONFIG.background.replace('#','');
   if (hex.length === 6) {
     var r = parseInt(hex.slice(0,2),16), g = parseInt(hex.slice(2,4),16), b = parseInt(hex.slice(4,6),16);
-    if ((0.299*r + 0.587*g + 0.114*b) / 255 < 0.45) meta.classList.add('dark');
+    if ((0.299*r + 0.587*g + 0.114*b) / 255 < 0.45) {
+      meta.classList.add('dark');
+      controls.classList.add('dark');
+    }
   }
   if (!img.getAttribute('src')) img.src = CONFIG.imageSrc;
   img.alt = CONFIG.metadata.title || 'Artwork';
+  snapToggle.checked = snapToState;
+  function persistSnap() {
+    try { localStorage.setItem(SNAP_KEY, snapToState ? '1' : '0'); } catch (e) {}
+  }
+  function renderAdvancedMeta() {
+    if (!CONFIG.advancedMetadata || !CONFIG.advancedMetadata.length) {
+      metaAdvWrap.style.display = 'none';
+      return;
+    }
+    if (CONFIG.overlayFields.advanced === false) {
+      metaAdvWrap.style.display = 'none';
+      return;
+    }
+    metaAdvWrap.style.display = 'block';
+    metaAdvList.innerHTML = CONFIG.advancedMetadata.map(function(entry) {
+      return '<dt>' + entry.label + '</dt><dd>' + entry.value.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</dd>';
+    }).join('');
+  }
+  renderAdvancedMeta();
+  metaAdvToggle.addEventListener('click', function(e) {
+    e.stopPropagation();
+    metaAdvOpen = !metaAdvOpen;
+    metaAdvToggle.classList.toggle('open', metaAdvOpen);
+    metaAdv.classList.toggle('open', metaAdvOpen);
+    meta.classList.add('interactive');
+    pulseUi();
+  });
+  controls.addEventListener('click', function(e) { e.stopPropagation(); });
+  snapToggle.addEventListener('change', function(e) {
+    e.stopPropagation();
+    snapToState = snapToggle.checked;
+    persistSnap();
+    pulseUi();
+  });
   function norm(a) { a %= 360; return a < 0 ? a + 360 : a; }
   function delta(from, to) {
     var a = norm(from), b = norm(to), d = b - a;
@@ -177,10 +270,7 @@ export function buildStandaloneHtml(
     h1.textContent = titleText;
     if (/[\\u0B80-\\u0BFF]/.test(titleText)) h1.classList.add('tamil-title');
     else h1.classList.remove('tamil-title');
-    var parts = [];
-    if (CONFIG.overlayFields.year !== false && CONFIG.metadata.year) parts.push(String(CONFIG.metadata.year));
-    if (CONFIG.overlayFields.process !== false && CONFIG.metadata.process) parts.push(CONFIG.metadata.process);
-    meta.querySelector('.detail').textContent = parts.join(' · ');
+    meta.querySelector('.detail').textContent = CONFIG.primaryDetails ? CONFIG.primaryDetails.join(' · ') : '';
     meta.querySelector('.state').textContent = CONFIG.overlayFields.state !== false && active ? (active.name && active.name.trim() ? active.name : (Math.round(active.angle) + '°')) : '';
     meta.querySelector('.caption').textContent = CONFIG.overlayFields.caption !== false && active && active.caption ? active.caption : '';
   }
@@ -202,7 +292,7 @@ export function buildStandaloneHtml(
     requestAnimationFrame(animate);
   }
   function rotate(dir) {
-    if (CONFIG.snapToState && CONFIG.states.length) {
+    if (snapToState && CONFIG.states.length) {
       var s = nextState(dir);
       if (s) goTo(s.angle);
     } else {
@@ -213,10 +303,13 @@ export function buildStandaloneHtml(
   function resetView() { zoom = 1; panX = 0; panY = 0; goTo(CONFIG.initialAngle || 0); pulseUi(); }
   function pulseUi() {
     meta.classList.remove('hidden');
+    controls.classList.add('visible');
     hint.classList.add('visible');
     clearTimeout(idleTimer);
     idleTimer = setTimeout(function() {
+      if (!metaAdvOpen) meta.classList.remove('interactive');
       meta.classList.add('hidden');
+      controls.classList.remove('visible');
       hint.classList.remove('visible');
     }, 3200);
   }
@@ -256,5 +349,5 @@ export function buildStandaloneHtml(
 })();
 </script>
 </body>
-</html>`
+</html>`;
 }

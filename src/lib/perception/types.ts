@@ -16,7 +16,22 @@ export interface PerceptualState {
 export interface ArtworkMetadata {
   title: string;
   year?: number;
+  /** Exact creation date (ISO date from date input) */
+  date?: string;
   process?: string;
+  medium?: string;
+  dimensions?: string;
+  edition?: string;
+  collection?: string;
+  postProcessing?: string;
+  captureMethod?: string;
+  orientationNotes?: string;
+  artistWebsite?: string;
+  archivalLink?: string;
+  transientLink?: string;
+  discoveredForms?: string;
+  perceptualNotes?: string;
+  rotationalObservations?: string;
   description?: string;
   tags?: string[];
 }
@@ -36,6 +51,7 @@ export interface PerceptionArtwork {
     process?: boolean;
     state?: boolean;
     caption?: boolean;
+    advanced?: boolean;
   };
 }
 

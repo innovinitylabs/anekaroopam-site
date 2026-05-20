@@ -9,6 +9,8 @@ import type {
   PerceptualState,
 } from "@/lib/perception/types";
 import { createId } from "@/lib/perception/engine";
+import { createDefaultMetadata, mergeArtworkMetadata } from "@/lib/perception/metadata";
+import { ArtworkMetadataPanel } from "./ArtworkMetadataPanel";
 import { BACKGROUND_PRESETS } from "@/lib/perception/backgrounds";
 import { downloadJson } from "@/lib/perception/export-html";
 import { ExportHtmlSection } from "./ExportHtmlSection";
@@ -18,7 +20,9 @@ import type { ExportPayload } from "@/lib/perception/types";
 
 const defaultArtwork = (): PerceptionArtwork => ({
   id: "draft",
-  metadata: { title: "", year: new Date().getFullYear() },
+  metadata: createDefaultMetadata({
+    year: new Date().getFullYear(),
+  }),
   imageSrc: "",
   states: [
     {
@@ -77,12 +81,12 @@ export function OrientationEditor() {
     setArtwork((prev) => ({
       ...prev,
       imageSrc: dataUrl,
-      metadata: {
+      metadata: mergeArtworkMetadata({
         ...prev.metadata,
         title:
           prev.metadata.title ||
           file.name.replace(/\.[^.]+$/, ""),
-      },
+      }),
     }));
   };
 
@@ -140,60 +144,12 @@ export function OrientationEditor() {
             />
           )}
 
-          <section className="space-y-4 border-t border-[var(--border)] pt-6">
-            <label className="block">
-              <span className="text-[0.62rem] tracking-[0.18em] uppercase text-[var(--muted)]">
-                Title
-              </span>
-              <input
-                className="mt-1 w-full border-b border-[var(--border)] bg-transparent py-1 outline-none"
-                placeholder="Optional"
-                value={artwork.metadata.title}
-                onChange={(e) =>
-                  setArtwork((p) => ({
-                    ...p,
-                    metadata: { ...p.metadata, title: e.target.value },
-                  }))
-                }
-              />
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="block">
-                <span className="text-[0.62rem] tracking-[0.18em] uppercase text-[var(--muted)]">
-                  Year
-                </span>
-                <input
-                  type="number"
-                  className="mt-1 w-full border-b border-[var(--border)] bg-transparent py-1 outline-none"
-                  value={artwork.metadata.year ?? ""}
-                  onChange={(e) =>
-                    setArtwork((p) => ({
-                      ...p,
-                      metadata: {
-                        ...p.metadata,
-                        year: Number(e.target.value) || undefined,
-                      },
-                    }))
-                  }
-                />
-              </label>
-              <label className="block">
-                <span className="text-[0.62rem] tracking-[0.18em] uppercase text-[var(--muted)]">
-                  Process
-                </span>
-                <input
-                  className="mt-1 w-full border-b border-[var(--border)] bg-transparent py-1 outline-none"
-                  value={artwork.metadata.process ?? ""}
-                  onChange={(e) =>
-                    setArtwork((p) => ({
-                      ...p,
-                      metadata: { ...p.metadata, process: e.target.value },
-                    }))
-                  }
-                />
-              </label>
-            </div>
-          </section>
+          <ArtworkMetadataPanel
+            metadata={artwork.metadata}
+            onChange={(metadata) =>
+              setArtwork((p) => ({ ...p, metadata }))
+            }
+          />
 
           <section className="mt-8 space-y-3 border-t border-[var(--border)] pt-6">
             <div className="flex items-center justify-between">

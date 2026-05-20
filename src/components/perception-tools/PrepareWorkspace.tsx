@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PerceptionArtwork } from "@/lib/perception/types";
+import { createDefaultMetadata, mergeArtworkMetadata } from "@/lib/perception/metadata";
 import type {
   ConversionOptions,
   ConversionResult,
@@ -58,7 +59,10 @@ export function PrepareWorkspace() {
   useEffect(() => {
     const session = loadPrepareSession();
     if (session?.artwork.imageSrc) {
-      setArtwork(session.artwork);
+      setArtwork({
+        ...session.artwork,
+        metadata: mergeArtworkMetadata(session.artwork.metadata),
+      });
       setSourceUrl(session.artwork.imageSrc);
       setOptions((o) => ({
         ...o,
@@ -184,7 +188,9 @@ export function PrepareWorkspace() {
     if (!converted) return;
     const effectiveArtwork: PerceptionArtwork = artwork ?? {
       id: "prepare-export",
-      metadata: { title: options.filename || "Artwork" },
+      metadata: createDefaultMetadata({
+        title: options.filename || "Artwork",
+      }),
       imageSrc: converted.dataUrl,
       states: [],
       background: "paper",

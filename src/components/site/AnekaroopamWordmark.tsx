@@ -123,7 +123,7 @@ export function AnekaroopamWordmark({ className }: AnekaroopamWordmarkProps) {
               rotate: reduceMotion ? 0 : showTamil ? 0 : WHEEL_IN_START_DEG,
               scaleX: 1.12,
               scaleY: 1.08,
-              y: -0.5,
+              y: -0.4,
             }}
             transition={{
               rotate: wheelTransition,
