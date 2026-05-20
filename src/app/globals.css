@@ -3,7 +3,7 @@
 :root {
   --paper: #f4f0e8;
   --paper-deep: #ebe6dc;
-  --ink: #1a1814;
+  --ink: #16120f;
   --muted: #8a8478;
   --border: rgba(26, 24, 20, 0.12);
   --surface: rgba(248, 244, 236, 0.62);
@@ -14,7 +14,7 @@
   --background: var(--paper);
   --foreground: var(--ink);
   --paper-fiber-opacity: 0.024;
-  --paper-scan-opacity: 0.038;
+  --paper-scan-opacity: 0.058;
   --paper-tone-opacity: 0.52;
 }
 
@@ -77,7 +77,7 @@ html::before {
     ),
     radial-gradient(
       ellipse 60% 45% at 28% 72%,
-      rgba(210, 218, 222, 0.08) 0%,
+      rgba(224, 216, 204, 0.07) 0%,
       transparent 70%
     ),
     radial-gradient(
@@ -104,7 +104,7 @@ html::after {
   mix-blend-mode: multiply;
   background-image:
     url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='c'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.22' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23c)'/%3E%3C/svg%3E"),
-    url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='m'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23m)'/%3E%3C/svg%3E");
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='m'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.47' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23m)'/%3E%3C/svg%3E");
   background-size: 640px 640px, 880px 880px;
   -webkit-mask-image: var(--paper-material-mask);
   mask-image: var(--paper-material-mask);
@@ -136,7 +136,7 @@ body {
   font-family: var(--font-source-serif), Georgia, "Times New Roman", serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  text-shadow: 0 0.35px 0 rgba(26, 24, 20, 0.035);
+  text-shadow: 0 0.15px 0 rgba(26, 24, 20, 0.02);
 }
 
 ::selection {
@@ -174,7 +174,7 @@ body {
   background:
     radial-gradient(
       ellipse 90% 70% at 50% 30%,
-      rgba(232, 224, 210, 0.14) 0%,
+      rgba(232, 224, 210, 0.18) 0%,
       transparent 62%
     ),
     radial-gradient(
