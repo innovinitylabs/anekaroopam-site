@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { AnekaroopamWordmark } from "@/components/site/AnekaroopamWordmark";
+import { BRAND } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 import { PerceptionSubnav } from "./PerceptionSubnav";
 import { CreatorCredit } from "./CreatorCredit";
@@ -22,9 +24,10 @@ export function PerceptionShell({ children }: { children: React.ReactNode }) {
         <div className="flex min-w-0 items-center gap-6 md:gap-10">
           <Link
             href="/"
+            aria-label={BRAND.name}
             className="shrink-0 font-display text-sm tracking-[0.08em] uppercase opacity-70 transition-opacity hover:opacity-100"
           >
-            Anekaroopam
+            <AnekaroopamWordmark />
           </Link>
           <span className="hidden h-3 w-px bg-[var(--border)] sm:block" aria-hidden />
           <PerceptionSubnav />

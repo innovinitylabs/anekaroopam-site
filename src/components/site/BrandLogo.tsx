@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { AnekaroopamWordmark } from "@/components/site/AnekaroopamWordmark";
 import { RotatingBrandMark } from "@/components/site/RotatingBrandMark";
 import { BRAND, type BrandTheme } from "@/lib/brand";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,7 @@ export function BrandLogo({
         (href ? (
           <Link
             href={href}
+            aria-label={BRAND.name}
             className={cn(
               "font-display tracking-[0.12em] uppercase transition-opacity hover:opacity-85",
               size === "sm" && "text-sm",
@@ -49,10 +51,11 @@ export function BrandLogo({
               wordmarkClassName,
             )}
           >
-            {BRAND.name}
+            <AnekaroopamWordmark />
           </Link>
         ) : (
           <span
+            aria-label={BRAND.name}
             className={cn(
               "font-display tracking-[0.12em] uppercase",
               size === "sm" && "text-sm",
@@ -62,7 +65,7 @@ export function BrandLogo({
               wordmarkClassName,
             )}
           >
-            {BRAND.name}
+            <AnekaroopamWordmark />
           </span>
         ))}
     </div>

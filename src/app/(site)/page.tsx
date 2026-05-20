@@ -25,9 +25,8 @@ export default function HomePage() {
         </FadeIn>
         <FadeIn delay={0.2}>
           <p className="mt-10 max-w-xl text-lg leading-relaxed text-[var(--muted)]">
-            Anekaroopam is not a gallery of fixed images. It is an archival
-            orientation framework where artworks reveal different perceptual
-            entities depending on angle, zoom, and the viewer&apos;s attention.
+            A perceptual archive where forms emerge through rotation,
+            instability, and sustained attention.
           </p>
         </FadeIn>
         <FadeIn delay={0.35} className="mt-14 flex flex-wrap gap-8">

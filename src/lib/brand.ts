@@ -1,5 +1,7 @@
 export const BRAND = {
   name: "Anekaroopam",
+  latinInitial: "A",
+  tamilInitial: "\u0B85",
   favicon: "/favicon.ico",
   ico: "/valipokkann.ico",
   svg: "/valipokkann.svg",
