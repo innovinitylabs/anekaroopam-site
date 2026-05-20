@@ -8,7 +8,6 @@ export default function SiteLayout({
 }) {
   return (
     <>
-      <div className="grain" aria-hidden />
       <SiteNav />
       <main className="flex-1 pt-24">{children}</main>
       <SiteFooter />

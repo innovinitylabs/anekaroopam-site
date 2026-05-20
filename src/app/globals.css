@@ -36,12 +36,57 @@
   box-sizing: border-box;
 }
 
+/* Procedural archival paper — museum rag, ultra-low contrast */
 html {
   scroll-behavior: smooth;
+  min-height: 100%;
+  background-color: var(--paper);
+}
+
+html::before,
+html::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Diffuse gallery light + soft tonal irregularity */
+html::before {
+  opacity: 0.38;
+  background:
+    radial-gradient(
+      ellipse 130% 95% at 14% 10%,
+      rgba(255, 251, 245, 0.38) 0%,
+      transparent 58%
+    ),
+    radial-gradient(
+      ellipse 100% 80% at 88% 82%,
+      rgba(230, 222, 208, 0.22) 0%,
+      transparent 54%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 48% 42%,
+      rgba(248, 243, 235, 0.1) 0%,
+      transparent 72%
+    );
+}
+
+/* Cotton-fiber grain (procedural SVG, non-directional) */
+html::after {
+  opacity: 0.013;
+  mix-blend-mode: multiply;
+  background-image:
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.68' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23f)'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='c'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.28' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23c)'/%3E%3C/svg%3E");
+  background-size: 460px 460px, 720px 720px;
 }
 
 body {
-  background: var(--background);
+  position: relative;
+  z-index: 1;
+  background: transparent;
   color: var(--foreground);
   font-family: var(--font-source-serif), Georgia, "Times New Roman", serif;
   -webkit-font-smoothing: antialiased;
@@ -90,20 +135,26 @@ body {
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-.grain {
-  pointer-events: none;
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  opacity: 0.04;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
+/* Dark perception workspace — matte surface, minimal cool grain */
 .perceive-theme {
+  position: relative;
+  z-index: 1;
   --background: #0f0f0f;
   --foreground: #e8e4dc;
   --border: rgba(232, 228, 220, 0.1);
   --surface: #141414;
   --surface-elevated: #1a1a1a;
   --muted: #9a9488;
+}
+
+.perceive-theme::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.012;
+  mix-blend-mode: soft-light;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='d'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23d)'/%3E%3C/svg%3E");
+  background-size: 520px 520px;
 }
