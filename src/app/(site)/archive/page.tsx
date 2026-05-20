@@ -3,7 +3,9 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useMemo, useState } from "react";
+import { DisplayTitle } from "@/components/site/DisplayTitle";
 import { FadeIn } from "@/components/site/FadeIn";
+import { hasTamilScript } from "@/lib/typography/tamil";
 import {
   archiveArtworks,
   filterArtworks,
@@ -108,8 +110,14 @@ export default function ArchivePage() {
                   />
                 </div>
                 <div className="mt-4 flex items-baseline justify-between gap-4">
-                  <h2 className="font-display text-xl tracking-wide">
-                    {artwork.metadata.title}
+                  <h2
+                    className={
+                      hasTamilScript(artwork.metadata.title)
+                        ? "text-xl font-anek-tamil-thin tracking-[0.06em] normal-case"
+                        : "font-display text-xl tracking-wide"
+                    }
+                  >
+                    <DisplayTitle>{artwork.metadata.title}</DisplayTitle>
                   </h2>
                   {artwork.metadata.year && (
                     <span className="text-[0.62rem] tracking-[0.14em] uppercase text-[var(--muted)]">

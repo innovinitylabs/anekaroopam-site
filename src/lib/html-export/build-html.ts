@@ -102,7 +102,9 @@ export function buildStandaloneHtml(
   #meta { position: fixed; left: 0; right: 0; bottom: 0; padding: 2rem 2.5rem; color: rgba(26,24,20,0.72); transition: opacity 0.5s; pointer-events: none; }
   #meta.dark { color: rgba(232,228,220,0.72); }
   #meta.hidden { opacity: 0; }
+  @import url('https://fonts.googleapis.com/css2?family=Anek+Tamil:wght@100..800&display=swap');
   #meta h1 { font-size: 0.72rem; letter-spacing: 0.28em; text-transform: uppercase; font-weight: 400; }
+  #meta h1.tamil-title { font-family: 'Anek Tamil', sans-serif; font-weight: 200; letter-spacing: 0.08em; text-transform: none; font-size: 0.95rem; }
   #meta .state { margin-top: 0.65rem; font-size: 0.95rem; letter-spacing: 0.06em; }
   #meta .caption { margin-top: 0.35rem; font-size: 0.82rem; font-style: italic; opacity: 0.85; max-width: 36rem; line-height: 1.55; }
   #meta .detail { margin-top: 0.5rem; font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.55; }
@@ -170,7 +172,11 @@ export function buildStandaloneHtml(
   function updateMeta() {
     if (!CONFIG.showMetadata) return;
     var active = nearestState(angle);
-    meta.querySelector('h1').textContent = CONFIG.overlayFields.title !== false ? (CONFIG.metadata.title || '') : '';
+    var h1 = meta.querySelector('h1');
+    var titleText = CONFIG.overlayFields.title !== false ? (CONFIG.metadata.title || '') : '';
+    h1.textContent = titleText;
+    if (/[\\u0B80-\\u0BFF]/.test(titleText)) h1.classList.add('tamil-title');
+    else h1.classList.remove('tamil-title');
     var parts = [];
     if (CONFIG.overlayFields.year !== false && CONFIG.metadata.year) parts.push(String(CONFIG.metadata.year));
     if (CONFIG.overlayFields.process !== false && CONFIG.metadata.process) parts.push(CONFIG.metadata.process);

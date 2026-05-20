@@ -18,7 +18,7 @@ const sourceSerif = Source_Serif_4({
 const anekTamil = Anek_Tamil({
   variable: "--font-anek-tamil",
   subsets: ["tamil"],
-  weight: ["500", "600"],
+  weight: ["100", "200", "300", "400", "500", "600", "700", "800"],
 });
 
 export const metadata: Metadata = {

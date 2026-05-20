@@ -24,6 +24,12 @@
   font-family: var(--font-anek-tamil), sans-serif;
 }
 
+.font-anek-tamil-thin {
+  font-family: var(--font-anek-tamil), sans-serif;
+  font-weight: 200;
+  font-variation-settings: "wght" 200;
+}
+
 * {
   box-sizing: border-box;
 }

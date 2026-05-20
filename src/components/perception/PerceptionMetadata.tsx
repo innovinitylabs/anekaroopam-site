@@ -2,11 +2,13 @@
 
 import { motion } from "framer-motion";
 import type { PerceptualState, PerceptionArtwork } from "@/lib/perception/types";
+import { DisplayTitle } from "@/components/site/DisplayTitle";
 import {
   displayTitle,
   hasDisplayTitle,
   stateOverlayLines,
 } from "@/lib/perception/display";
+import { hasTamilScript } from "@/lib/typography/tamil";
 
 interface PerceptionMetadataProps {
   artwork: PerceptionArtwork;
@@ -52,8 +54,14 @@ export function PerceptionMetadata({
       transition={{ duration: 0.5 }}
     >
       {fields.title && hasDisplayTitle(artwork.metadata.title) && (
-        <p className="text-[0.72rem] font-normal tracking-[0.28em] uppercase">
-          {title}
+        <p
+          className={
+            hasTamilScript(title)
+              ? "text-[0.95rem] font-anek-tamil-thin tracking-[0.08em] normal-case"
+              : "text-[0.72rem] font-normal tracking-[0.28em] uppercase"
+          }
+        >
+          <DisplayTitle>{title}</DisplayTitle>
         </p>
       )}
       {showState && (
