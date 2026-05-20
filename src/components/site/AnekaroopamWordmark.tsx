@@ -16,7 +16,7 @@ const TAMIL_ROTATE_IN = 16;
 
 /** Tamil only: Anek Tamil, optical size/spacing (Latin has no transform in idle state). */
 const tamilGlyphClass =
-  "font-anek-tamil font-medium leading-none pr-[0.09em] translate-y-[1px] scale-[1.08]";
+  "font-anek-tamil font-medium leading-none pr-[0.1em]";
 
 type AnekaroopamWordmarkProps = {
   className?: string;
@@ -24,7 +24,7 @@ type AnekaroopamWordmarkProps = {
 
 /**
  * Identity wordmark: leading Latin "A" shifts to Tamil "அ" (Anek Tamil) on hover.
- * Permanent invisible Tamil reserve preserves width; Latin reads as normal serif until transition.
+ * Fixed-width stack keeps Tamil metrics out of the line box; Latin reads as normal serif until transition.
  */
 export function AnekaroopamWordmark({ className }: AnekaroopamWordmarkProps) {
   const [hovered, setHovered] = useState(false);
@@ -69,53 +69,49 @@ export function AnekaroopamWordmark({ className }: AnekaroopamWordmarkProps) {
 
   return (
     <span
-      className={cn("inline-flex items-baseline", className)}
+      className={cn("inline-flex items-center leading-none", className)}
       onMouseEnter={onPointerEnter}
       onMouseLeave={onPointerLeave}
       onFocus={onFocus}
       onBlur={onBlur}
     >
       <span
-        className="wordmark-initial inline-grid shrink-0 leading-none [grid-template-areas:'stack']"
+        className="wordmark-initial relative inline-block h-[1em] w-[0.94em] shrink-0 overflow-visible leading-none"
         aria-hidden
       >
-        <span className="[grid-area:stack] select-none">
-          <span className={cn("invisible inline-block", tamilGlyphClass)}>
-            {BRAND.tamilInitial}
-          </span>
-        </span>
+        <motion.span
+          className="latin-a absolute left-0 top-0 z-10 origin-center leading-none"
+          initial={false}
+          animate={{
+            opacity: showTamil ? 0 : 1,
+            rotate: reduceMotion ? 0 : showTamil ? LATIN_ROTATE_OUT : 0,
+          }}
+          transition={transition}
+        >
+          {BRAND.latinInitial}
+        </motion.span>
 
-        <span className="pointer-events-none [grid-area:stack] relative flex h-full w-full items-end justify-start">
-          <motion.span
-            className="latin-a relative z-10 origin-bottom-left leading-none"
-            initial={false}
-            animate={{
-              opacity: showTamil ? 0 : 1,
-              rotate: reduceMotion ? 0 : showTamil ? LATIN_ROTATE_OUT : 0,
-            }}
-            transition={transition}
-          >
-            {BRAND.latinInitial}
-          </motion.span>
-
-          <motion.span
-            className={cn(
-              "tamil-a absolute bottom-0 left-0 z-20 origin-bottom-left leading-none will-change-transform",
-              tamilGlyphClass,
-            )}
-            initial={false}
-            animate={{
-              opacity: showTamil ? 1 : 0,
-              rotate: reduceMotion ? 0 : showTamil ? 0 : TAMIL_ROTATE_IN,
-            }}
-            transition={transition}
-          >
-            {BRAND.tamilInitial}
-          </motion.span>
-        </span>
+        <motion.span
+          className={cn(
+            "tamil-a absolute left-0 top-0 z-20 origin-center leading-none will-change-transform",
+            tamilGlyphClass,
+          )}
+          initial={false}
+          animate={{
+            opacity: showTamil ? 1 : 0,
+            rotate: reduceMotion ? 0 : showTamil ? 0 : TAMIL_ROTATE_IN,
+            scale: 1.08,
+            y: 1,
+          }}
+          transition={transition}
+        >
+          {BRAND.tamilInitial}
+        </motion.span>
       </span>
 
-      <span aria-hidden>{REST}</span>
+      <span className="leading-none" aria-hidden>
+        {REST}
+      </span>
     </span>
   );
 }
