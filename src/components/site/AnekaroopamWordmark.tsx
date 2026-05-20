@@ -138,7 +138,7 @@ export function AnekaroopamWordmark({ className }: AnekaroopamWordmarkProps) {
         className="leading-none will-change-transform"
         aria-hidden
         initial={false}
-        animate={{ x: reduceMotion ? 0 : showTamil ? 2 : 0 }}
+        animate={{ x: reduceMotion ? 0 : showTamil ? 4 : 0 }}
         transition={rotationTransition}
       >
         {REST}
