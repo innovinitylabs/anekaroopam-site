@@ -101,12 +101,12 @@ export default function ArchivePage() {
           <FadeIn key={artwork.id} delay={0.05 * i}>
             <li>
               <Link href={`/archive/${artwork.id}`} className="group block">
-                <div className="relative aspect-square overflow-hidden bg-[var(--surface-elevated)]">
+                <div className="archive-mount relative aspect-square overflow-hidden">
                   <Image
                     src={artwork.imageSrc}
                     alt={artwork.metadata.title}
                     fill
-                    className="object-contain p-6 transition-transform duration-700 group-hover:scale-[1.02]"
+                    className="relative z-[1] object-contain p-6"
                   />
                 </div>
                 <div className="mt-4 flex items-baseline justify-between gap-4">
