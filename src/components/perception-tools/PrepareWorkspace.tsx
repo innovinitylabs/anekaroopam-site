@@ -16,6 +16,7 @@ import {
   defaultConversionOptions,
   formatBytes,
 } from "@/lib/image-processing";
+import { decodeImageSource, isHeicLike } from "@/lib/image-processing/decode-source";
 import { EXPORT_PRESETS, getPreset } from "@/lib/image-processing/presets";
 import {
   estimateHtmlExport,
@@ -51,6 +52,8 @@ export function PrepareWorkspace() {
   const [compareView, setCompareView] = useState<
     "split" | "slider" | "original" | "converted"
   >("split");
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [conversionError, setConversionError] = useState<string | null>(null);
 
   useEffect(() => {
     const session = loadPrepareSession();
@@ -66,26 +69,55 @@ export function PrepareWorkspace() {
 
   useEffect(() => {
     if (!sourceFile && !sourceUrl) return;
+    let cancelled = false;
     const run = async () => {
-      const result = await analyzeImage(
-        sourceFile ?? sourceUrl!,
-        sourceFile?.size,
-      );
-      setAnalysis(result);
+      try {
+        setAnalysisError(null);
+        const result = await analyzeImage(
+          sourceFile ?? sourceUrl!,
+          sourceFile?.size,
+        );
+        if (!cancelled) setAnalysis(result);
+      } catch (err) {
+        if (!cancelled) {
+          setAnalysis(null);
+          setAnalysisError(
+            err instanceof Error ? err.message : "Could not analyze image",
+          );
+        }
+      }
     };
     run();
+    return () => {
+      cancelled = true;
+    };
   }, [sourceFile, sourceUrl]);
 
   const handleImport = useCallback(async (file: File) => {
-    const url = URL.createObjectURL(file);
-    setSourceFile(file);
-    setSourceUrl(url);
+    setAnalysisError(null);
+    setConversionError(null);
     setConverted(null);
     setFallbackWebp(null);
+    setSourceFile(file);
     setOptions((o) => ({
       ...o,
       filename: file.name.replace(/\.[^.]+$/, ""),
     }));
+
+    if (isHeicLike(file)) {
+      try {
+        const decoded = await decodeImageSource(file);
+        setSourceUrl(decoded.dataUrl);
+      } catch (err) {
+        setSourceUrl(null);
+        setAnalysisError(
+          err instanceof Error ? err.message : "HEIC decode failed",
+        );
+      }
+      return;
+    }
+
+    setSourceUrl(URL.createObjectURL(file));
   }, []);
 
   const applyPreset = (id: ExportPresetId) => {
@@ -101,6 +133,7 @@ export function PrepareWorkspace() {
   const runConversion = useCallback(async () => {
     if (!sourceFile && !sourceUrl) return;
     setConverting(true);
+    setConversionError(null);
     try {
       const result = await convertImage(
         sourceFile ?? sourceUrl!,
@@ -123,6 +156,12 @@ export function PrepareWorkspace() {
       } else {
         setFallbackWebp(null);
       }
+    } catch (err) {
+      setConverted(null);
+      setFallbackWebp(null);
+      setConversionError(
+        err instanceof Error ? err.message : "Conversion failed",
+      );
     } finally {
       setConverting(false);
     }
@@ -179,6 +218,11 @@ export function PrepareWorkspace() {
           <>
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6 md:p-8">
               <div className="mx-auto max-w-3xl space-y-8">
+              {analysisError && (
+                <p className="border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-[0.78rem] leading-relaxed text-red-700/90">
+                  {analysisError}
+                </p>
+              )}
               <PanelSection
                 title="Compare"
                 subtitle="Original against converted output"
@@ -501,30 +545,58 @@ export function PrepareWorkspace() {
                 </div>
                 <button
                   type="button"
-                  disabled={converting}
+                  disabled={converting || Boolean(analysisError)}
                   onClick={runConversion}
                   className="mt-6 w-full border border-[var(--ink)] py-2.5 text-[0.68rem] tracking-[0.16em] uppercase disabled:opacity-40"
                 >
                   {converting ? "Processing..." : "Convert"}
                 </button>
+                {conversionError && (
+                  <p className="mt-3 text-[0.72rem] leading-relaxed text-red-700/90 dark:text-red-300/90">
+                    {conversionError}
+                  </p>
+                )}
                 {converted && analysis && (
                   <SpecTable
                     className="mt-4"
                     rows={[
                       {
-                        label: "Converted size",
-                        value: formatBytes(converted.stats.byteSize),
+                        label: "Source file",
+                        value: formatBytes(analysis.stats.byteSize),
                       },
                       {
-                        label: "Ratio",
-                        value: `${converted.compressionRatio}%`,
+                        label: "Output",
+                        value: `${formatBytes(converted.stats.byteSize)} (${converted.stats.mimeType})`,
+                      },
+                      ...(converted.requestedFormat &&
+                      converted.requestedFormat !== converted.format
+                        ? [
+                            {
+                              label: "Note",
+                              value: `${converted.requestedFormat.toUpperCase()} unavailable; encoded as ${converted.format.toUpperCase()}`,
+                            },
+                          ]
+                        : []),
+                      {
+                        label: "Size change",
+                        value:
+                          converted.compressionRatio > 0
+                            ? `${converted.compressionRatio}% smaller`
+                            : converted.compressionRatio < 0
+                              ? `${Math.abs(converted.compressionRatio)}% larger`
+                              : "No change",
                       },
                       {
-                        label: "Time",
+                        label: "Encode time",
                         value: `${converted.processingMs} ms`,
                       },
                     ]}
                   />
+                )}
+                {converted?.transcodedFromHeic && (
+                  <p className="mt-2 text-[0.65rem] leading-relaxed text-[var(--muted)]">
+                    HEIC/HEIF was decoded before re-encoding to your chosen format.
+                  </p>
                 )}
                 {converted && (
                   <button

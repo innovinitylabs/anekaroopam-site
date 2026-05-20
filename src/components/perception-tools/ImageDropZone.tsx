@@ -1,6 +1,12 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { isHeicLike, isLikelyBrowserDecodable } from "@/lib/image-processing/decode-source";
+
+function isAcceptedImage(file: File): boolean {
+  if (isHeicLike(file) || isLikelyBrowserDecodable(file)) return true;
+  return file.type.startsWith("image/");
+}
 
 export function ImageDropZone({
   dragOver,
@@ -29,12 +35,12 @@ export function ImageDropZone({
         e.preventDefault();
         onDragOver(false);
         const file = e.dataTransfer.files[0];
-        if (file?.type.startsWith("image/")) onImport(file);
+        if (file && isAcceptedImage(file)) onImport(file);
       }}
     >
       <input
         type="file"
-        accept="image/*"
+        accept="image/*,.heic,.heif"
         className="sr-only"
         onChange={(e) => {
           const file = e.target.files?.[0];
@@ -45,7 +51,7 @@ export function ImageDropZone({
         Import source artwork
       </span>
       <span className="mt-2 max-w-sm text-[0.75rem] leading-relaxed opacity-60">
-        Drag a high-resolution image for archival conversion and perceptual export
+        JPEG, PNG, WebP, AVIF, GIF, BMP, SVG, HEIC/HEIF, and other browser-readable images
       </span>
     </label>
   );

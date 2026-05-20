@@ -26,9 +26,13 @@ export interface ConversionResult {
   blob: Blob;
   dataUrl: string;
   stats: ImageStats;
+  /** Actual encoded format (from blob MIME). */
   format: ImageFormat;
+  /** Format the user selected before browser capability fallback. */
+  requestedFormat?: ImageFormat;
   compressionRatio: number;
   processingMs: number;
+  transcodedFromHeic?: boolean;
 }
 
 export interface ImageAnalysis {

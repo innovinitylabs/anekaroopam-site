@@ -58,11 +58,17 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     options.lossless || options.format === "png",
   );
   const quality =
-    options.lossless && (options.format === "png" || options.format === "webp")
-      ? 1
-      : options.quality;
+    options.format === "png"
+      ? undefined
+      : options.lossless && options.format === "webp"
+        ? 1
+        : options.quality;
 
   const blob = await canvas.convertToBlob({ type: mime, quality });
+  if (!blob || blob.size === 0) {
+    self.postMessage({ error: `Failed to encode ${options.format}` });
+    return;
+  }
   const buffer = await blob.arrayBuffer();
 
   const response: WorkerResponse = {

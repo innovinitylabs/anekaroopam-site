@@ -1,7 +1,12 @@
-import type { ConversionOptions, ConversionResult } from "./types";
+import type { ConversionOptions, ConversionResult, ImageFormat } from "./types";
 import { blobToDataUrl, compressionRatio } from "./bytes";
 import { buildStatsFromBlob } from "./analyze";
-import { detectFormatSupport, mimeForFormat } from "./format-support";
+import {
+  detectFormatSupport,
+  formatFromMime,
+  mimeForFormat,
+} from "./format-support";
+import { decodeImageSource } from "./decode-source";
 import type { WorkerRequest, WorkerResponse } from "./conversion.worker";
 
 const WORKER_THRESHOLD_PIXELS = 1_500_000;
@@ -10,7 +15,7 @@ function loadImageElement(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = reject;
+    img.onerror = () => reject(new Error("Failed to load image for encoding"));
     img.src = src;
   });
 }
@@ -33,7 +38,7 @@ function computeDimensions(
   };
 }
 
-async function convertOnMainThread(
+async function encodeOnCanvas(
   img: HTMLImageElement,
   options: ConversionOptions,
 ): Promise<{ blob: Blob; width: number; height: number; mimeType: string }> {
@@ -59,19 +64,28 @@ async function convertOnMainThread(
     options.lossless || options.format === "png",
   );
   const quality =
-    options.lossless && (options.format === "png" || options.format === "webp")
-      ? 1
-      : options.quality;
+    options.format === "png"
+      ? undefined
+      : options.lossless && options.format === "webp"
+        ? 1
+        : options.quality;
 
   const blob = await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
-      (b) => (b ? resolve(b) : reject(new Error(`Failed to encode ${mime}`))),
+      (b) => {
+        if (!b || b.size === 0) {
+          reject(new Error(`Browser could not encode ${options.format.toUpperCase()}`));
+          return;
+        }
+        resolve(b);
+      },
       mime,
       quality,
     );
   });
 
-  return { blob, width, height, mimeType: mime };
+  const actualMime = blob.type || mime;
+  return { blob, width, height, mimeType: actualMime };
 }
 
 async function convertInWorker(
@@ -92,11 +106,16 @@ async function convertInWorker(
         return;
       }
       const { buffer, mimeType, width, height } = event.data;
+      const blob = new Blob([buffer], { type: mimeType });
+      if (blob.size === 0) {
+        reject(new Error("Worker produced empty image"));
+        return;
+      }
       resolve({
-        blob: new Blob([buffer], { type: mimeType }),
+        blob,
         width,
         height,
-        mimeType,
+        mimeType: blob.type || mimeType,
       });
     };
     worker.onerror = (err) => {
@@ -110,6 +129,15 @@ async function convertInWorker(
   });
 }
 
+async function resolveOutputFormat(
+  requested: ImageFormat,
+  support: Record<ImageFormat, boolean>,
+): Promise<ImageFormat> {
+  if (support[requested]) return requested;
+  if (requested === "avif" && support.webp) return "webp";
+  return "png";
+}
+
 export async function convertImage(
   source: string | File,
   options: ConversionOptions,
@@ -117,27 +145,34 @@ export async function convertImage(
 ): Promise<ConversionResult> {
   const start = performance.now();
   const support = await detectFormatSupport();
-  if (!support[options.format]) {
-    const fallback = options.format === "avif" ? "webp" : "png";
-    options = { ...options, format: support[fallback] ? fallback : "png" };
-  }
+  const outputFormat = await resolveOutputFormat(options.format, support);
+  const encodeOptions: ConversionOptions = {
+    ...options,
+    format: outputFormat,
+  };
 
-  const dataUrl =
-    typeof source === "string" ? source : await blobToDataUrlFromFile(source);
-  const img = await loadImageElement(dataUrl);
+  const decoded = await decodeImageSource(source);
+  const img = await loadImageElement(decoded.dataUrl);
   const pixels = img.naturalWidth * img.naturalHeight;
 
-  const encoded =
-    pixels > WORKER_THRESHOLD_PIXELS
-      ? await convertInWorker(img, options)
-      : await convertOnMainThread(img, options);
+  let encoded: { blob: Blob; width: number; height: number; mimeType: string };
+  try {
+    encoded =
+      pixels > WORKER_THRESHOLD_PIXELS
+        ? await convertInWorker(img, encodeOptions)
+        : await encodeOnCanvas(img, encodeOptions);
+  } catch (workerErr) {
+    if (pixels > WORKER_THRESHOLD_PIXELS) {
+      encoded = await encodeOnCanvas(img, encodeOptions);
+    } else {
+      throw workerErr;
+    }
+  }
 
+  const actualFormat =
+    formatFromMime(encoded.mimeType) ?? encodeOptions.format;
   const resultDataUrl = await blobToDataUrl(encoded.blob);
-  const originalSize =
-    originalByteSize ??
-    (typeof source === "string"
-      ? Math.round(((dataUrl.split(",")[1]?.length ?? 0) * 3) / 4)
-      : source.size);
+  const originalSize = originalByteSize ?? decoded.originalByteSize;
 
   const stats = buildStatsFromBlob(
     encoded.blob,
@@ -150,19 +185,12 @@ export async function convertImage(
     blob: encoded.blob,
     dataUrl: resultDataUrl,
     stats,
-    format: options.format,
+    format: actualFormat,
+    requestedFormat: options.format,
     compressionRatio: compressionRatio(originalSize, encoded.blob.size),
     processingMs: Math.round(performance.now() - start),
+    transcodedFromHeic: decoded.decodedViaTranscode,
   };
-}
-
-function blobToDataUrlFromFile(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
 }
 
 export function defaultConversionOptions(filename = "artwork"): ConversionOptions {

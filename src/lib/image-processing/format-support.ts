@@ -13,6 +13,15 @@ export function mimeForFormat(format: ImageFormat, lossless: boolean): string {
   }
 }
 
+export function formatFromMime(mime: string): ImageFormat | null {
+  const m = mime.toLowerCase();
+  if (m.includes("avif")) return "avif";
+  if (m.includes("webp")) return "webp";
+  if (m.includes("png")) return "png";
+  if (m.includes("jpeg") || m.includes("jpg")) return "jpeg";
+  return null;
+}
+
 export function extensionForFormat(format: ImageFormat): string {
   return format === "jpeg" ? "jpg" : format;
 }
@@ -22,8 +31,10 @@ export async function detectFormatSupport(): Promise<Record<ImageFormat, boolean
     return { avif: false, webp: true, png: true, jpeg: true };
   }
 
-  const avif = await canEncode("image/avif");
-  const webp = await canEncode("image/webp");
+  const [avif, webp] = await Promise.all([
+    canEncode("image/avif"),
+    canEncode("image/webp"),
+  ]);
 
   return {
     avif,
@@ -36,12 +47,19 @@ export async function detectFormatSupport(): Promise<Record<ImageFormat, boolean
 async function canEncode(mime: string): Promise<boolean> {
   try {
     const canvas = document.createElement("canvas");
-    canvas.width = 1;
-    canvas.height = 1;
+    canvas.width = 2;
+    canvas.height = 2;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return false;
+    ctx.fillStyle = "#808080";
+    ctx.fillRect(0, 0, 2, 2);
+
     const blob = await new Promise<Blob | null>((resolve) =>
       canvas.toBlob(resolve, mime, 0.5),
     );
-    return blob !== null && blob.size > 0;
+    if (!blob || blob.size === 0) return false;
+    if (blob.type && blob.type !== mime) return false;
+    return true;
   } catch {
     return false;
   }

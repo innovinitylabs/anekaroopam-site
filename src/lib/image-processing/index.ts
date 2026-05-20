@@ -3,4 +3,6 @@ export * from "./presets";
 export * from "./format-support";
 export * from "./bytes";
 export * from "./analyze";
+export * from "./analyze-utils";
+export * from "./decode-source";
 export * from "./convert";

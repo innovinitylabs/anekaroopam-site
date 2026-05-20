@@ -1,6 +1,7 @@
 import type { ImageAnalysis, ImageStats } from "./types";
 import { formatBytes, compressionRatio } from "./bytes";
 import { detectFormatSupport, loadingEstimate } from "./format-support";
+import { decodeImageSource } from "./decode-source";
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -55,9 +56,8 @@ export async function analyzeImage(
   source: string | File,
   originalByteSize?: number,
 ): Promise<ImageAnalysis> {
-  const dataUrl =
-    typeof source === "string" ? source : await readFileAsDataUrl(source);
-  const img = await loadImage(dataUrl);
+  const decoded = await decodeImageSource(source);
+  const img = await loadImage(decoded.dataUrl);
 
   const width = img.naturalWidth;
   const height = img.naturalHeight;
@@ -68,17 +68,13 @@ export async function analyzeImage(
   if (!ctx) throw new Error("Canvas unavailable");
 
   ctx.drawImage(img, 0, 0);
-  const byteSize =
-    originalByteSize ??
-    (typeof source === "string"
-      ? estimateDataUrlBytes(dataUrl)
-      : source.size);
+  const byteSize = originalByteSize ?? decoded.originalByteSize;
 
   const stats: ImageStats = {
     width,
     height,
     byteSize,
-    mimeType: typeof source === "string" ? "image/unknown" : source.type,
+    mimeType: decoded.sourceMime,
     aspectRatio: width / height,
   };
 
@@ -92,20 +88,6 @@ export async function analyzeImage(
     formatSupport,
     loadingEstimate: loadingEstimate(byteSize),
   };
-}
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-function estimateDataUrlBytes(dataUrl: string): number {
-  const base64 = dataUrl.split(",")[1] ?? "";
-  return Math.round((base64.length * 3) / 4);
 }
 
 export function buildStatsFromBlob(

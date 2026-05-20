@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type ImageCompareSliderProps = {
   originalSrc: string;
@@ -16,11 +16,12 @@ export function ImageCompareSlider({
   onRequestConvert,
 }: ImageCompareSliderProps) {
   const [posPct, setPosPct] = useState(50);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const dragging = useRef(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   const setFromClientX = useCallback((clientX: number) => {
-    const el = containerRef.current;
+    const el = rootRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
     if (r.width <= 0) return;
@@ -28,13 +29,33 @@ export function ImageCompareSlider({
     setPosPct(Math.min(100, Math.max(0, p)));
   }, []);
 
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    const el = rootRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+    } else {
+      await el.requestFullscreen();
+    }
+  };
+
   const onPointerDownTrack = (e: React.PointerEvent) => {
+    if ((e.target as HTMLElement).closest("[data-compare-control]")) return;
     if (!convertedSrc) {
       onRequestConvert();
       return;
     }
     dragging.current = true;
-    containerRef.current?.setPointerCapture(e.pointerId);
+    rootRef.current?.setPointerCapture(e.pointerId);
     setFromClientX(e.clientX);
   };
 
@@ -45,7 +66,7 @@ export function ImageCompareSlider({
 
   const onPointerUp = (e: React.PointerEvent) => {
     dragging.current = false;
-    const el = containerRef.current;
+    const el = rootRef.current;
     if (el?.hasPointerCapture(e.pointerId)) {
       el.releasePointerCapture(e.pointerId);
     }
@@ -68,16 +89,29 @@ export function ImageCompareSlider({
 
   return (
     <div
-      ref={containerRef}
-      className="relative w-full cursor-ew-resize touch-none select-none border border-[var(--border)] bg-[var(--paper)]"
-      style={{ minHeight: "min(85vh, 920px)" }}
+      ref={rootRef}
+      className={`relative w-full touch-none select-none border border-[var(--border)] bg-[var(--paper)] ${
+        isFullscreen ? "cursor-ew-resize" : ""
+      }`}
+      style={{
+        minHeight: isFullscreen ? undefined : "min(85vh, 920px)",
+        ...(isFullscreen ? { width: "100%", height: "100%" } : {}),
+      }}
       onPointerDown={onPointerDownTrack}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
     >
-      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center p-4">
-        <div className="relative h-[min(80vh,880px)] w-full max-w-full">
+      <div
+        className={`absolute inset-0 flex flex-col items-center justify-center p-4 ${
+          isFullscreen ? "cursor-ew-resize" : "cursor-ew-resize"
+        }`}
+      >
+        <div
+          className={`relative w-full max-w-full ${
+            isFullscreen ? "h-full" : "h-[min(80vh,880px)]"
+          }`}
+        >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={convertedSrc}
@@ -101,6 +135,7 @@ export function ImageCompareSlider({
           </div>
         </div>
       </div>
+
       <div
         className="pointer-events-none absolute inset-y-0 w-0.5 bg-[var(--ink)]"
         style={{ left: `${posPct}%`, transform: "translateX(-50%)" }}
@@ -120,10 +155,24 @@ export function ImageCompareSlider({
           <span className="block h-4 w-px bg-[var(--ink)]" />
         </span>
       </div>
+
+      <div
+        data-compare-control
+        className="pointer-events-auto absolute right-3 top-3 z-10 flex gap-2"
+      >
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          className="border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[0.58rem] tracking-[0.18em] uppercase text-[var(--muted)] transition-opacity hover:opacity-90"
+        >
+          {isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+        </button>
+      </div>
+
       <div className="pointer-events-none absolute left-3 top-3 text-[0.58rem] tracking-[0.2em] uppercase text-[var(--muted)]">
         Original
       </div>
-      <div className="pointer-events-none absolute right-3 top-3 text-[0.58rem] tracking-[0.2em] uppercase text-[var(--muted)]">
+      <div className="pointer-events-none absolute right-3 top-12 text-[0.58rem] tracking-[0.2em] uppercase text-[var(--muted)]">
         Converted
       </div>
     </div>
