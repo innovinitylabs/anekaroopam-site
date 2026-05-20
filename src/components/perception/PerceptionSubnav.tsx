@@ -14,7 +14,7 @@ export function PerceptionSubnav() {
 
   return (
     <nav
-      className="flex items-center gap-6"
+      className="flex shrink-0 items-center gap-4 sm:gap-6"
       aria-label="Perception system"
     >
       {items.map((item) => {
@@ -26,7 +26,7 @@ export function PerceptionSubnav() {
             key={item.href}
             href={item.href}
             className={cn(
-              "text-[0.68rem] tracking-[0.2em] uppercase transition-opacity",
+              "-my-3 py-3 text-[0.62rem] tracking-[0.16em] uppercase transition-opacity sm:text-[0.68rem] sm:tracking-[0.2em]",
               active ? "opacity-100" : "opacity-40 hover:opacity-75",
             )}
           >

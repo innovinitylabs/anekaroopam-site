@@ -38,12 +38,12 @@ export default function ArchivePage() {
   }, [year, process, query]);
 
   return (
-    <div className="mx-auto max-w-6xl px-6 pb-24 md:px-10">
+    <div className="mx-auto max-w-6xl px-6 pb-20 md:px-10 md:pb-24">
       <FadeIn className="paper-depth pb-8">
         <p className="text-[0.62rem] tracking-[0.28em] uppercase text-[var(--muted)]">
           Archive
         </p>
-        <h1 className="mt-4 font-display text-4xl tracking-tight md:text-5xl">
+        <h1 className="mt-4 font-display text-[2.45rem] leading-tight tracking-tight md:text-5xl">
           Perceptual records
         </h1>
         <p className="mt-6 max-w-xl text-[var(--muted)] leading-relaxed">
@@ -52,11 +52,11 @@ export default function ArchivePage() {
         </p>
       </FadeIn>
 
-      <FadeIn delay={0.1} className="mt-12 flex flex-wrap gap-6 border-y border-[var(--border)] py-6">
+      <FadeIn delay={0.1} className="mt-10 grid gap-5 border-y border-[var(--border)] py-6 sm:grid-cols-2 md:mt-12 md:flex md:flex-wrap md:gap-6">
         <label className="text-[0.62rem] tracking-[0.16em] uppercase">
           Year
           <select
-            className="mt-1 block border-b border-[var(--border)] bg-transparent py-1 text-sm normal-case tracking-normal"
+            className="mt-1 block min-h-10 w-full border-b border-[var(--border)] bg-transparent py-1 text-sm normal-case tracking-normal md:w-auto"
             value={year}
             onChange={(e) =>
               setYear(e.target.value ? Number(e.target.value) : "")
@@ -73,7 +73,7 @@ export default function ArchivePage() {
         <label className="text-[0.62rem] tracking-[0.16em] uppercase">
           Process
           <select
-            className="mt-1 block border-b border-[var(--border)] bg-transparent py-1 text-sm normal-case tracking-normal"
+            className="mt-1 block min-h-10 w-full border-b border-[var(--border)] bg-transparent py-1 text-sm normal-case tracking-normal md:w-auto"
             value={process}
             onChange={(e) => setProcess(e.target.value)}
           >
@@ -85,10 +85,10 @@ export default function ArchivePage() {
             ))}
           </select>
         </label>
-        <label className="flex-1 min-w-[12rem] text-[0.62rem] tracking-[0.16em] uppercase">
+        <label className="min-w-0 text-[0.62rem] tracking-[0.16em] uppercase sm:col-span-2 md:min-w-[12rem] md:flex-1">
           Search
           <input
-            className="mt-1 w-full border-b border-[var(--border)] bg-transparent py-1 text-sm normal-case tracking-normal outline-none"
+            className="mt-1 min-h-10 w-full border-b border-[var(--border)] bg-transparent py-1 text-sm normal-case tracking-normal outline-none"
             placeholder="Title or perceptual state"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -96,7 +96,7 @@ export default function ArchivePage() {
         </label>
       </FadeIn>
 
-      <ul className="mt-16 grid gap-12 md:grid-cols-2 lg:grid-cols-3">
+      <ul className="mt-12 grid gap-14 sm:grid-cols-2 md:mt-16 md:gap-12 lg:grid-cols-3">
         {filtered.map((artwork, i) => (
           <FadeIn key={artwork.id} delay={0.05 * i}>
             <li>
@@ -106,7 +106,9 @@ export default function ArchivePage() {
                     src={artwork.imageSrc}
                     alt={artwork.metadata.title}
                     fill
-                    className="relative z-[1] object-contain p-6"
+                    sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                    priority={i === 0}
+                    className="relative z-[1] object-contain p-5 sm:p-6"
                   />
                 </div>
                 <div className="mt-4 flex items-baseline justify-between gap-4">

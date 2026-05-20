@@ -108,7 +108,7 @@ export function buildStandaloneHtml(
   #transform { will-change: transform; transform-origin: center center; }
   #artwork, picture img { max-width: 88vmin; max-height: 88vmin; display: block; user-select: none; pointer-events: none; }
   picture { display: block; line-height: 0; }
-  #meta { position: fixed; left: 0; right: 0; bottom: 0; padding: 2rem 2.5rem 2.25rem; color: rgba(26,24,20,0.72); transition: opacity 0.5s; pointer-events: none; max-height: 55vh; overflow-y: auto; }
+  #meta { position: fixed; left: 0; right: 0; bottom: 0; padding: 2rem 2.5rem calc(env(safe-area-inset-bottom) + 2.25rem); color: rgba(26,24,20,0.72); transition: opacity 0.5s; pointer-events: none; max-height: 55vh; overflow-y: auto; }
   #meta.dark { color: rgba(232,228,220,0.72); }
   #meta.hidden { opacity: 0; }
   #meta.interactive { pointer-events: auto; }
@@ -130,14 +130,26 @@ export function buildStandaloneHtml(
   #meta-adv dt { font-size: 0.58rem; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.75; margin-top: 0.65rem; }
   #meta-adv dt:first-child { margin-top: 0; }
   #meta-adv dd { margin-top: 0.2rem; white-space: pre-wrap; }
-  #controls { position: fixed; top: 1.25rem; right: 1.5rem; opacity: 0; transition: opacity 0.45s; pointer-events: none; font-size: 0.62rem; letter-spacing: 0.14em; color: rgba(26,24,20,0.5); }
+  #controls { position: fixed; top: calc(env(safe-area-inset-top) + 1.25rem); right: 1.5rem; opacity: 0; transition: opacity 0.45s; pointer-events: none; font-size: 0.62rem; letter-spacing: 0.14em; color: rgba(26,24,20,0.5); }
   #controls.dark { color: rgba(232,228,220,0.5); }
   #controls.visible { opacity: 1; pointer-events: auto; }
   #controls label { display: flex; align-items: center; gap: 0.45rem; cursor: pointer; user-select: none; }
   #controls input[type="checkbox"] { width: 0.75rem; height: 0.75rem; margin: 0; accent-color: rgba(26,24,20,0.45); cursor: pointer; }
   #controls.dark input[type="checkbox"] { accent-color: rgba(232,228,220,0.45); }
-  #hint { position: fixed; top: 1.25rem; left: 50%; transform: translateX(-50%); font-size: 0.62rem; letter-spacing: 0.22em; text-transform: uppercase; opacity: 0; transition: opacity 0.4s; pointer-events: none; }
+  #mobile-rotate { display: none; }
+  #hint { position: fixed; top: calc(env(safe-area-inset-top) + 1.25rem); left: 50%; transform: translateX(-50%); font-size: 0.62rem; letter-spacing: 0.22em; text-transform: uppercase; opacity: 0; transition: opacity 0.4s; pointer-events: none; }
   #hint.visible { opacity: 0.35; }
+  @media (max-width: 640px) {
+    #artwork, picture img { max-width: 86vmin; max-height: 82vmin; }
+    #controls { top: calc(env(safe-area-inset-top) + 0.9rem); right: 1rem; max-width: 44vw; font-size: 0.56rem; line-height: 1.45; }
+    #meta { padding: 1.25rem 1.25rem calc(env(safe-area-inset-bottom) + 4.75rem); max-height: 48vh; }
+    #meta h1 { font-size: 0.66rem; letter-spacing: 0.2em; }
+    #hint { top: calc(env(safe-area-inset-top) + 1rem); font-size: 0.56rem; letter-spacing: 0.16em; white-space: nowrap; }
+    #mobile-rotate { position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 0.75rem); display: flex; justify-content: center; gap: 2rem; padding: 0 1.25rem; opacity: 0; transition: opacity 0.4s; pointer-events: none; color: rgba(26,24,20,0.55); }
+    #mobile-rotate.dark { color: rgba(232,228,220,0.55); }
+    #mobile-rotate.visible { opacity: 1; pointer-events: auto; }
+    #mobile-rotate button { min-width: 2.75rem; min-height: 2.75rem; border: 0; border-top: 1px solid currentColor; background: transparent; color: inherit; font: inherit; font-size: 0.58rem; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.82; }
+  }
 </style>
 </head>
 <body>
@@ -152,6 +164,11 @@ export function buildStandaloneHtml(
       <input type="checkbox" id="snap-toggle" />
       <span>Snap to perceptual states</span>
     </label>
+  </div>
+  <div id="mobile-rotate">
+    <button type="button" data-rotate="ccw" aria-label="Rotate counterclockwise">Ccw</button>
+    <button type="button" data-reset aria-label="Reset view">0</button>
+    <button type="button" data-rotate="cw" aria-label="Rotate clockwise">Cw</button>
   </div>
   <div id="meta">
     <h1></h1>
@@ -178,6 +195,7 @@ export function buildStandaloneHtml(
   var img = document.getElementById('artwork');
   var meta = document.getElementById('meta');
   var controls = document.getElementById('controls');
+  var mobileRotate = document.getElementById('mobile-rotate');
   var snapToggle = document.getElementById('snap-toggle');
   var hint = document.getElementById('hint');
   var metaAdvWrap = document.getElementById('meta-adv-wrap');
@@ -187,6 +205,9 @@ export function buildStandaloneHtml(
   var angle = CONFIG.initialAngle || 0;
   var zoom = 1, panX = 0, panY = 0, targetAngle = angle, animStart = null, animFrom = angle;
   var DURATION = 680, idleTimer = null, metaAdvOpen = false;
+  var pointers = {};
+  var pinchStart = null;
+  var suppressClick = false;
   var SNAP_KEY = 'anek_snap_' + (CONFIG.artworkId || 'artwork');
   var snapToState = !!CONFIG.initialSnapToState;
   try {
@@ -201,6 +222,7 @@ export function buildStandaloneHtml(
     if ((0.299*r + 0.587*g + 0.114*b) / 255 < 0.45) {
       meta.classList.add('dark');
       controls.classList.add('dark');
+      mobileRotate.classList.add('dark');
     }
   }
   if (!img.getAttribute('src')) img.src = CONFIG.imageSrc;
@@ -233,6 +255,13 @@ export function buildStandaloneHtml(
     pulseUi();
   });
   controls.addEventListener('click', function(e) { e.stopPropagation(); });
+  mobileRotate.addEventListener('click', function(e) {
+    e.stopPropagation();
+    var button = e.target.closest('button');
+    if (!button) return;
+    if (button.dataset.rotate) rotate(button.dataset.rotate);
+    if (button.dataset.reset !== undefined) resetView();
+  });
   snapToggle.addEventListener('change', function(e) {
     e.stopPropagation();
     snapToState = snapToggle.checked;
@@ -304,16 +333,22 @@ export function buildStandaloneHtml(
   function pulseUi() {
     meta.classList.remove('hidden');
     controls.classList.add('visible');
+    mobileRotate.classList.add('visible');
     hint.classList.add('visible');
     clearTimeout(idleTimer);
     idleTimer = setTimeout(function() {
       if (!metaAdvOpen) meta.classList.remove('interactive');
       meta.classList.add('hidden');
       controls.classList.remove('visible');
+      mobileRotate.classList.remove('visible');
       hint.classList.remove('visible');
     }, 3200);
   }
   stage.addEventListener('click', function(e) {
+    if (suppressClick) {
+      suppressClick = false;
+      return;
+    }
     var rect = stage.getBoundingClientRect();
     rotate((e.clientX - rect.left) < rect.width / 2 ? 'ccw' : 'cw');
   });
@@ -325,18 +360,48 @@ export function buildStandaloneHtml(
     pulseUi();
   }, { passive: false });
   var dragging = false, lastX = 0, lastY = 0;
+  function pointerDistance() {
+    var ids = Object.keys(pointers);
+    if (ids.length < 2) return 0;
+    var a = pointers[ids[0]], b = pointers[ids[1]];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
   stage.addEventListener('pointerdown', function(e) {
     if (e.detail > 1) return;
-    dragging = true; lastX = e.clientX; lastY = e.clientY;
+    pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+    if (Object.keys(pointers).length === 2) {
+      pinchStart = { distance: pointerDistance(), zoom: zoom };
+      suppressClick = true;
+    }
+    dragging = false; lastX = e.clientX; lastY = e.clientY;
     stage.setPointerCapture(e.pointerId);
   });
   stage.addEventListener('pointermove', function(e) {
-    if (!dragging) return;
+    pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+    if (pinchStart && Object.keys(pointers).length >= 2) {
+      var distance = pointerDistance();
+      if (pinchStart.distance > 0) {
+        zoom = Math.min(4, Math.max(0.4, pinchStart.zoom * (distance / pinchStart.distance)));
+        applyTransform(); pulseUi();
+      }
+      suppressClick = true;
+      return;
+    }
     panX += e.clientX - lastX; panY += e.clientY - lastY;
+    if (Math.abs(e.clientX - lastX) > 1 || Math.abs(e.clientY - lastY) > 1) {
+      dragging = true;
+      suppressClick = true;
+    }
     lastX = e.clientX; lastY = e.clientY;
     applyTransform(); pulseUi();
   });
-  stage.addEventListener('pointerup', function() { dragging = false; });
+  function endPointer(e) {
+    delete pointers[e.pointerId];
+    if (Object.keys(pointers).length < 2) pinchStart = null;
+    setTimeout(function() { dragging = false; }, 0);
+  }
+  stage.addEventListener('pointerup', endPointer);
+  stage.addEventListener('pointercancel', endPointer);
   window.addEventListener('keydown', function(e) {
     if (e.key === 'ArrowLeft') rotate('ccw');
     if (e.key === 'ArrowRight') rotate('cw');

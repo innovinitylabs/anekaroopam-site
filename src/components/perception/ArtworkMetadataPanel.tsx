@@ -11,9 +11,9 @@ interface ArtworkMetadataPanelProps {
 const labelClass =
   "text-[0.62rem] tracking-[0.18em] uppercase text-[var(--muted)]";
 const inputClass =
-  "mt-1 w-full border-b border-[var(--border)] bg-transparent py-1 outline-none";
+  "mt-1 min-h-10 w-full border-b border-[var(--border)] bg-transparent py-1 outline-none sm:min-h-0";
 const textareaClass =
-  "mt-1 w-full resize-y border border-[var(--border)] bg-transparent px-2 py-1.5 text-[0.82rem] leading-relaxed outline-none";
+  "mt-1 min-h-24 w-full resize-y border border-[var(--border)] bg-transparent px-2 py-2 text-[0.82rem] leading-relaxed outline-none sm:min-h-0 sm:py-1.5";
 
 function Field({
   label,
@@ -50,7 +50,7 @@ export function ArtworkMetadataPanel({
         />
       </Field>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Year">
           <input
             type="number"
@@ -74,7 +74,7 @@ export function ArtworkMetadataPanel({
         <button
           type="button"
           onClick={() => setAdvancedOpen((o) => !o)}
-          className="group flex w-full items-center gap-3 py-2 text-[0.62rem] tracking-[0.2em] uppercase text-[var(--muted)] transition-opacity hover:opacity-100"
+          className="group flex w-full items-center gap-2 py-3 text-center text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)] transition-opacity hover:opacity-100 sm:gap-3 sm:py-2 sm:text-[0.62rem] sm:tracking-[0.2em]"
           aria-expanded={advancedOpen}
         >
           <span className="h-px flex-1 bg-[var(--border)]" aria-hidden />
@@ -84,7 +84,9 @@ export function ArtworkMetadataPanel({
           >
             ⌄
           </span>
-          <span className="whitespace-nowrap">Additional archival metadata</span>
+          <span className="max-w-[12rem] leading-relaxed sm:max-w-none sm:whitespace-nowrap">
+            Additional archival metadata
+          </span>
           <span className="h-px flex-1 bg-[var(--border)]" aria-hidden />
         </button>
 
@@ -108,7 +110,7 @@ export function ArtworkMetadataPanel({
               />
             </Field>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Dimensions">
                 <input
                   className={inputClass}

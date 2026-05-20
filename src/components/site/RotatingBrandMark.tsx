@@ -78,7 +78,7 @@ export function RotatingBrandMark({
           priority={priority}
           unoptimized={isGif}
           className="pointer-events-none object-contain"
-          style={{ height, width: "auto", maxWidth: width * 1.35 }}
+          style={{ width, height }}
         />
       </motion.span>
     </button>

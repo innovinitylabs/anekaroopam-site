@@ -211,7 +211,7 @@ export function PrepareWorkspace() {
   return (
     <div className="flex h-full min-h-0 w-full flex-col lg:flex-row">
       {!sourceUrl ? (
-        <div className="flex flex-1 items-center justify-center p-8">
+        <div className="flex flex-1 items-center justify-center p-5 sm:p-8">
           <div className="w-full max-w-md">
             <ImageDropZone
               dragOver={dragOver}
@@ -222,8 +222,8 @@ export function PrepareWorkspace() {
         </div>
       ) : (
           <>
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6 md:p-8">
-              <div className="mx-auto max-w-3xl space-y-8">
+            <div className="min-h-0 flex-[1_1_58%] overflow-y-auto overscroll-contain p-5 sm:p-6 md:p-8">
+              <div className="mx-auto max-w-3xl space-y-6 md:space-y-8">
               {analysisError && (
                 <p className="border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-[0.78rem] leading-relaxed text-red-700/90">
                   {analysisError}
@@ -246,7 +246,7 @@ export function PrepareWorkspace() {
                       key={v}
                       type="button"
                       onClick={() => setCompareView(v)}
-                      className={`px-2 py-1 border ${
+                      className={`min-h-9 border px-2 py-1 ${
                         compareView === v
                           ? "border-[var(--ink)]"
                           : "border-[var(--border)] opacity-50"
@@ -270,7 +270,7 @@ export function PrepareWorkspace() {
                     }`}
                   >
                     {(compareView === "split" || compareView === "original") && (
-                      <figure className="border border-[var(--border)] bg-[var(--paper)] p-4">
+                      <figure className="border border-[var(--border)] bg-[var(--paper)] p-3 sm:p-4">
                         <figcaption className="mb-3 text-[0.62rem] tracking-[0.16em] uppercase text-[var(--muted)]">
                           Original
                         </figcaption>
@@ -278,12 +278,12 @@ export function PrepareWorkspace() {
                         <img
                           src={sourceUrl}
                           alt="Original"
-                          className="mx-auto max-h-[min(70vh,720px)] w-auto object-contain"
+                          className="mx-auto max-h-[min(58vh,720px)] w-auto max-w-full object-contain md:max-h-[min(70vh,720px)]"
                         />
                       </figure>
                     )}
                     {(compareView === "split" || compareView === "converted") && (
-                      <figure className="border border-[var(--border)] bg-[var(--paper)] p-4">
+                      <figure className="border border-[var(--border)] bg-[var(--paper)] p-3 sm:p-4">
                         <figcaption className="mb-3 text-[0.62rem] tracking-[0.16em] uppercase text-[var(--muted)]">
                           Converted
                           {converted ? ` (${converted.format})` : ""}
@@ -293,7 +293,7 @@ export function PrepareWorkspace() {
                           <img
                             src={converted.dataUrl}
                             alt="Converted"
-                            className="mx-auto max-h-[min(70vh,720px)] w-auto object-contain"
+                            className="mx-auto max-h-[min(58vh,720px)] w-auto max-w-full object-contain md:max-h-[min(70vh,720px)]"
                           />
                         ) : (
                           <button
@@ -388,8 +388,8 @@ export function PrepareWorkspace() {
             </div>
           </div>
 
-          <aside className="flex w-full flex-col border-t border-[var(--border)] bg-[var(--surface)] lg:h-full lg:w-[22rem] lg:shrink-0 lg:overflow-hidden lg:border-t-0 lg:border-l">
-            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-6">
+          <aside className="flex max-h-[44svh] w-full flex-col border-t border-[var(--border)] bg-[var(--surface)] lg:h-full lg:max-h-none lg:w-[22rem] lg:shrink-0 lg:overflow-hidden lg:border-t-0 lg:border-l">
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] sm:p-6 lg:space-y-6">
               <PanelSection title="Presets" subtitle="Perceptual export modes">
                 <ul className="space-y-3">
                   {EXPORT_PRESETS.map((p) => (
@@ -467,7 +467,7 @@ export function PrepareWorkspace() {
                       className="mt-2 w-full"
                     />
                   </label>
-                  <label className="flex items-center gap-2 text-[0.68rem]">
+                  <label className="flex min-h-10 items-center gap-2 text-[0.68rem] sm:min-h-0">
                     <input
                       type="checkbox"
                       checked={options.lossless}
@@ -477,14 +477,14 @@ export function PrepareWorkspace() {
                     />
                     Lossless (PNG / WebP)
                   </label>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
                     <label className="block">
                       <span className="text-[0.62rem] uppercase tracking-wide text-[var(--muted)]">
                         Max width
                       </span>
                       <input
                         type="number"
-                        className="mt-1 w-full border-b border-[var(--border)] bg-transparent py-1"
+                        className="mt-1 min-h-10 w-full border-b border-[var(--border)] bg-transparent py-1 sm:min-h-0"
                         placeholder="native"
                         value={options.maxWidth ?? ""}
                         onChange={(e) =>
@@ -503,7 +503,7 @@ export function PrepareWorkspace() {
                       </span>
                       <input
                         type="number"
-                        className="mt-1 w-full border-b border-[var(--border)] bg-transparent py-1"
+                        className="mt-1 min-h-10 w-full border-b border-[var(--border)] bg-transparent py-1 sm:min-h-0"
                         placeholder="native"
                         value={options.maxHeight ?? ""}
                         onChange={(e) =>
@@ -522,7 +522,7 @@ export function PrepareWorkspace() {
                       Chroma
                     </span>
                     <select
-                      className="mt-1 w-full border-b border-[var(--border)] bg-transparent py-1"
+                      className="mt-1 min-h-10 w-full border-b border-[var(--border)] bg-transparent py-1 sm:min-h-0"
                       value={options.chromaSubsampling}
                       onChange={(e) =>
                         setOptions((o) => ({
@@ -545,7 +545,7 @@ export function PrepareWorkspace() {
                       Filename
                     </span>
                     <input
-                      className="mt-1 w-full border-b border-[var(--border)] bg-transparent py-1"
+                      className="mt-1 min-h-10 w-full border-b border-[var(--border)] bg-transparent py-1 sm:min-h-0"
                       value={options.filename}
                       onChange={(e) =>
                         setOptions((o) => ({ ...o, filename: e.target.value }))
@@ -557,7 +557,7 @@ export function PrepareWorkspace() {
                   type="button"
                   disabled={converting || Boolean(analysisError)}
                   onClick={runConversion}
-                  className="mt-6 w-full border border-[var(--ink)] py-2.5 text-[0.68rem] tracking-[0.16em] uppercase disabled:opacity-40"
+                  className="mt-6 w-full border border-[var(--ink)] py-3 text-[0.68rem] tracking-[0.16em] uppercase disabled:opacity-40 sm:py-2.5"
                 >
                   {converting ? "Processing..." : "Convert"}
                 </button>
@@ -622,7 +622,7 @@ export function PrepareWorkspace() {
                     onClick={() =>
                       downloadConvertedImage(converted, options.filename)
                     }
-                    className="mt-3 w-full border border-[var(--border)] py-2 text-[0.62rem] tracking-[0.14em] uppercase"
+                    className="mt-3 w-full border border-[var(--border)] py-3 text-[0.62rem] tracking-[0.14em] uppercase sm:py-2"
                   >
                     Download {converted.format.toUpperCase()}
                   </button>
@@ -630,7 +630,7 @@ export function PrepareWorkspace() {
               </PanelSection>
 
               <PanelSection title="HTML artifact" subtitle="Standalone orientation export">
-                <label className="mb-4 flex items-center gap-2 text-[0.68rem]">
+                <label className="mb-4 flex min-h-10 items-center gap-2 text-[0.68rem] sm:min-h-0">
                   <input
                     type="checkbox"
                     checked={enableFallback}
@@ -645,7 +645,7 @@ export function PrepareWorkspace() {
                   type="button"
                   disabled={!converted}
                   onClick={exportHtml}
-                  className="mt-4 w-full border border-[var(--ink)] py-2.5 text-[0.68rem] tracking-[0.16em] uppercase disabled:opacity-40"
+                  className="mt-4 w-full border border-[var(--ink)] py-3 text-[0.68rem] tracking-[0.16em] uppercase disabled:opacity-40 sm:py-2.5"
                 >
                   Export standalone HTML
                 </button>
@@ -668,7 +668,7 @@ export function PrepareWorkspace() {
                   setConverted(null);
                   setAnalysis(null);
                 }}
-                className="w-full py-2 text-[0.62rem] tracking-[0.16em] uppercase opacity-50 hover:opacity-90"
+                className="w-full py-3 text-[0.62rem] tracking-[0.16em] uppercase opacity-50 hover:opacity-90 sm:py-2"
               >
                 Clear source
               </button>

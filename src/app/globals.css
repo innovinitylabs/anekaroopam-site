@@ -43,6 +43,7 @@
 html {
   scroll-behavior: smooth;
   min-height: 100%;
+  overflow-x: clip;
   background-color: var(--paper);
 }
 
@@ -131,6 +132,8 @@ html::after {
 body {
   position: relative;
   z-index: 1;
+  min-width: 0;
+  overflow-x: clip;
   background: transparent;
   color: var(--foreground);
   font-family: var(--font-source-serif), Georgia, "Times New Roman", serif;
@@ -151,6 +154,23 @@ body {
   max-width: 42rem;
   line-height: 1.75;
   font-size: 1.05rem;
+}
+
+@media (max-width: 640px) {
+  :root {
+    --paper-fiber-opacity: 0.018;
+    --paper-scan-opacity: 0.048;
+    --paper-tone-opacity: 0.48;
+  }
+
+  .prose-anek {
+    font-size: 1rem;
+    line-height: 1.82;
+  }
+
+  html::after {
+    background-size: 760px 760px, 980px 980px;
+  }
 }
 
 .prose-anek p + p {

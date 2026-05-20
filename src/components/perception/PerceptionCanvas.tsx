@@ -46,7 +46,10 @@ export function PerceptionCanvas({
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const animRef = useRef<number | null>(null);
   const draggingRef = useRef(false);
+  const suppressClickRef = useRef(false);
   const lastPointerRef = useRef({ x: 0, y: 0 });
+  const pointersRef = useRef(new Map<number, { x: number; y: number }>());
+  const pinchRef = useRef<{ distance: number; zoom: number } | null>(null);
 
   const bgColor = resolveBackground(artwork.background);
   const fgColor = foregroundForBackground(bgColor);
@@ -109,7 +112,10 @@ export function PerceptionCanvas({
 
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
-      if (draggingRef.current) return;
+      if (draggingRef.current || suppressClickRef.current) {
+        suppressClickRef.current = false;
+        return;
+      }
       const rect = e.currentTarget.getBoundingClientRect();
       const x = e.clientX - rect.left;
       rotate(x < rect.width / 2 ? "ccw" : "cw");
@@ -133,18 +139,46 @@ export function PerceptionCanvas({
     (e: ReactPointerEvent<HTMLDivElement>) => {
       if (e.detail > 1) return;
       draggingRef.current = false;
+      pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointersRef.current.size === 2) {
+        const [a, b] = [...pointersRef.current.values()];
+        pinchRef.current = {
+          distance: Math.hypot(a.x - b.x, a.y - b.y),
+          zoom: transform.zoom,
+        };
+        suppressClickRef.current = true;
+      }
       lastPointerRef.current = { x: e.clientX, y: e.clientY };
       e.currentTarget.setPointerCapture(e.pointerId);
     },
-    [],
+    [transform.zoom],
   );
 
   const handlePointerMove = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
       if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+      pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointersRef.current.size >= 2 && pinchRef.current) {
+        const [a, b] = [...pointersRef.current.values()];
+        const distance = Math.hypot(a.x - b.x, a.y - b.y);
+        if (pinchRef.current.distance > 0) {
+          setTransform((prev) => ({
+            ...prev,
+            zoom: clampZoom(
+              pinchRef.current!.zoom * (distance / pinchRef.current!.distance),
+            ),
+          }));
+        }
+        suppressClickRef.current = true;
+        pulseUi();
+        return;
+      }
       const dx = e.clientX - lastPointerRef.current.x;
       const dy = e.clientY - lastPointerRef.current.y;
-      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) draggingRef.current = true;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+        draggingRef.current = true;
+        suppressClickRef.current = true;
+      }
       if (!draggingRef.current) return;
       setTransform((prev) => ({
         ...prev,
@@ -157,7 +191,9 @@ export function PerceptionCanvas({
     [pulseUi],
   );
 
-  const handlePointerUp = useCallback(() => {
+  const handlePointerUp = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    pointersRef.current.delete(e.pointerId);
+    if (pointersRef.current.size < 2) pinchRef.current = null;
     setTimeout(() => {
       draggingRef.current = false;
     }, 0);
@@ -207,6 +243,7 @@ export function PerceptionCanvas({
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
       role="application"
       aria-label={`Orientation interface for ${artwork.metadata.title}`}
     >
@@ -222,7 +259,7 @@ export function PerceptionCanvas({
           <motion.img
             src={artwork.imageSrc}
             alt={artwork.metadata.title}
-            className="max-h-[88vmin] max-w-[88vmin] pointer-events-none"
+            className="pointer-events-none max-h-[82vmin] max-w-[86vmin] sm:max-h-[88vmin] sm:max-w-[88vmin]"
             style={{ rotate: transform.angle }}
             draggable={false}
           />
@@ -238,8 +275,48 @@ export function PerceptionCanvas({
         />
       )}
 
+      <motion.div
+        className="absolute inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-10 flex justify-center gap-8 px-6 md:hidden"
+        animate={{ opacity: uiVisible ? 0.52 : 0 }}
+        transition={{ duration: 0.4 }}
+      >
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            rotate("ccw");
+          }}
+          className="min-h-11 min-w-11 border-t border-current/25 px-2 text-[0.58rem] tracking-[0.18em] uppercase opacity-80"
+          aria-label="Rotate counterclockwise"
+        >
+          Ccw
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            resetView();
+          }}
+          className="min-h-11 min-w-11 border-t border-current/25 px-2 text-[0.58rem] tracking-[0.18em] uppercase opacity-60"
+          aria-label="Reset view"
+        >
+          0
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            rotate("cw");
+          }}
+          className="min-h-11 min-w-11 border-t border-current/25 px-2 text-[0.58rem] tracking-[0.18em] uppercase opacity-80"
+          aria-label="Rotate clockwise"
+        >
+          Cw
+        </button>
+      </motion.div>
+
       <motion.p
-        className="pointer-events-none absolute top-5 left-1/2 -translate-x-1/2 text-[0.62rem] tracking-[0.22em] uppercase"
+        className="pointer-events-none absolute top-[calc(env(safe-area-inset-top)+1.25rem)] left-1/2 -translate-x-1/2 whitespace-nowrap text-[0.58rem] tracking-[0.18em] uppercase sm:text-[0.62rem] sm:tracking-[0.22em]"
         animate={{ opacity: uiVisible ? 0.35 : 0 }}
         transition={{ duration: 0.4 }}
       >

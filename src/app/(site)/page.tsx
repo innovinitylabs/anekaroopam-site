@@ -4,8 +4,8 @@ import { FadeIn } from "@/components/site/FadeIn";
 
 export default function HomePage() {
   return (
-    <div className="relative min-h-[calc(100vh-6rem)]">
-      <section className="paper-depth mx-auto flex min-h-[85vh] max-w-6xl flex-col justify-center px-6 pb-24 md:px-10">
+    <div className="relative min-h-[calc(100vh-5rem)] md:min-h-[calc(100vh-6rem)]">
+      <section className="paper-depth mx-auto flex min-h-[72vh] max-w-6xl flex-col justify-center px-6 pt-4 pb-16 sm:min-h-[76vh] md:min-h-[85vh] md:px-10 md:pt-0 md:pb-24">
         <FadeIn>
           <BrandLogo
             href="/"
@@ -19,26 +19,26 @@ export default function HomePage() {
           </p>
         </FadeIn>
         <FadeIn delay={0.1}>
-          <h1 className="mt-6 max-w-3xl font-display text-5xl leading-[1.1] tracking-tight md:text-7xl">
+          <h1 className="mt-6 max-w-3xl font-display text-[2.7rem] leading-[1.08] tracking-tight sm:text-5xl md:text-7xl">
             Multistable perception, held in rotation
           </h1>
         </FadeIn>
         <FadeIn delay={0.2}>
-          <p className="mt-10 max-w-xl text-lg leading-relaxed text-[var(--muted)]">
+          <p className="mt-8 max-w-xl text-[1.02rem] leading-relaxed text-[var(--muted)] sm:text-lg md:mt-10">
             A perceptual archive where forms emerge through rotation,
             instability, and sustained attention.
           </p>
         </FadeIn>
-        <FadeIn delay={0.35} className="mt-14 flex flex-wrap gap-8">
+        <FadeIn delay={0.35} className="mt-10 flex flex-wrap gap-x-8 gap-y-2 md:mt-14">
           <Link
             href="/archive"
-            className="text-[0.68rem] tracking-[0.2em] uppercase border-b border-[var(--ink)] pb-1"
+            className="-my-3 inline-block border-b border-[var(--ink)] py-3 text-[0.68rem] tracking-[0.2em] uppercase"
           >
             Enter the archive
           </Link>
           <Link
             href="/perceive"
-            className="text-[0.68rem] tracking-[0.2em] uppercase opacity-50 hover:opacity-90"
+            className="-my-3 inline-block py-3 text-[0.68rem] tracking-[0.2em] uppercase opacity-50 hover:opacity-90"
           >
             Perception
           </Link>
@@ -46,7 +46,7 @@ export default function HomePage() {
       </section>
 
       <section className="border-t border-[var(--border)] bg-[var(--surface)]">
-        <div className="mx-auto grid max-w-6xl gap-16 px-6 py-24 md:grid-cols-2 md:px-10">
+        <div className="mx-auto grid max-w-6xl gap-12 px-6 py-18 md:grid-cols-2 md:gap-16 md:px-10 md:py-24">
           <FadeIn>
             <h2 className="font-display text-2xl tracking-wide">
               Perception is participatory

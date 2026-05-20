@@ -20,12 +20,12 @@ export function PerceptionShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex shrink-0 items-center justify-between gap-6 border-b border-[var(--border)] px-6 py-3">
-        <div className="flex min-w-0 items-center gap-6 md:gap-10">
+      <header className="flex shrink-0 items-center justify-between gap-4 border-b border-[var(--border)] px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 sm:px-6 md:gap-6">
+        <div className="flex min-w-0 items-center gap-4 md:gap-10">
           <Link
             href="/"
             aria-label={BRAND.name}
-            className="shrink-0 font-display text-sm tracking-[0.08em] uppercase opacity-70 transition-opacity hover:opacity-100"
+            className="min-w-0 shrink font-display text-xs tracking-[0.06em] uppercase opacity-70 transition-opacity hover:opacity-100 sm:text-sm sm:tracking-[0.08em]"
           >
             <AnekaroopamWordmark />
           </Link>
@@ -46,7 +46,7 @@ export function PerceptionShell({ children }: { children: React.ReactNode }) {
       </header>
 
       {onPrepare && (
-        <p className="shrink-0 border-b border-[var(--border)] px-6 py-2 text-[0.68rem] tracking-[0.12em] text-[var(--muted)]">
+        <p className="shrink-0 border-b border-[var(--border)] px-4 py-2 text-[0.64rem] leading-relaxed tracking-[0.1em] text-[var(--muted)] sm:px-6 sm:text-[0.68rem] sm:tracking-[0.12em]">
           Archival conversion and export preparation
         </p>
       )}

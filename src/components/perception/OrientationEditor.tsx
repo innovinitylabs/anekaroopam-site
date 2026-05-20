@@ -107,7 +107,7 @@ export function OrientationEditor() {
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col lg:flex-row">
-      <div className="relative min-h-0 flex-1">
+      <div className="relative min-h-[46svh] flex-[0_0_52svh] lg:min-h-0 lg:flex-1">
         {artwork.imageSrc ? (
           <PerceptionCanvas
             artwork={{
@@ -125,23 +125,34 @@ export function OrientationEditor() {
             onImport={handleImport}
           />
         )}
+        {artwork.imageSrc && (
+          <button
+            type="button"
+            onClick={() => setPanelVisible((v) => !v)}
+            className="absolute right-4 bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-20 border-t border-[var(--border)] px-1 py-3 text-[0.58rem] tracking-[0.18em] uppercase text-[var(--muted)] lg:hidden"
+          >
+            {panelVisible ? "Hide record" : "Show record"}
+          </button>
+        )}
       </div>
 
       <aside
         className={`flex flex-col border-t border-[var(--border)] bg-[var(--surface)] transition-all duration-500 lg:h-full lg:w-[22rem] lg:shrink-0 lg:overflow-hidden lg:border-t-0 lg:border-l ${
           panelVisible
-            ? "min-h-0 flex-1 opacity-100"
+            ? "max-h-[48svh] min-h-0 opacity-100 lg:max-h-none lg:flex-1"
             : "max-h-0 overflow-hidden opacity-0 lg:max-h-none lg:opacity-100"
         }`}
       >
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6 text-sm">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] text-sm sm:p-6">
           {!artwork.imageSrc && (
-            <ImportZone
-              compact
-              dragOver={dragOver}
-              onDragOver={setDragOver}
-              onImport={handleImport}
-            />
+            <div className="hidden lg:block">
+              <ImportZone
+                compact
+                dragOver={dragOver}
+                onDragOver={setDragOver}
+                onImport={handleImport}
+              />
+            </div>
           )}
 
           <ArtworkMetadataPanel
@@ -232,7 +243,7 @@ export function OrientationEditor() {
                   savedAt: new Date().toISOString(),
                 });
               }}
-              className={`block w-full border border-[var(--border)] py-2 text-center text-[0.68rem] tracking-[0.14em] uppercase ${
+              className={`block w-full border border-[var(--border)] py-3 text-center text-[0.68rem] tracking-[0.14em] uppercase sm:py-2 ${
                 artwork.imageSrc ? "hover:border-[var(--foreground)]" : "pointer-events-none opacity-30"
               }`}
             >
@@ -253,7 +264,7 @@ export function OrientationEditor() {
               type="button"
               disabled={!artwork.imageSrc}
               onClick={handleExportJson}
-              className="block w-full border border-[var(--border)] py-2 text-[0.68rem] tracking-[0.14em] uppercase disabled:opacity-30"
+              className="block w-full border border-[var(--border)] py-3 text-[0.68rem] tracking-[0.14em] uppercase disabled:opacity-30 sm:py-2"
             >
               Configuration JSON
             </button>
@@ -275,30 +286,30 @@ function StateRow({
 }) {
   return (
     <div className="space-y-2 border border-[var(--border)] p-3">
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <input
-          className="flex-1 bg-transparent outline-none"
+          className="min-h-9 min-w-0 flex-1 bg-transparent outline-none"
           placeholder="Name (optional)"
           value={state.name}
           onChange={(e) => onChange({ name: e.target.value })}
         />
         <input
           type="number"
-          className="w-16 bg-transparent text-right outline-none"
+          className="min-h-9 w-20 bg-transparent text-right outline-none sm:w-16"
           value={state.angle}
           onChange={(e) => onChange({ angle: Number(e.target.value) })}
         />
         <button
           type="button"
           onClick={onRemove}
-          className="text-[0.62rem] opacity-40 hover:opacity-100"
+          className="min-h-9 px-2 text-[0.62rem] opacity-40 hover:opacity-100"
           aria-label="Remove state"
         >
           x
         </button>
       </div>
       <input
-        className="w-full bg-transparent text-[0.8rem] italic opacity-80 outline-none"
+        className="min-h-9 w-full bg-transparent text-[0.8rem] italic opacity-80 outline-none"
         placeholder="Caption"
         value={state.caption ?? ""}
         onChange={(e) => onChange({ caption: e.target.value })}
@@ -321,7 +332,7 @@ function ImportZone({
   return (
     <label
       className={`flex cursor-pointer flex-col items-center justify-center border border-dashed border-[var(--border)] text-center transition-colors ${
-        compact ? "p-6" : "absolute inset-0 m-8"
+        compact ? "p-6" : "absolute inset-0 m-5 sm:m-8"
       } ${dragOver ? "bg-[var(--surface-elevated)]" : ""}`}
       onDragOver={(e) => {
         e.preventDefault();

@@ -20,7 +20,7 @@ export function SiteNav() {
 
   return (
     <header className="fixed top-0 z-40 w-full">
-      <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6 md:px-10">
+      <nav className="mx-auto flex max-w-6xl items-center justify-between px-5 pt-[calc(env(safe-area-inset-top)+1rem)] pb-4 md:px-10 md:pt-[calc(env(safe-area-inset-top)+1.5rem)] md:pb-6">
         <BrandLogo href="/" size="sm" priority />
         <ul className="hidden items-center gap-8 md:flex">
           {links.map((link) => (
@@ -42,7 +42,7 @@ export function SiteNav() {
         <Link
           href="/perceive"
           className={cn(
-            "text-[0.62rem] tracking-[0.18em] uppercase transition-opacity",
+            "-my-3 py-3 text-[0.62rem] tracking-[0.18em] uppercase transition-opacity",
             onPerceive ? "opacity-100" : "opacity-50 hover:opacity-90",
           )}
         >
