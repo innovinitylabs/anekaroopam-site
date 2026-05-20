@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond, Source_Serif_4 } from "next/font/google";
+import { Anek_Tamil, Cormorant_Garamond, Source_Serif_4 } from "next/font/google";
 import { BRAND } from "@/lib/brand";
 import "./globals.css";
 
@@ -13,6 +13,12 @@ const sourceSerif = Source_Serif_4({
   variable: "--font-source-serif",
   subsets: ["latin"],
   weight: ["300", "400", "500"],
+});
+
+const anekTamil = Anek_Tamil({
+  variable: "--font-anek-tamil",
+  subsets: ["tamil"],
+  weight: ["500", "600"],
 });
 
 export const metadata: Metadata = {
@@ -49,7 +55,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${cormorant.variable} ${sourceSerif.variable} h-full`}
+      className={`${cormorant.variable} ${sourceSerif.variable} ${anekTamil.variable} h-full`}
     >
       <body className="flex min-h-full flex-col antialiased">{children}</body>
     </html>

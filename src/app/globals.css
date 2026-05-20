@@ -20,6 +20,10 @@
   --font-display: var(--font-cormorant);
 }
 
+.font-anek-tamil {
+  font-family: var(--font-anek-tamil), sans-serif;
+}
+
 * {
   box-sizing: border-box;
 }
