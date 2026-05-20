@@ -143,7 +143,7 @@ export function AnekaroopamWordmark({ className }: AnekaroopamWordmarkProps) {
         aria-hidden
         initial={false}
         animate={{
-          x: reduceMotion ? 0 : showTamil ? 3 : 0,
+          x: reduceMotion ? 0 : showTamil ? 4 : 0,
           fontWeight: showTamil ? 600 : 400,
         }}
         transition={{

@@ -6,101 +6,52 @@ export type ArchiveFilter = {
   state?: string;
 };
 
-export const archiveArtworks: PerceptionArtwork[] = [
+function artworkSrc(filename: string): string {
+  return `/artworks/${encodeURIComponent(filename)}`;
+}
+
+function titleFromFilename(filename: string): string {
+  return filename.replace(/\.[^.]+$/, "");
+}
+
+const ARCHIVE_FILES = [
   {
-    id: "witness-field",
+    id: "the-one-who-is-crown-among-the-kings",
+    file: "The One Who Is Crown Among The Kings.png",
+  },
+  {
+    id: "valiroopam",
+    file: "Valiroopam.png",
+  },
+  {
+    id: "aazhmaarrattam",
+    file: "ஆழ்மாற்றம்.png",
+  },
+] as const;
+
+function defaultStates(): PerceptionArtwork["states"] {
+  return [
+    { id: "s1", name: "", angle: 0, caption: "" },
+    { id: "s2", name: "", angle: 120, caption: "" },
+    { id: "s3", name: "", angle: 240, caption: "" },
+  ];
+}
+
+export const archiveArtworks: PerceptionArtwork[] = ARCHIVE_FILES.map(
+  ({ id, file }) => ({
+    id,
     metadata: {
-      title: "Witness Field",
-      year: 2024,
+      title: titleFromFilename(file),
       process: "Valiroopam",
-      description:
-        "A field of lines that resolves into witness-forms at oblique orientations.",
-      tags: ["emergence", "figuration"],
     },
-    imageSrc: "/artworks/witness-field.svg",
-    states: [
-      {
-        id: "s1",
-        name: "Witness",
-        angle: 90,
-        caption: "A witness that sees without eyes.",
-      },
-      {
-        id: "s2",
-        name: "Animal",
-        angle: 217,
-        caption: "The form destabilizes into instinct.",
-      },
-      {
-        id: "s3",
-        name: "Threshold",
-        angle: 0,
-        caption: "Neither figure nor ground claims precedence.",
-      },
-    ],
+    imageSrc: artworkSrc(file),
+    states: defaultStates(),
     background: "paper",
-    initialAngle: 0,
-    snapToState: true,
-    showMetadataOverlay: true,
-  },
-  {
-    id: "line-emergence",
-    metadata: {
-      title: "Line Emergence Study",
-      year: 2023,
-      process: "Valiroopam",
-      description: "Spontaneous line clusters awaiting rotational discovery.",
-    },
-    imageSrc: "/artworks/line-emergence.svg",
-    states: [
-      {
-        id: "s1",
-        name: "Drift",
-        angle: 45,
-        caption: "Lines hesitate between becoming and undoing.",
-      },
-      {
-        id: "s2",
-        name: "Coherence",
-        angle: 135,
-        caption: "A face assembles from refusal.",
-      },
-    ],
-    background: "archival",
-    initialAngle: 45,
-    snapToState: true,
-    showMetadataOverlay: true,
-  },
-  {
-    id: "rotational-void",
-    metadata: {
-      title: "Rotational Void",
-      year: 2025,
-      process: "Valiroopam",
-      description: "Negative space rotates into presence.",
-      tags: ["void", "rotation"],
-    },
-    imageSrc: "/artworks/rotational-void.svg",
-    states: [
-      {
-        id: "s1",
-        name: "Absence",
-        angle: 0,
-        caption: "The void holds the figure at bay.",
-      },
-      {
-        id: "s2",
-        name: "Emergence",
-        angle: 180,
-        caption: "Presence arrives sideways.",
-      },
-    ],
-    background: "black",
     initialAngle: 0,
     snapToState: false,
     showMetadataOverlay: true,
-  },
-];
+  }),
+);
 
 export function getArtworkById(id: string): PerceptionArtwork | undefined {
   return archiveArtworks.find((a) => a.id === id);
