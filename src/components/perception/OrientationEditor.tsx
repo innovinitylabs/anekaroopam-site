@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useState } from "react";
+import { savePrepareSession } from "@/lib/export-engine/session";
 import type {
   BackgroundPreset,
   PerceptionArtwork,
@@ -281,6 +283,28 @@ export function OrientationEditor() {
             <h2 className="text-[0.62rem] tracking-[0.18em] uppercase text-[var(--muted)]">
               Export
             </h2>
+            <Link
+              href="/perceive/tools/prepare"
+              onClick={() => {
+                if (!artwork.imageSrc) return;
+                savePrepareSession({
+                  artwork: {
+                    ...artwork,
+                    background:
+                      artwork.background === "custom"
+                        ? customBg
+                        : artwork.background,
+                  },
+                  customBackground: customBg,
+                  savedAt: new Date().toISOString(),
+                });
+              }}
+              className={`block w-full border border-[var(--border)] py-2 text-center text-[0.68rem] tracking-[0.14em] uppercase ${
+                artwork.imageSrc ? "hover:border-[var(--ink)]" : "pointer-events-none opacity-30"
+              }`}
+            >
+              Prepare and convert
+            </Link>
             <button
               type="button"
               disabled={!artwork.imageSrc}

@@ -44,6 +44,17 @@ src/
 - Export standalone offline HTML (base64 image, embedded behavior)
 - Export JSON configuration for future integrations
 
+## Perceptual preparation (`/perceive/tools/prepare`)
+
+Conservation-lab workflow for artwork preparation:
+
+- Convert to AVIF, WebP, PNG, JPEG (browser-native, Web Worker for large images)
+- Archival / Perceptual / Distribution presets
+- Side-by-side compare, file size and compression metrics
+- Image analysis (dominant colors, transparency, format support)
+- Standalone HTML export with embedded format choice and optional WebP fallback
+- Session bridge from the orientation editor (states + metadata preserved)
+
 ## Deployment
 
 Deploy to Vercel with:
