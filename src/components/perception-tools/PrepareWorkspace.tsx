@@ -30,6 +30,7 @@ import { loadPrepareSession } from "@/lib/export-engine/session";
 import { PanelSection } from "./PanelSection";
 import { SpecTable } from "./SpecTable";
 import { ImageDropZone } from "./ImageDropZone";
+import { ImageCompareSlider } from "./ImageCompareSlider";
 
 const FORMATS: ImageFormat[] = ["avif", "webp", "png", "jpeg"];
 
@@ -47,9 +48,9 @@ export function PrepareWorkspace() {
   const [dragOver, setDragOver] = useState(false);
   const [artwork, setArtwork] = useState<PerceptionArtwork | null>(null);
   const [enableFallback, setEnableFallback] = useState(true);
-  const [compareView, setCompareView] = useState<"split" | "original" | "converted">(
-    "split",
-  );
+  const [compareView, setCompareView] = useState<
+    "split" | "slider" | "original" | "converted"
+  >("split");
 
   useEffect(() => {
     const session = loadPrepareSession();
@@ -97,7 +98,7 @@ export function PrepareWorkspace() {
     }));
   };
 
-  const runConversion = async () => {
+  const runConversion = useCallback(async () => {
     if (!sourceFile && !sourceUrl) return;
     setConverting(true);
     try {
@@ -125,7 +126,13 @@ export function PrepareWorkspace() {
     } finally {
       setConverting(false);
     }
-  };
+  }, [
+    sourceFile,
+    sourceUrl,
+    options,
+    analysis?.stats.byteSize,
+    enableFallback,
+  ]);
 
   const htmlEstimate = useMemo(() => {
     if (!converted || !analysis) return null;
@@ -176,8 +183,15 @@ export function PrepareWorkspace() {
                 title="Compare"
                 subtitle="Original against converted output"
               >
-                <div className="mb-4 flex gap-2 text-[0.62rem] tracking-[0.14em] uppercase">
-                  {(["split", "original", "converted"] as const).map((v) => (
+                <div className="mb-4 flex flex-wrap gap-2 text-[0.62rem] tracking-[0.14em] uppercase">
+                  {(
+                    [
+                      ["split", "Split"],
+                      ["slider", "Slider"],
+                      ["original", "Original"],
+                      ["converted", "Converted"],
+                    ] as const
+                  ).map(([v, label]) => (
                     <button
                       key={v}
                       type="button"
@@ -188,49 +202,67 @@ export function PrepareWorkspace() {
                           : "border-[var(--border)] opacity-50"
                       }`}
                     >
-                      {v}
+                      {label}
                     </button>
                   ))}
                 </div>
-                <div
-                  className={`grid gap-4 ${
-                    compareView === "split" ? "md:grid-cols-2" : "grid-cols-1"
-                  }`}
-                >
-                  {(compareView === "split" || compareView === "original") && (
-                    <figure className="border border-[var(--border)] bg-[var(--paper)] p-4">
-                      <figcaption className="mb-3 text-[0.62rem] tracking-[0.16em] uppercase text-[var(--muted)]">
-                        Original
-                      </figcaption>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={sourceUrl}
-                        alt="Original"
-                        className="mx-auto max-h-[320px] w-auto object-contain"
-                      />
-                    </figure>
-                  )}
-                  {(compareView === "split" || compareView === "converted") && (
-                    <figure className="border border-[var(--border)] bg-[var(--paper)] p-4">
-                      <figcaption className="mb-3 text-[0.62rem] tracking-[0.16em] uppercase text-[var(--muted)]">
-                        Converted
-                        {converted ? ` (${converted.format})` : ""}
-                      </figcaption>
-                      {converted ? (
-                        // eslint-disable-next-line @next/next/no-img-element
+                {compareView === "slider" ? (
+                  <ImageCompareSlider
+                    originalSrc={sourceUrl}
+                    convertedSrc={converted?.dataUrl ?? null}
+                    converting={converting}
+                    onRequestConvert={runConversion}
+                  />
+                ) : (
+                  <div
+                    className={`grid gap-4 ${
+                      compareView === "split" ? "md:grid-cols-2" : "grid-cols-1"
+                    }`}
+                  >
+                    {(compareView === "split" || compareView === "original") && (
+                      <figure className="border border-[var(--border)] bg-[var(--paper)] p-4">
+                        <figcaption className="mb-3 text-[0.62rem] tracking-[0.16em] uppercase text-[var(--muted)]">
+                          Original
+                        </figcaption>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                          src={converted.dataUrl}
-                          alt="Converted"
-                          className="mx-auto max-h-[320px] w-auto object-contain"
+                          src={sourceUrl}
+                          alt="Original"
+                          className="mx-auto max-h-[min(70vh,720px)] w-auto object-contain"
                         />
-                      ) : (
-                        <p className="py-16 text-center text-[0.75rem] text-[var(--muted)]">
-                          Run conversion to preview
-                        </p>
-                      )}
-                    </figure>
-                  )}
-                </div>
+                      </figure>
+                    )}
+                    {(compareView === "split" || compareView === "converted") && (
+                      <figure className="border border-[var(--border)] bg-[var(--paper)] p-4">
+                        <figcaption className="mb-3 text-[0.62rem] tracking-[0.16em] uppercase text-[var(--muted)]">
+                          Converted
+                          {converted ? ` (${converted.format})` : ""}
+                        </figcaption>
+                        {converted ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={converted.dataUrl}
+                            alt="Converted"
+                            className="mx-auto max-h-[min(70vh,720px)] w-auto object-contain"
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={converting}
+                            onClick={runConversion}
+                            className="flex min-h-[200px] w-full flex-col items-center justify-center gap-2 py-12 text-center text-[0.75rem] text-[var(--muted)] transition-opacity hover:opacity-90 disabled:opacity-40"
+                          >
+                            <span>
+                              {converting
+                                ? "Processing..."
+                                : "Click here to run conversion and preview"}
+                            </span>
+                          </button>
+                        )}
+                      </figure>
+                    )}
+                  </div>
+                )}
               </PanelSection>
 
               {analysis && (
