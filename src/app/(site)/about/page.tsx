@@ -39,10 +39,9 @@ export default function AboutPage() {
             or dashboard.
           </p>
           <p>
-            The Perception Engine at perceive.anekaroopam.art allows artworks to
-            be composed with creator-defined perceptual states—angles, names,
-            captions—and exported as self-contained orientations for preservation
-            and future research.
+            The perception system lets artworks be composed with creator-defined
+            perceptual states—angles, optional names, captions—and exported as
+            self-contained orientations for preservation and future research.
           </p>
         </div>
       </FadeIn>

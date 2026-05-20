@@ -7,7 +7,6 @@ import { BrandLogo } from "@/components/site/BrandLogo";
 import { cn } from "@/lib/utils";
 
 const links = [
-  { href: "/", label: "Home" },
   { href: "/archive", label: "Archive" },
   { href: "/manifesto", label: "Manifesto" },
   { href: "/process", label: "Process" },
@@ -17,19 +16,22 @@ const links = [
 
 export function SiteNav() {
   const pathname = usePathname();
+  const onPerceive = pathname.startsWith("/perceive");
 
   return (
     <header className="fixed top-0 z-40 w-full">
       <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6 md:px-10">
         <BrandLogo href="/" size="sm" priority />
         <ul className="hidden items-center gap-8 md:flex">
-          {links.slice(1).map((link) => (
+          {links.map((link) => (
             <li key={link.href}>
               <Link
                 href={link.href}
                 className={cn(
                   "text-[0.68rem] tracking-[0.2em] uppercase transition-opacity",
-                  pathname === link.href ? "opacity-100" : "opacity-45 hover:opacity-80",
+                  pathname === link.href || pathname.startsWith(`${link.href}/`)
+                    ? "opacity-100"
+                    : "opacity-45 hover:opacity-80",
                 )}
               >
                 {link.label}
@@ -39,9 +41,12 @@ export function SiteNav() {
         </ul>
         <Link
           href="/perceive"
-          className="text-[0.62rem] tracking-[0.18em] uppercase opacity-50 transition-opacity hover:opacity-90"
+          className={cn(
+            "text-[0.62rem] tracking-[0.18em] uppercase transition-opacity",
+            onPerceive ? "opacity-100" : "opacity-50 hover:opacity-90",
+          )}
         >
-          Orient
+          Perception
         </Link>
       </nav>
       <motion.div

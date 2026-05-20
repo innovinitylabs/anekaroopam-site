@@ -22,12 +22,12 @@ export function estimateHtmlExport(
 
 export function formatExportSpecs(estimate: HtmlExportEstimate) {
   return [
-    { label: "Format", value: estimate.format.toUpperCase() },
+    { label: "Embedded format", value: estimate.format.toUpperCase() },
     { label: "Resolution", value: estimate.resolution },
-    { label: "Embedded Size", value: formatBytes(estimate.embeddedSize) },
-    { label: "Final HTML Size", value: formatBytes(estimate.finalHtmlSize) },
+    { label: "Embedded asset", value: formatBytes(estimate.embeddedSize) },
+    { label: "Final HTML", value: formatBytes(estimate.finalHtmlSize) },
     {
-      label: "Compression Ratio",
+      label: "Compression ratio",
       value: `${estimate.compressionRatio}%`,
     },
   ];

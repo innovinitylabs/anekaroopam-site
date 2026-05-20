@@ -10,25 +10,22 @@ import type {
 } from "@/lib/perception/types";
 import { createId } from "@/lib/perception/engine";
 import { BACKGROUND_PRESETS } from "@/lib/perception/backgrounds";
-import {
-  buildStandaloneHtml,
-  downloadHtml,
-  downloadJson,
-} from "@/lib/perception/export-html";
+import { downloadJson } from "@/lib/perception/export-html";
+import { ExportHtmlSection } from "./ExportHtmlSection";
 import { PerceptionCanvas } from "./PerceptionCanvas";
 import { fileToDataUrl } from "@/lib/utils";
 import type { ExportPayload } from "@/lib/perception/types";
 
 const defaultArtwork = (): PerceptionArtwork => ({
   id: "draft",
-  metadata: { title: "Untitled orientation", year: new Date().getFullYear() },
+  metadata: { title: "", year: new Date().getFullYear() },
   imageSrc: "",
   states: [
     {
       id: createId(),
-      name: "Emergence",
+      name: "",
       angle: 0,
-      caption: "A form waiting to be discovered.",
+      caption: "",
     },
   ],
   background: "paper",
@@ -60,7 +57,7 @@ export function OrientationEditor() {
         ...prev.states,
         {
           id: createId(),
-          name: "State",
+          name: "",
           angle: (prev.states.length * 45) % 360,
           caption: "",
         },
@@ -82,25 +79,17 @@ export function OrientationEditor() {
       imageSrc: dataUrl,
       metadata: {
         ...prev.metadata,
-        title: prev.metadata.title || file.name.replace(/\.[^.]+$/, ""),
+        title:
+          prev.metadata.title ||
+          file.name.replace(/\.[^.]+$/, ""),
       },
     }));
   };
 
-  const handleExportHtml = () => {
-    if (!artwork.imageSrc) return;
-    const payload: ExportPayload = {
-      version: 1,
-      artwork: {
-        ...artwork,
-        background:
-          artwork.background === "custom" ? customBg : artwork.background,
-      },
-      exportedAt: new Date().toISOString(),
-    };
-    const html = buildStandaloneHtml(payload);
-    const slug = artwork.metadata.title.toLowerCase().replace(/\s+/g, "-");
-    downloadHtml(`${slug || "orientation"}.html`, html);
+  const resolvedArtwork = {
+    ...artwork,
+    background:
+      artwork.background === "custom" ? customBg : artwork.background,
   };
 
   const handleExportJson = () => {
@@ -142,15 +131,6 @@ export function OrientationEditor() {
         }`}
       >
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6 text-sm">
-          <header className="mb-8">
-            <p className="text-[0.62rem] tracking-[0.24em] uppercase text-[var(--muted)]">
-              Orientation System
-            </p>
-            <h1 className="mt-2 font-display text-xl tracking-wide">
-              Configurational Interface
-            </h1>
-          </header>
-
           {!artwork.imageSrc && (
             <ImportZone
               compact
@@ -167,6 +147,7 @@ export function OrientationEditor() {
               </span>
               <input
                 className="mt-1 w-full border-b border-[var(--border)] bg-transparent py-1 outline-none"
+                placeholder="Optional"
                 value={artwork.metadata.title}
                 onChange={(e) =>
                   setArtwork((p) => ({
@@ -290,31 +271,28 @@ export function OrientationEditor() {
               onClick={() => {
                 if (!artwork.imageSrc) return;
                 savePrepareSession({
-                  artwork: {
-                    ...artwork,
-                    background:
-                      artwork.background === "custom"
-                        ? customBg
-                        : artwork.background,
-                  },
+                  artwork: resolvedArtwork,
                   customBackground: customBg,
                   savedAt: new Date().toISOString(),
                 });
               }}
               className={`block w-full border border-[var(--border)] py-2 text-center text-[0.68rem] tracking-[0.14em] uppercase ${
-                artwork.imageSrc ? "hover:border-[var(--ink)]" : "pointer-events-none opacity-30"
+                artwork.imageSrc ? "hover:border-[var(--foreground)]" : "pointer-events-none opacity-30"
               }`}
             >
-              Prepare and convert
+              Open in Prepare
             </Link>
-            <button
-              type="button"
-              disabled={!artwork.imageSrc}
-              onClick={handleExportHtml}
-              className="block w-full border border-[var(--border)] py-2 text-[0.68rem] tracking-[0.14em] uppercase disabled:opacity-30"
-            >
-              Standalone HTML
-            </button>
+            {artwork.imageSrc && (
+              <ExportHtmlSection
+                artwork={resolvedArtwork}
+                imageSrc={artwork.imageSrc}
+                filename={
+                  artwork.metadata.title.trim() ||
+                  "orientation"
+                }
+                compact
+              />
+            )}
             <button
               type="button"
               disabled={!artwork.imageSrc}
@@ -344,7 +322,7 @@ function StateRow({
       <div className="flex gap-2">
         <input
           className="flex-1 bg-transparent outline-none"
-          placeholder="Name"
+          placeholder="Name (optional)"
           value={state.name}
           onChange={(e) => onChange({ name: e.target.value })}
         />

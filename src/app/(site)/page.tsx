@@ -41,7 +41,7 @@ export default function HomePage() {
             href="/perceive"
             className="text-[0.68rem] tracking-[0.2em] uppercase opacity-50 hover:opacity-90"
           >
-            Orientation system
+            Perception
           </Link>
         </FadeIn>
       </section>

@@ -2,6 +2,11 @@
 
 import { motion } from "framer-motion";
 import type { PerceptualState, PerceptionArtwork } from "@/lib/perception/types";
+import {
+  displayTitle,
+  hasDisplayTitle,
+  stateOverlayLines,
+} from "@/lib/perception/display";
 
 interface PerceptionMetadataProps {
   artwork: PerceptionArtwork;
@@ -24,6 +29,9 @@ export function PerceptionMetadata({
     caption: true,
   };
 
+  const title = displayTitle(artwork.metadata.title);
+  const { primary, secondary } = stateOverlayLines(activeState);
+
   const details: string[] = [];
   if (fields.year && artwork.metadata.year) {
     details.push(String(artwork.metadata.year));
@@ -32,6 +40,10 @@ export function PerceptionMetadata({
     details.push(artwork.metadata.process);
   }
 
+  const showState = fields.state && primary;
+  const showCaption =
+    fields.caption && secondary && activeState && stateOverlayLines(activeState).secondary;
+
   return (
     <motion.div
       className="pointer-events-none absolute inset-x-0 bottom-0 px-8 pb-9 pt-16 md:px-10"
@@ -39,19 +51,17 @@ export function PerceptionMetadata({
       animate={{ opacity: visible ? 0.72 : 0 }}
       transition={{ duration: 0.5 }}
     >
-      {fields.title && (
+      {fields.title && hasDisplayTitle(artwork.metadata.title) && (
         <p className="text-[0.72rem] font-normal tracking-[0.28em] uppercase">
-          {artwork.metadata.title}
+          {title}
         </p>
       )}
-      {fields.state && activeState && (
-        <p className="mt-2.5 text-[0.95rem] tracking-[0.06em]">
-          {activeState.name}
-        </p>
+      {showState && (
+        <p className="mt-2.5 text-[0.95rem] tracking-[0.06em]">{primary}</p>
       )}
-      {fields.caption && activeState?.caption && (
+      {showCaption && (
         <p className="mt-1.5 max-w-xl text-[0.82rem] leading-relaxed italic opacity-85">
-          {activeState.caption}
+          {secondary}
         </p>
       )}
       {details.length > 0 && (

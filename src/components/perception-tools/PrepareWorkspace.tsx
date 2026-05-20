@@ -157,37 +157,21 @@ export function PrepareWorkspace() {
   };
 
   return (
-    <div className="h-full min-h-0 pb-8">
-      <div className="mx-auto max-w-6xl px-6 md:px-10">
-        <header className="mb-12 border-b border-[var(--border)] pb-8">
-          <p className="text-[0.62rem] tracking-[0.28em] uppercase text-[var(--muted)]">
-            Perceptual preparation
-          </p>
-          <h1 className="mt-3 font-display text-3xl tracking-tight md:text-4xl">
-            Conservation lab
-          </h1>
-          <p className="mt-4 max-w-2xl text-[0.9rem] leading-relaxed text-[var(--muted)]">
-            Optimize, convert, and export artworks for rotational viewing. Preserves
-            emergent line work and watercolor gradients for archival and perceptual
-            distribution.
-          </p>
-          <nav className="mt-6 flex flex-wrap gap-6 text-[0.62rem] tracking-[0.18em] uppercase">
-            <Link href="/perceive" className="opacity-50 hover:opacity-90">
-              Orientation system
-            </Link>
-            <span className="opacity-30">Prepare</span>
-          </nav>
-        </header>
-
-        {!sourceUrl ? (
-          <ImageDropZone
-            dragOver={dragOver}
-            onDragOver={setDragOver}
-            onImport={handleImport}
-          />
-        ) : (
-          <div className="grid gap-8 lg:grid-cols-[1fr_22rem]">
-            <div className="space-y-8">
+    <div className="flex h-full min-h-0 w-full flex-col lg:flex-row">
+      {!sourceUrl ? (
+        <div className="flex flex-1 items-center justify-center p-8">
+          <div className="w-full max-w-md">
+            <ImageDropZone
+              dragOver={dragOver}
+              onDragOver={setDragOver}
+              onImport={handleImport}
+            />
+          </div>
+        </div>
+      ) : (
+          <>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6 md:p-8">
+              <div className="mx-auto max-w-3xl space-y-8">
               <PanelSection
                 title="Compare"
                 subtitle="Original against converted output"
@@ -320,8 +304,10 @@ export function PrepareWorkspace() {
                 </PanelSection>
               )}
             </div>
+          </div>
 
-            <aside className="space-y-6">
+          <aside className="flex w-full flex-col border-t border-[var(--border)] bg-[var(--surface)] lg:h-full lg:w-[22rem] lg:shrink-0 lg:overflow-hidden lg:border-t-0 lg:border-l">
+            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-6">
               <PanelSection title="Presets" subtitle="Perceptual export modes">
                 <ul className="space-y-3">
                   {EXPORT_PRESETS.map((p) => (
@@ -543,9 +529,9 @@ export function PrepareWorkspace() {
                 </button>
                 {!artwork && (
                   <p className="mt-3 text-[0.68rem] leading-relaxed text-[var(--muted)]">
-                    Open from the{" "}
+                    Open from{" "}
                     <Link href="/perceive" className="underline">
-                      orientation system
+                      Orient
                     </Link>{" "}
                     to include perceptual states, or import will use image only.
                   </p>
@@ -564,10 +550,10 @@ export function PrepareWorkspace() {
               >
                 Clear source
               </button>
-            </aside>
-          </div>
-        )}
-      </div>
+            </div>
+          </aside>
+        </>
+      )}
     </div>
   );
 }

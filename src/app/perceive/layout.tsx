@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
-import { PerceiveHeader } from "@/components/site/PerceiveHeader";
+import { PerceptionShell } from "@/components/perception/PerceptionShell";
 
 export const metadata: Metadata = {
-  title: "Orientation System",
+  title: {
+    default: "Perception",
+    template: "%s — Perception",
+  },
   description:
-    "Perception Engine and configurational interface for multistable artworks.",
+    "Orientation and archival preparation for multistable artworks.",
 };
 
 export default function PerceiveLayout({
@@ -14,8 +17,7 @@ export default function PerceiveLayout({
 }) {
   return (
     <div className="perceive-theme flex h-[100dvh] flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
-      <PerceiveHeader />
-      <div className="min-h-0 flex-1">{children}</div>
+      <PerceptionShell>{children}</PerceptionShell>
     </div>
   );
 }

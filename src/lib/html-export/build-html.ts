@@ -175,7 +175,7 @@ export function buildStandaloneHtml(
     if (CONFIG.overlayFields.year !== false && CONFIG.metadata.year) parts.push(String(CONFIG.metadata.year));
     if (CONFIG.overlayFields.process !== false && CONFIG.metadata.process) parts.push(CONFIG.metadata.process);
     meta.querySelector('.detail').textContent = parts.join(' · ');
-    meta.querySelector('.state').textContent = CONFIG.overlayFields.state !== false && active ? active.name : '';
+    meta.querySelector('.state').textContent = CONFIG.overlayFields.state !== false && active ? (active.name && active.name.trim() ? active.name : (Math.round(active.angle) + '°')) : '';
     meta.querySelector('.caption').textContent = CONFIG.overlayFields.caption !== false && active && active.caption ? active.caption : '';
   }
   function applyTransform() {
