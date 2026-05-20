@@ -104,7 +104,7 @@ export function buildStandaloneHtml(
   #meta.hidden { opacity: 0; }
   @import url('https://fonts.googleapis.com/css2?family=Anek+Tamil:wght@100..800&display=swap');
   #meta h1 { font-size: 0.72rem; letter-spacing: 0.28em; text-transform: uppercase; font-weight: 400; }
-  #meta h1.tamil-title { font-family: 'Anek Tamil', sans-serif; font-weight: 200; letter-spacing: 0.08em; text-transform: none; font-size: 0.95rem; }
+  #meta h1.tamil-title { font-family: 'Anek Tamil', sans-serif; font-weight: 300; letter-spacing: 0.08em; text-transform: none; font-size: 0.95rem; }
   #meta .state { margin-top: 0.65rem; font-size: 0.95rem; letter-spacing: 0.06em; }
   #meta .caption { margin-top: 0.35rem; font-size: 0.82rem; font-style: italic; opacity: 0.85; max-width: 36rem; line-height: 1.55; }
   #meta .detail { margin-top: 0.5rem; font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.55; }
