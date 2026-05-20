@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Cormorant_Garamond, Source_Serif_4 } from "next/font/google";
+import { BRAND } from "@/lib/brand";
 import "./globals.css";
 
 const cormorant = Cormorant_Garamond({
@@ -26,6 +27,15 @@ export const metadata: Metadata = {
     siteName: "Anekaroopam",
     locale: "en_US",
     type: "website",
+    images: [{ url: BRAND.mark, width: 1200, height: 1200, alt: "Anekaroopam" }],
+  },
+  icons: {
+    icon: [
+      { url: BRAND.ico, sizes: "any" },
+      { url: BRAND.svg, type: "image/svg+xml" },
+    ],
+    apple: BRAND.mark,
+    shortcut: BRAND.ico,
   },
 };
 

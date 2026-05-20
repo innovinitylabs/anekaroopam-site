@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
+import { BRAND } from "@/lib/brand";
 
 export const metadata: Metadata = {
   title: "Orientation System",
@@ -17,9 +19,19 @@ export default function PerceiveLayout({
       <header className="fixed top-0 z-50 flex w-full items-center justify-between px-6 py-5 mix-blend-difference">
         <Link
           href="/"
-          className="text-[0.62rem] tracking-[0.2em] uppercase text-[#e8e4dc] opacity-60 hover:opacity-100"
+          className="flex items-center gap-2 opacity-80 transition-opacity hover:opacity-100"
+          aria-label="Anekaroopam home"
         >
-          Anekaroopam
+          <Image
+            src={BRAND.mark}
+            alt=""
+            width={32}
+            height={28}
+            className="h-7 w-auto object-contain"
+          />
+          <span className="hidden text-[0.62rem] tracking-[0.2em] uppercase text-[#e8e4dc] sm:inline">
+            Anekaroopam
+          </span>
         </Link>
         <p className="text-[0.62rem] tracking-[0.22em] uppercase text-[#e8e4dc] opacity-40">
           Perception Engine

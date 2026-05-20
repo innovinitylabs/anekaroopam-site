@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BrandLogo } from "@/components/site/BrandLogo";
 import { FadeIn } from "@/components/site/FadeIn";
 
 export default function HomePage() {
@@ -6,6 +7,7 @@ export default function HomePage() {
     <div className="relative min-h-[calc(100vh-6rem)]">
       <section className="mx-auto flex min-h-[85vh] max-w-6xl flex-col justify-center px-6 pb-24 md:px-10">
         <FadeIn>
+          <BrandLogo href="/" size="lg" showWordmark={false} className="mb-8" />
           <p className="text-[0.62rem] tracking-[0.28em] uppercase text-[var(--muted)]">
             Visual philosophy of emergence
           </p>

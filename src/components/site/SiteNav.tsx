@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
+import { BrandLogo } from "@/components/site/BrandLogo";
 import { cn } from "@/lib/utils";
 
 const links = [
@@ -20,12 +21,7 @@ export function SiteNav() {
   return (
     <header className="fixed top-0 z-40 w-full">
       <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6 md:px-10">
-        <Link
-          href="/"
-          className="font-display text-lg tracking-[0.12em] uppercase"
-        >
-          Anekaroopam
-        </Link>
+        <BrandLogo href="/" size="sm" priority />
         <ul className="hidden items-center gap-8 md:flex">
           {links.slice(1).map((link) => (
             <li key={link.href}>
