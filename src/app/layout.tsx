@@ -3,6 +3,11 @@ import { Anek_Tamil, Cormorant_Garamond, Source_Serif_4 } from "next/font/google
 import { BRAND } from "@/lib/brand";
 import "./globals.css";
 
+const siteDescription =
+  "Anekaroopam is a visual philosophy and perceptual archive focused on multistable figurative emergence through rotational perception and the Valiroopam process.";
+
+const socialImage = "/artworks/Valiroopam.png";
+
 const cormorant = Cormorant_Garamond({
   variable: "--font-cormorant",
   subsets: ["latin"],
@@ -27,15 +32,32 @@ export const metadata: Metadata = {
     default: "Anekaroopam",
     template: "%s — Anekaroopam",
   },
-  description:
-    "A visual philosophy of multistable figurative emergence. An archival perceptual orientation framework.",
+  description: siteDescription,
+  applicationName: "Anekaroopam",
+  creator: "Valipokkann",
+  publisher: "Anekaroopam",
+  alternates: {
+    canonical: "/",
+  },
   openGraph: {
+    title: "Anekaroopam",
+    description: siteDescription,
+    url: "/",
     siteName: "Anekaroopam",
     locale: "en_US",
     type: "website",
     images: [
-      { url: BRAND.markLight, width: 1200, height: 1200, alt: "Anekaroopam" },
+      {
+        url: socialImage,
+        alt: "Valiroopam artwork showing figurative emergence through rotational perception",
+      },
     ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Anekaroopam",
+    description: siteDescription,
+    images: [socialImage],
   },
   icons: {
     icon: [
