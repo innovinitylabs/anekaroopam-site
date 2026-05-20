@@ -6,7 +6,7 @@ import "./globals.css";
 const siteDescription =
   "Anekaroopam is a visual philosophy and perceptual archive focused on multistable figurative emergence through rotational perception and the Valiroopam process.";
 
-const socialImage = "/artworks/Valiroopam.png";
+const socialImage = "/opengraph-image";
 
 const cormorant = Cormorant_Garamond({
   variable: "--font-cormorant",
@@ -49,6 +49,8 @@ export const metadata: Metadata = {
     images: [
       {
         url: socialImage,
+        width: 1200,
+        height: 630,
         alt: "Valiroopam artwork showing figurative emergence through rotational perception",
       },
     ],

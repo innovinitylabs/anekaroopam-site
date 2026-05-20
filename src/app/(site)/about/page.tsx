@@ -3,7 +3,7 @@ import { FadeIn } from "@/components/site/FadeIn";
 import { RotatingBrandMark } from "@/components/site/RotatingBrandMark";
 
 const siteUrl = "https://anekaroopam.art";
-const socialImage = "/artworks/Valiroopam.png";
+const socialImage = "/opengraph-image";
 const pageDescription =
   "Anekaroopam is a visual philosophy and perceptual archive focused on multistable figurative emergence through rotational perception and the Valiroopam process.";
 
@@ -139,6 +139,8 @@ export const metadata: Metadata = {
     images: [
       {
         url: socialImage,
+        width: 1200,
+        height: 630,
         alt: "Valiroopam artwork showing figurative emergence through rotational perception",
       },
     ],
