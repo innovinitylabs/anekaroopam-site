@@ -7,13 +7,16 @@ import { BRAND } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 
 const REST = BRAND.name.slice(1);
-const EASE = [0.33, 1, 0.38, 1] as const;
-const DURATION = 0.42;
+const EASE = [0.28, 1, 0.36, 1] as const;
+const DURATION = 0.4;
 const HOVER_DELAY_MS = 120;
 
-/** Optical tuning for Tamil only — Latin A has no transform. */
+const LATIN_ROTATE_OUT = -18;
+const TAMIL_ROTATE_IN = 16;
+
+/** Tamil only: Anek Tamil, optical size/spacing (Latin has no transform in idle state). */
 const tamilGlyphClass =
-  "font-anek-tamil font-medium leading-none pr-[0.06em] -translate-y-[0.04em] scale-[1.08]";
+  "font-anek-tamil font-medium leading-none pr-[0.09em] translate-y-[1px] scale-[1.08]";
 
 type AnekaroopamWordmarkProps = {
   className?: string;
@@ -21,7 +24,7 @@ type AnekaroopamWordmarkProps = {
 
 /**
  * Identity wordmark: leading Latin "A" shifts to Tamil "அ" (Anek Tamil) on hover.
- * Parent link should set aria-label={BRAND.name} for screen readers.
+ * Permanent invisible Tamil reserve preserves width; Latin reads as normal serif until transition.
  */
 export function AnekaroopamWordmark({ className }: AnekaroopamWordmarkProps) {
   const [hovered, setHovered] = useState(false);
@@ -59,54 +62,60 @@ export function AnekaroopamWordmark({ className }: AnekaroopamWordmarkProps) {
 
   useEffect(() => () => clearHoverTimer(), [clearHoverTimer]);
 
-  const fade = {
-    duration: reduceMotion ? 0 : DURATION,
+  const transition = {
+    duration: reduceMotion ? 0.12 : DURATION,
     ease: EASE,
   };
 
   return (
     <span
-      className={cn("inline-flex items-baseline leading-none", className)}
+      className={cn("inline-flex items-baseline", className)}
       onMouseEnter={onPointerEnter}
       onMouseLeave={onPointerLeave}
       onFocus={onFocus}
       onBlur={onBlur}
     >
-      <span className="wordmark-initial relative inline-block shrink-0 align-baseline leading-none">
-        <span
-          className={cn("invisible inline-block", tamilGlyphClass)}
-          aria-hidden
-        >
-          {BRAND.tamilInitial}
+      <span
+        className="wordmark-initial inline-grid shrink-0 leading-none [grid-template-areas:'stack']"
+        aria-hidden
+      >
+        <span className="[grid-area:stack] select-none">
+          <span className={cn("invisible inline-block", tamilGlyphClass)}>
+            {BRAND.tamilInitial}
+          </span>
         </span>
 
-        <motion.span
-          className="latin-a absolute bottom-0 left-0 leading-none"
-          aria-hidden
-          initial={false}
-          animate={{ opacity: showTamil ? 0 : 1 }}
-          transition={fade}
-        >
-          {BRAND.latinInitial}
-        </motion.span>
+        <span className="pointer-events-none [grid-area:stack] relative flex h-full w-full items-end justify-start">
+          <motion.span
+            className="latin-a relative z-10 origin-bottom-left leading-none"
+            initial={false}
+            animate={{
+              opacity: showTamil ? 0 : 1,
+              rotate: reduceMotion ? 0 : showTamil ? LATIN_ROTATE_OUT : 0,
+            }}
+            transition={transition}
+          >
+            {BRAND.latinInitial}
+          </motion.span>
 
-        <motion.span
-          className={cn(
-            "tamil-a absolute bottom-0 left-0 leading-none will-change-[opacity]",
-            tamilGlyphClass,
-          )}
-          aria-hidden
-          initial={false}
-          animate={{ opacity: showTamil ? 1 : 0 }}
-          transition={fade}
-        >
-          {BRAND.tamilInitial}
-        </motion.span>
+          <motion.span
+            className={cn(
+              "tamil-a absolute bottom-0 left-0 z-20 origin-bottom-left leading-none will-change-transform",
+              tamilGlyphClass,
+            )}
+            initial={false}
+            animate={{
+              opacity: showTamil ? 1 : 0,
+              rotate: reduceMotion ? 0 : showTamil ? 0 : TAMIL_ROTATE_IN,
+            }}
+            transition={transition}
+          >
+            {BRAND.tamilInitial}
+          </motion.span>
+        </span>
       </span>
 
-      <span className="leading-none" aria-hidden>
-        {REST}
-      </span>
+      <span aria-hidden>{REST}</span>
     </span>
   );
 }
