@@ -117,7 +117,7 @@ export function AnekaroopamWordmark({ className }: AnekaroopamWordmarkProps) {
               rotate: reduceMotion ? 0 : showTamil ? 0 : WHEEL_IN_START_DEG,
               scaleX: 1.12,
               scaleY: 1.08,
-              y: 1,
+              y: -1,
             }}
             transition={{
               rotate: wheelTransition,
@@ -136,7 +136,7 @@ export function AnekaroopamWordmark({ className }: AnekaroopamWordmarkProps) {
         className="leading-none will-change-transform"
         aria-hidden
         initial={false}
-        animate={{ x: reduceMotion ? 0 : showTamil ? 8 : 0 }}
+        animate={{ x: reduceMotion ? 0 : showTamil ? 4 : 0 }}
         transition={wheelTransition}
       >
         {REST}
