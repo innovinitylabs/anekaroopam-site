@@ -57,8 +57,11 @@ export function getArtworkById(id: string): PerceptionArtwork | undefined {
   return archiveArtworks.find((a) => a.id === id);
 }
 
-export function filterArtworks(filters: ArchiveFilter): PerceptionArtwork[] {
-  return archiveArtworks.filter((artwork) => {
+export function filterArtworks(
+  filters: ArchiveFilter,
+  source: PerceptionArtwork[] = archiveArtworks,
+): PerceptionArtwork[] {
+  return source.filter((artwork) => {
     if (filters.year && artwork.metadata.year !== filters.year) return false;
     if (filters.process && artwork.metadata.process !== filters.process)
       return false;

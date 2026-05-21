@@ -14,6 +14,8 @@ export interface PerceptualState {
 }
 
 export interface ArtworkMetadata {
+  /** Permanent local archival identifier, e.g. AR-2026-0001. */
+  accessionId?: string;
   title: string;
   year?: number;
   /** Exact creation date (ISO date from date input) */

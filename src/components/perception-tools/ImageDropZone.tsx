@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { isHeicLike, isLikelyBrowserDecodable } from "@/lib/image-processing/decode-source";
 
@@ -19,6 +20,18 @@ export function ImageDropZone({
   onImport: (file: File) => void;
   compact?: boolean;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [inputKey, setInputKey] = useState(0);
+
+  const acceptFile = (file: File) => {
+    if (!isAcceptedImage(file)) return;
+    onImport(file);
+    setInputKey((k) => k + 1);
+    if (inputRef.current) {
+      inputRef.current.value = "";
+    }
+  };
+
   return (
     <label
       className={cn(
@@ -35,16 +48,18 @@ export function ImageDropZone({
         e.preventDefault();
         onDragOver(false);
         const file = e.dataTransfer.files[0];
-        if (file && isAcceptedImage(file)) onImport(file);
+        if (file) acceptFile(file);
       }}
     >
       <input
+        key={inputKey}
+        ref={inputRef}
         type="file"
         accept="image/*,.heic,.heif"
         className="sr-only"
         onChange={(e) => {
           const file = e.target.files?.[0];
-          if (file) onImport(file);
+          if (file) acceptFile(file);
         }}
       />
       <span className="text-[0.68rem] tracking-[0.18em] uppercase text-[var(--muted)]">

@@ -29,6 +29,12 @@ import {
   downloadStandaloneArtifact,
 } from "@/lib/export-engine/pipeline";
 import { loadPrepareSession } from "@/lib/export-engine/session";
+import { hydrateArtworkPreview } from "@/lib/export-engine/session-artwork";
+import {
+  installUploadRegistryBridge,
+  resolveFileFromAnyTab,
+  resolveObjectUrlFromAnyTab,
+} from "@/lib/archive/transient-upload-registry";
 import { PanelSection } from "./PanelSection";
 import { SpecTable } from "./SpecTable";
 import { ImageDropZone } from "./ImageDropZone";
@@ -57,17 +63,37 @@ export function PrepareWorkspace() {
   const [conversionError, setConversionError] = useState<string | null>(null);
 
   useEffect(() => {
+    installUploadRegistryBridge();
+
     const session = loadPrepareSession();
-    if (session?.artwork.imageSrc) {
+    if (!session) return;
+
+    const uploadId = session.uploadDraftId;
+    const file = resolveFileFromAnyTab(uploadId);
+    const objectUrl = resolveObjectUrlFromAnyTab(uploadId);
+
+    if (session.artwork) {
       setArtwork({
-        ...session.artwork,
+        ...(objectUrl
+          ? hydrateArtworkPreview(session.artwork, objectUrl)
+          : session.artwork),
         metadata: mergeArtworkMetadata(session.artwork.metadata),
       });
-      setSourceUrl(session.artwork.imageSrc);
+    }
+
+    if (file) {
+      setSourceFile(file);
       setOptions((o) => ({
         ...o,
-        filename: session.artwork.metadata.title,
+        filename:
+          session.sourceFileName?.replace(/\.[^.]+$/, "") ||
+          session.artwork.metadata.title ||
+          file.name.replace(/\.[^.]+$/, ""),
       }));
+    }
+
+    if (objectUrl) {
+      setSourceUrl(objectUrl);
     }
   }, []);
 
@@ -108,6 +134,10 @@ export function PrepareWorkspace() {
       filename: file.name.replace(/\.[^.]+$/, ""),
     }));
 
+    if (sourceUrl?.startsWith("blob:")) {
+      URL.revokeObjectURL(sourceUrl);
+    }
+
     if (isHeicLike(file)) {
       try {
         const decoded = await decodeImageSource(file);
@@ -122,7 +152,7 @@ export function PrepareWorkspace() {
     }
 
     setSourceUrl(URL.createObjectURL(file));
-  }, []);
+  }, [sourceUrl]);
 
   const applyPreset = (id: ExportPresetId) => {
     setPresetId(id);
