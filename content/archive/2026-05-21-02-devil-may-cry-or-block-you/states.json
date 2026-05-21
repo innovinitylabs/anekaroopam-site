@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "slug": "2026-05-21-02-devil-may-cry-or-block-you",
+  "perception": {
+    "states": [
+      {
+        "id": "ps_fzlaxirn",
+        "name": "devil may cry",
+        "angle": 0,
+        "caption": ""
+      },
+      {
+        "id": "ps_u7w3mvw0",
+        "name": "or block you",
+        "angle": 180,
+        "caption": ""
+      }
+    ],
+    "background": "paper",
+    "initialAngle": 0,
+    "snapToState": true,
+    "showMetadataOverlay": true
+  },
+  "exportedAt": "2026-05-21T06:02:34.702Z"
+}
