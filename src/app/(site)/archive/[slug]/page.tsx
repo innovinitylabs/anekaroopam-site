@@ -1,12 +1,16 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { PerceptionCanvas } from "@/components/perception/PerceptionCanvas";
 import { ArchiveProvenance } from "@/components/site/ArchiveProvenance";
 import {
   getArtworkBySlug,
   getArchiveEntryBySlug,
+  getAccessionRuntimeBySlug,
   listAllArchiveSlugs,
 } from "@/lib/content/resolve-artwork";
+import { resolveArchiveRedirect } from "@/lib/archive/redirects";
+
+export const dynamic = "force-dynamic";
 
 export async function generateStaticParams() {
   const slugs = await listAllArchiveSlugs();
@@ -31,9 +35,16 @@ export default async function ArchiveArtworkPage({
 }) {
   const { slug } = await params;
   const artwork = await getArtworkBySlug(slug);
-  if (!artwork) notFound();
+  if (!artwork) {
+    const mapped = await resolveArchiveRedirect(slug);
+    if (mapped) redirect(`/archive/${mapped.to}`);
+    notFound();
+  }
 
   const entry = await getArchiveEntryBySlug(slug);
+  const runtime = await getAccessionRuntimeBySlug(slug);
+  const visibilityNotice =
+    runtime?.visibility.public === false ? runtime.visibility.notice : null;
 
   return (
     <div className="fixed inset-0 z-50 bg-[var(--paper)]">
@@ -49,6 +60,11 @@ export default async function ArchiveArtworkPage({
         <div className="pointer-events-none fixed bottom-6 left-6 z-[55] max-w-sm text-white/70">
           <p className="text-[0.58rem] tracking-[0.2em] uppercase">Accession</p>
           <p className="mt-1 text-[0.72rem]">{entry.metadata.title}</p>
+          {visibilityNotice && (
+            <p className="mt-3 border border-white/20 bg-black/25 p-3 text-[0.68rem] leading-relaxed text-white/85">
+              {visibilityNotice}
+            </p>
+          )}
           {entry.metadata.process && (
             <p className="text-[0.68rem] opacity-70">{entry.metadata.process}</p>
           )}

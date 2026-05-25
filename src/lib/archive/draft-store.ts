@@ -7,6 +7,7 @@ import {
   ArchiveEntrySchema,
   CreateAccessionDraftSchema,
   SlugUpdateSchema,
+  archiveMasterFilename,
   buildArchiveSlug,
   createDefaultDraftArtwork,
   emptyProvenance,
@@ -16,23 +17,35 @@ import {
   sourceFilenameForUpload,
   type AccessionDraft,
   type AccessionDraftUpdate,
+  type ArchiveEntry,
   type CreateAccessionDraftInput,
   type DraftStatus,
   type SlugUpdateInput,
 } from "./schema";
 import {
   contentArchiveDir,
+  contentArchivePreparedDir,
+  contentArchiveSourceDir,
   contentDraftDir,
   contentDraftSourceDir,
   contentDraftWorkingDir,
   contentDraftsDir,
 } from "./paths";
-import { accessionDraftToArchiveDraft } from "./adapters";
+import {
+  accessionDraftToArchiveDraft,
+  archiveEntryToAccessionDraft,
+} from "./adapters";
 import { runArchiveExport } from "./export-orchestrator";
-import { buildArchiveBundleFiles } from "./generate-entry";
+import { loadArchiveEntry } from "./load-entry";
+import { addArchiveRedirect, assertSlugAllowed, redirectTargetExists } from "./redirects";
+import {
+  prepareDraftSource,
+  readPreparedDraftBuffer,
+} from "./prepare-pipeline";
 
 const DRAFT_FILE = "draft.json";
 const STATES_FILE = "states.json";
+const DELETED_DIR = ".deleted";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -143,6 +156,12 @@ export async function loadAccessionDraft(
   }
 }
 
+export async function saveArchiveEntry(entry: ArchiveEntry): Promise<ArchiveEntry> {
+  const parsed = ArchiveEntrySchema.parse(entry);
+  await writeJson(path.join(contentArchiveDir(parsed.slug), "metadata.json"), parsed);
+  return parsed;
+}
+
 export async function archiveSlugExists(slug: string): Promise<boolean> {
   try {
     await fs.access(path.join(contentArchiveDir(slug), "metadata.json"));
@@ -228,6 +247,7 @@ export async function createAccessionDraft(
     slugLocked: Boolean(parsed.slug),
     slugHistory: [],
     source: {},
+    processing: {},
     artwork,
     provenance: emptyProvenance(),
     export: {
@@ -266,6 +286,77 @@ export async function saveAccessionDraft(
   return parsed;
 }
 
+export async function archiveDraftForDeletion(
+  draftId: string,
+): Promise<{ tombstonePath: string }> {
+  const draft = await loadAccessionDraft(draftId);
+  if (!draft) throw new Error(`Draft not found: ${draftId}`);
+  const tombstone = {
+    ...draft,
+    deletedAt: nowIso(),
+  };
+  const deletedDir = path.join(contentDraftsDir(), DELETED_DIR);
+  await fs.mkdir(deletedDir, { recursive: true });
+  const tombstonePath = path.join(deletedDir, `${draftId}.json`);
+  await writeJson(tombstonePath, tombstone);
+  return { tombstonePath };
+}
+
+export async function deleteDraft(
+  draftId: string,
+  confirmation: string,
+): Promise<void> {
+  if (confirmation !== draftId) {
+    throw new Error("Draft deletion requires exact draft ID confirmation.");
+  }
+  const draft = await loadAccessionDraft(draftId);
+  if (!draft) throw new Error(`Draft not found: ${draftId}`);
+  await archiveDraftForDeletion(draftId);
+  await fs.rm(contentDraftDir(draftId), { recursive: true, force: true });
+}
+
+export async function prepareAccessionDraft(
+  draftId: string,
+): Promise<AccessionDraft> {
+  const draft = await loadAccessionDraft(draftId);
+  if (!draft) throw new Error(`Draft not found: ${draftId}`);
+  const prepared = await prepareDraftSource(draft);
+  return updateAccessionDraft(draftId, {
+    processing: prepared.processing,
+    status: "prepared",
+    preparedAt: prepared.processing.preparedAt,
+  });
+}
+
+export async function hydrateDraftFromArchiveSlug(
+  slug: string,
+): Promise<AccessionDraft> {
+  const entry = await loadArchiveEntry(slug);
+  if (!entry) throw new Error(`Archive entry not found: ${slug}`);
+
+  const hydrated = archiveEntryToAccessionDraft(entry);
+  const existing = await loadAccessionDraft(hydrated.draftId);
+  const draft = existing
+    ? AccessionDraftSchema.parse({
+        ...existing,
+        ...hydrated,
+        source: existing.source.storedFilename ? existing.source : hydrated.source,
+        updatedAt: nowIso(),
+      })
+    : hydrated;
+
+  return saveAccessionDraft(draft);
+}
+
+export async function loadDraftForPublishedSlug(
+  slug: string,
+): Promise<AccessionDraft | null> {
+  const entry = await loadArchiveEntry(slug);
+  if (!entry) return null;
+  const draftId = archiveEntryToAccessionDraft(entry).draftId;
+  return loadAccessionDraft(draftId);
+}
+
 export async function updateAccessionDraft(
   draftId: string,
   patch: AccessionDraftUpdate,
@@ -275,7 +366,7 @@ export async function updateAccessionDraft(
 
   const parsed = AccessionDraftUpdateSchema.parse(patch);
   const nextSlug = parsed.slug
-    ? normalizeArchiveSlug(parsed.slug)
+    ? assertSlugAllowed(parsed.slug)
     : existing.slug;
   if (nextSlug !== existing.slug) {
     await validateSlugUnique(nextSlug, draftId);
@@ -318,7 +409,7 @@ export async function updateDraftSlug(
 ): Promise<AccessionDraft> {
   const parsed = SlugUpdateSchema.parse(input);
   return updateAccessionDraft(draftId, {
-    slug: normalizeArchiveSlug(parsed.slug),
+    slug: assertSlugAllowed(parsed.slug),
     slugLocked: parsed.lock,
   });
 }
@@ -333,8 +424,26 @@ export async function updateDraftStatus(
   if (status === "generated") patch.generatedAt = timestamp;
   if (status === "published") patch.publishedAt = timestamp;
   if (status === "minted") patch.mintedAt = timestamp;
+  if (status === "hidden") patch.hiddenAt = timestamp;
   if (status === "withdrawn") patch.withdrawnAt = timestamp;
   return updateAccessionDraft(draftId, patch);
+}
+
+export async function updateArchiveVisibility(
+  slug: string,
+  status: DraftStatus,
+): Promise<ArchiveEntry> {
+  const entry = await loadArchiveEntry(slug);
+  if (!entry) throw new Error(`Archive entry not found: ${slug}`);
+  const timestamp = nowIso();
+  const updated = ArchiveEntrySchema.parse({
+    ...entry,
+    status,
+    hiddenAt: status === "hidden" ? timestamp : entry.hiddenAt,
+    withdrawnAt: status === "withdrawn" ? timestamp : entry.withdrawnAt,
+    updatedAt: timestamp,
+  });
+  return saveArchiveEntry(updated);
 }
 
 export async function storeDraftSource(
@@ -351,15 +460,61 @@ export async function storeDraftSource(
 
   return updateAccessionDraft(draftId, {
     source: {
+      kind: "original",
       originalFilename: file.name,
       storedFilename,
       mimeType: file.type || "application/octet-stream",
       byteSize: buffer.length,
       importedAt: nowIso(),
     },
-    status: "prepared",
-    preparedAt: nowIso(),
   });
+}
+
+export async function storeArchiveSource(
+  slug: string,
+  file: File,
+): Promise<ArchiveEntry> {
+  const entry = await loadArchiveEntry(slug);
+  if (!entry) throw new Error(`Archive entry not found: ${slug}`);
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const storedFilename = archiveMasterFilename(file.name);
+  const sourceDir = contentArchiveSourceDir(slug);
+  await fs.mkdir(sourceDir, { recursive: true });
+  await fs.writeFile(path.join(sourceDir, storedFilename), buffer);
+
+  const source = {
+    kind: "original" as const,
+    originalFilename: file.name,
+    storedFilename,
+    mimeType: file.type || "application/octet-stream",
+    byteSize: buffer.length,
+    importedAt: nowIso(),
+  };
+
+  const updated = ArchiveEntrySchema.parse({
+    ...entry,
+    source,
+    updatedAt: nowIso(),
+  });
+  await writeJson(path.join(contentArchiveDir(slug), "metadata.json"), updated);
+  await writeJson(path.join(sourceDir, "source.json"), source);
+
+  const draft = await loadDraftForPublishedSlug(slug);
+  if (draft) {
+    await updateAccessionDraft(draft.draftId, { source });
+  }
+
+  return updated;
+}
+
+async function readArchiveSourceBuffer(entry: ArchiveEntry): Promise<Buffer> {
+  if (!entry.source?.storedFilename || entry.source.kind !== "original") {
+    throw new Error("source_required: Deposit an original source before regeneration.");
+  }
+  return fs.readFile(
+    path.join(contentArchiveSourceDir(entry.slug), entry.source.storedFilename),
+  );
 }
 
 export async function readDraftSourceBuffer(draft: AccessionDraft): Promise<Buffer> {
@@ -371,6 +526,29 @@ export async function readDraftSourceBuffer(draft: AccessionDraft): Promise<Buff
   );
 }
 
+async function preserveDraftSourceInArchive(draft: AccessionDraft): Promise<void> {
+  if (!draft.source.storedFilename) return;
+  const sourceDir = contentArchiveSourceDir(draft.slug);
+  await fs.mkdir(sourceDir, { recursive: true });
+  const sourceBuffer =
+    (await readPreparedDraftBuffer(draft)) ?? (await readDraftSourceBuffer(draft));
+  const storedFilename = archiveMasterFilename(
+    draft.source.originalFilename ?? draft.source.storedFilename,
+  );
+  await fs.writeFile(path.join(sourceDir, storedFilename), sourceBuffer);
+  await writeJson(path.join(sourceDir, "source.json"), {
+    ...draft.source,
+    kind: "original",
+    storedFilename,
+  });
+  const preparedBuffer = await readPreparedDraftBuffer(draft);
+  if (preparedBuffer) {
+    const preparedDir = contentArchivePreparedDir(draft.slug);
+    await fs.mkdir(preparedDir, { recursive: true });
+    await fs.writeFile(path.join(preparedDir, "master-prepared.avif"), preparedBuffer);
+  }
+}
+
 export async function generateArchiveFromDraft(
   draftId: string,
 ): Promise<Awaited<ReturnType<typeof runArchiveExport>>> {
@@ -379,10 +557,29 @@ export async function generateArchiveFromDraft(
   await validateSlugUnique(draft.slug, draft.draftId, draft.accessionId);
 
   const sourceBuffer = await readDraftSourceBuffer(draft);
+  const existingEntry = await loadArchiveEntry(draft.slug);
   const result = await runArchiveExport({
     draft: accessionDraftToArchiveDraft(draft),
     sourceBuffer,
+    existingEntry: existingEntry ?? undefined,
+    source: {
+      ...draft.source,
+      kind: draft.source.kind ?? "original",
+      storedFilename: archiveMasterFilename(
+        draft.source.originalFilename ?? draft.source.storedFilename ?? "source.bin",
+      ),
+    },
   });
+  await preserveDraftSourceInArchive(draft);
+  const previousSlug = draft.slugHistory.at(-1);
+  if (previousSlug && previousSlug !== draft.slug) {
+    await addArchiveRedirect(previousSlug, draft.slug, draft.accessionId);
+    await fs.rm(contentArchiveDir(previousSlug), { recursive: true, force: true });
+    await fs.rm(path.join(process.cwd(), "public", "archive", previousSlug), {
+      recursive: true,
+      force: true,
+    });
+  }
 
   await updateAccessionDraft(draftId, {
     status: "generated",
@@ -396,6 +593,91 @@ export async function regenerateArchiveDerivatives(
   draftId: string,
 ): Promise<Awaited<ReturnType<typeof runArchiveExport>>> {
   return generateArchiveFromDraft(draftId);
+}
+
+export async function regeneratePublishedEntryFromDraft(
+  draftId: string,
+): Promise<Awaited<ReturnType<typeof runArchiveExport>>> {
+  const draft = await loadAccessionDraft(draftId);
+  if (!draft) throw new Error(`Draft not found: ${draftId}`);
+
+  const existingEntry = await loadArchiveEntry(draft.slug);
+  if (!existingEntry) throw new Error(`Archive entry not found: ${draft.slug}`);
+
+  const sourceBuffer = draft.source.storedFilename
+    ? (await readPreparedDraftBuffer(draft)) ?? (await readDraftSourceBuffer(draft))
+    : await readArchiveSourceBuffer(existingEntry);
+  const source = draft.source.storedFilename ? draft.source : existingEntry.source;
+
+  const result = await runArchiveExport({
+    draft: accessionDraftToArchiveDraft(draft),
+    sourceBuffer,
+    existingEntry,
+    source,
+  });
+  if (draft.source.storedFilename) {
+    await preserveDraftSourceInArchive(draft);
+  }
+
+  await updateAccessionDraft(draftId, {
+    status: "published",
+    generatedAt: nowIso(),
+  });
+
+  return result;
+}
+
+export async function publishDraftMutation(
+  draftId: string,
+): Promise<Awaited<ReturnType<typeof regeneratePublishedEntryFromDraft>>> {
+  return regeneratePublishedEntryFromDraft(draftId);
+}
+
+export async function renamePublishedArchiveSlug(
+  slug: string,
+  nextSlugInput: string,
+): Promise<ArchiveEntry> {
+  const entry = await loadArchiveEntry(slug);
+  if (!entry) throw new Error(`Archive entry not found: ${slug}`);
+
+  const nextSlug = assertSlugAllowed(nextSlugInput);
+  if (nextSlug === slug) return entry;
+  await validateSlugUnique(nextSlug, undefined, entry.accessionId ?? entry.metadata.accessionId);
+  if (await redirectTargetExists(nextSlug)) {
+    throw new Error(`Slug is already used in redirects: ${nextSlug}`);
+  }
+
+  const oldDir = contentArchiveDir(slug);
+  const nextDir = contentArchiveDir(nextSlug);
+  await fs.cp(oldDir, nextDir, { recursive: true });
+
+  const publicOld = path.join(process.cwd(), "public", "archive", slug);
+  const publicNext = path.join(process.cwd(), "public", "archive", nextSlug);
+  try {
+    await fs.cp(publicOld, publicNext, { recursive: true });
+  } catch {
+    /* public derivatives can be regenerated later */
+  }
+
+  const updated = ArchiveEntrySchema.parse({
+    ...entry,
+    slug: nextSlug,
+    assets: {
+      ...entry.assets,
+      artwork: `/archive/${nextSlug}/artwork.avif`,
+      preview: `/archive/${nextSlug}/preview.avif`,
+      previewWebp: `/archive/${nextSlug}/preview.webp`,
+      social: `/archive/${nextSlug}/social.jpg`,
+      socialJpg: `/archive/${nextSlug}/social.jpg`,
+      thumb: `/archive/${nextSlug}/thumb.jpg`,
+    },
+    updatedAt: nowIso(),
+  });
+  await writeJson(path.join(nextDir, "metadata.json"), updated);
+  await addArchiveRedirect(slug, nextSlug, updated.accessionId ?? updated.metadata.accessionId);
+  await fs.rm(oldDir, { recursive: true, force: true });
+
+  return updated;
 }
 
 export function draftSourcePublicLabel(draft: AccessionDraft): string {

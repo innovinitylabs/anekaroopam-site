@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "draftId": "draft-2026-0004",
+  "accessionId": "AR-2026-0004",
+  "status": "prepared",
+  "slug": "2026-05-21-alice-jpg",
+  "slugLocked": false,
+  "slugHistory": [
+    "2026-05-21-ar-2026-0004"
+  ],
+  "source": {
+    "kind": "migration-required"
+  },
+  "artwork": {
+    "id": "draft-2026-0004",
+    "metadata": {
+      "accessionId": "AR-2026-0004",
+      "title": "alice jpg",
+      "year": 2026,
+      "date": "2026-05-21"
+    },
+    "imageSrc": "",
+    "states": [
+      {
+        "id": "s1",
+        "name": "",
+        "angle": 0,
+        "caption": ""
+      }
+    ],
+    "background": "paper",
+    "initialAngle": 0,
+    "snapToState": true,
+    "showMetadataOverlay": true
+  },
+  "provenance": {
+    "mint": [],
+    "auction": [],
+    "marketplace": []
+  },
+  "export": {
+    "standaloneHtml": "perception.html",
+    "includeWebpFallback": true,
+    "preset": "archival"
+  },
+  "createdAt": "2026-05-21T09:07:39.362Z",
+  "updatedAt": "2026-05-21T09:08:05.776Z",
+  "preparedAt": "2026-05-21T09:08:05.575Z"
+}

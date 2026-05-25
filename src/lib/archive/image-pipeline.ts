@@ -3,6 +3,7 @@ import {
   ARCHIVE_IMAGE_OUTPUTS,
   type ArchiveImageVariant,
 } from "./image-specs";
+import type { DerivativeAsset } from "./schema";
 
 export interface ArchiveImageBuffers {
   artwork: Buffer;
@@ -74,4 +75,32 @@ export async function runArchiveImagePipeline(
 export function bufferToDataUrl(buffer: Buffer, mime = "image/avif"): string {
   const base64 = buffer.toString("base64");
   return `data:${mime};base64,${base64}`;
+}
+
+export async function derivativeAssetFromBuffer(
+  variant: ArchiveImageVariant,
+  publicPath: string,
+  buffer: Buffer,
+  generatedAt: string,
+): Promise<DerivativeAsset> {
+  const spec = ARCHIVE_IMAGE_OUTPUTS[variant];
+  const meta = await sharp(buffer).metadata();
+  const role =
+    variant === "thumbJpg"
+      ? "thumb"
+      : variant === "socialJpg"
+        ? "social"
+        : variant === "artwork"
+          ? "artwork"
+          : "preview";
+
+  return {
+    role,
+    path: publicPath,
+    format: spec.format,
+    width: meta.width,
+    height: meta.height,
+    byteSize: buffer.length,
+    generatedAt,
+  };
 }

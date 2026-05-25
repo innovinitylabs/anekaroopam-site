@@ -218,8 +218,9 @@ export function PerceptionCanvas({
   }, [pulseUi, resetView, rotate]);
 
   useEffect(() => {
-    pulseUi();
+    const uiTimer = window.setTimeout(() => pulseUi(), 0);
     return () => {
+      window.clearTimeout(uiTimer);
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
       if (animRef.current) cancelAnimationFrame(animRef.current);
     };

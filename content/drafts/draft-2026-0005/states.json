@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "draftId": "draft-2026-0005",
+  "accessionId": "AR-2026-0005",
+  "perception": {
+    "states": [
+      {
+        "id": "s1",
+        "name": "",
+        "angle": 0,
+        "caption": ""
+      }
+    ],
+    "background": "paper",
+    "initialAngle": 0,
+    "snapToState": true,
+    "showMetadataOverlay": true
+  },
+  "updatedAt": "2026-05-21T09:08:53.371Z"
+}

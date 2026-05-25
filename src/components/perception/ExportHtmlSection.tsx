@@ -45,7 +45,6 @@ export function ExportHtmlSection({
 
   const estimatePreview = useMemo(() => {
     if (!originalByteSize) return null;
-    const preset = getPreset("perceptual");
     const ratio =
       format === "avif" ? 0.22 : format === "webp" ? 0.35 : format === "png" ? 0.85 : 0.5;
     const embedded = Math.round(originalByteSize * ratio);

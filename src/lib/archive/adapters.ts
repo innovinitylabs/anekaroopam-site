@@ -7,6 +7,7 @@ import {
   type ArchiveEntry,
   type ArchivePerception,
   type AccessionDraft,
+  type DraftSource,
   type ProvenanceRecord,
   defaultArchiveAssets,
   emptyProvenance,
@@ -33,6 +34,8 @@ export function perceptionArtworkToArchiveEntry(
       accessionId: resolvedAccessionId,
     },
     assets: resolvedAssets,
+    derivatives: [],
+    exports: [],
     perception: {
       states: artwork.states,
       background: artwork.background,
@@ -57,7 +60,7 @@ export function archiveEntryToPerceptionArtwork(entry: ArchiveEntry): Perception
   return {
     id: entry.slug,
     metadata: entry.metadata,
-    imageSrc: entry.assets.artwork,
+    imageSrc: entry.assets.previewWebp ?? entry.assets.preview ?? entry.assets.artwork,
     states: entry.perception.states,
     background: entry.perception.background,
     initialAngle: entry.perception.initialAngle,
@@ -106,6 +109,9 @@ export function draftToArchiveEntry(draft: ArchiveDraft): ArchiveEntry {
   if (draft.export) {
     entry.export = { ...entry.export, ...draft.export };
   }
+  if (draft.processing) {
+    entry.processing = draft.processing;
+  }
   return entry;
 }
 
@@ -140,5 +146,69 @@ export function accessionDraftToArchiveDraft(
     },
     provenance: parsed.provenance,
     export: parsed.export,
+    processing: parsed.processing,
+    customBackground:
+      parsed.artwork.background === "custom"
+        ? parsed.artwork.background
+        : undefined,
   };
+}
+
+function editDraftIdForAccession(accessionId: string): string {
+  return `edit-${accessionId.toLowerCase()}`;
+}
+
+function sourceForHydration(source?: DraftSource): DraftSource {
+  if (source?.storedFilename) {
+    return source;
+  }
+  return { kind: "migration-required" };
+}
+
+export function archiveEntryToAccessionDraft(
+  entry: ArchiveEntry,
+): AccessionDraft {
+  const accessionId =
+    entry.metadata.accessionId ?? entry.accessionId ?? `AR-${entry.slug}`;
+  const source = sourceForHydration(entry.source);
+  const updatedAt = new Date().toISOString();
+
+  return AccessionDraftSchema.parse({
+    version: ARCHIVE_VERSION,
+    draftId: editDraftIdForAccession(accessionId),
+    accessionId,
+    status: entry.status ?? "published",
+    slug: entry.slug,
+    slugLocked: true,
+    slugHistory: [],
+    source,
+    processing: entry.processing ?? {},
+    artwork: {
+      id: entry.slug,
+      metadata: {
+        ...entry.metadata,
+        accessionId,
+      },
+      imageSrc: "",
+      states: entry.perception.states,
+      background: entry.perception.background,
+      initialAngle: entry.perception.initialAngle,
+      snapToState: entry.perception.snapToState,
+      showMetadataOverlay: entry.perception.showMetadataOverlay,
+      overlayFields: entry.perception.overlayFields,
+    },
+    provenance: entry.provenance ?? emptyProvenance(),
+    export: entry.export,
+    createdAt: entry.createdAt,
+    updatedAt,
+    generatedAt: entry.updatedAt,
+    publishedAt: entry.publishedAt ?? entry.createdAt,
+    mintedAt: entry.mintedAt,
+    hiddenAt: entry.hiddenAt,
+    withdrawnAt: entry.withdrawnAt,
+  });
+}
+
+export function archiveEntryToArchiveDraft(entry: ArchiveEntry): ArchiveDraft {
+  return accessionDraftToArchiveDraft(archiveEntryToAccessionDraft(entry));
 }

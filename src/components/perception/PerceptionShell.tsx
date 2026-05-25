@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnekaroopamWordmark } from "@/components/site/AnekaroopamWordmark";
 import { BRAND } from "@/lib/brand";
-import { cn } from "@/lib/utils";
 import { PerceptionSubnav } from "./PerceptionSubnav";
 import { CreatorCredit } from "./CreatorCredit";
 

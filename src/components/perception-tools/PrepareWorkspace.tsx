@@ -72,29 +72,32 @@ export function PrepareWorkspace() {
     const file = resolveFileFromAnyTab(uploadId);
     const objectUrl = resolveObjectUrlFromAnyTab(uploadId);
 
-    if (session.artwork) {
-      setArtwork({
-        ...(objectUrl
-          ? hydrateArtworkPreview(session.artwork, objectUrl)
-          : session.artwork),
-        metadata: mergeArtworkMetadata(session.artwork.metadata),
-      });
-    }
+    const timeout = window.setTimeout(() => {
+      if (session.artwork) {
+        setArtwork({
+          ...(objectUrl
+            ? hydrateArtworkPreview(session.artwork, objectUrl)
+            : session.artwork),
+          metadata: mergeArtworkMetadata(session.artwork.metadata),
+        });
+      }
 
-    if (file) {
-      setSourceFile(file);
-      setOptions((o) => ({
-        ...o,
-        filename:
-          session.sourceFileName?.replace(/\.[^.]+$/, "") ||
-          session.artwork.metadata.title ||
-          file.name.replace(/\.[^.]+$/, ""),
-      }));
-    }
+      if (file) {
+        setSourceFile(file);
+        setOptions((o) => ({
+          ...o,
+          filename:
+            session.sourceFileName?.replace(/\.[^.]+$/, "") ||
+            session.artwork.metadata.title ||
+            file.name.replace(/\.[^.]+$/, ""),
+        }));
+      }
 
-    if (objectUrl) {
-      setSourceUrl(objectUrl);
-    }
+      if (objectUrl) {
+        setSourceUrl(objectUrl);
+      }
+    }, 0);
+    return () => window.clearTimeout(timeout);
   }, []);
 
   useEffect(() => {
@@ -203,7 +206,7 @@ export function PrepareWorkspace() {
     sourceFile,
     sourceUrl,
     options,
-    analysis?.stats.byteSize,
+    analysis,
     enableFallback,
   ]);
 

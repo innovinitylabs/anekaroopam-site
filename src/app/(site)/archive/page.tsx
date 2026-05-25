@@ -2,6 +2,8 @@ import { FadeIn } from "@/components/site/FadeIn";
 import { ArchiveGrid } from "@/components/site/ArchiveGrid";
 import { listAllArtworks } from "@/lib/content/resolve-artwork";
 
+export const dynamic = "force-dynamic";
+
 export default async function ArchivePage() {
   const artworks = await listAllArtworks();
 

@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "draftId": "draft-2026-0006",
+  "accessionId": "AR-2026-0006",
+  "status": "prepared",
+  "slug": "2026-05-21-ar-2026-0006",
+  "slugLocked": false,
+  "slugHistory": [],
+  "source": {
+    "kind": "migration-required"
+  },
+  "processing": {},
+  "artwork": {
+    "id": "draft-2026-0006",
+    "metadata": {
+      "accessionId": "AR-2026-0006",
+      "title": "",
+      "year": 2026,
+      "date": "2026-05-21"
+    },
+    "imageSrc": "",
+    "states": [
+      {
+        "id": "s1",
+        "name": "",
+        "angle": 0,
+        "caption": ""
+      }
+    ],
+    "background": "paper",
+    "initialAngle": 0,
+    "snapToState": true,
+    "showMetadataOverlay": true
+  },
+  "provenance": {
+    "mint": [],
+    "auction": [],
+    "marketplace": []
+  },
+  "export": {
+    "standaloneHtml": "perception.html",
+    "includeWebpFallback": true,
+    "preset": "archival"
+  },
+  "createdAt": "2026-05-21T11:31:38.784Z",
+  "updatedAt": "2026-05-21T11:38:34.465Z",
+  "preparedAt": "2026-05-21T11:38:33.714Z"
+}

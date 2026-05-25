@@ -8,6 +8,7 @@ export const DraftStatusSchema = z.enum([
   "generated",
   "published",
   "minted",
+  "hidden",
   "withdrawn",
 ]);
 
@@ -59,6 +60,46 @@ export const ArchiveAssetsSchema = z.object({
   thumb: z.string(),
   previewWebp: z.string().optional(),
   socialJpg: z.string().optional(),
+});
+
+export const SourceKindSchema = z.enum(["original", "migration-required"]);
+
+export const DerivativeRoleSchema = z.enum([
+  "thumb",
+  "preview",
+  "artwork",
+  "social",
+  "standalone-html",
+]);
+
+export const DerivativeAssetSchema = z.object({
+  role: DerivativeRoleSchema,
+  path: z.string(),
+  format: z.string(),
+  width: z.number().optional(),
+  height: z.number().optional(),
+  byteSize: z.number().optional(),
+  generatedAt: z.string(),
+});
+
+export const DraftProcessingSchema = z.object({
+  preparedSource: z.string().optional(),
+  preparedAt: z.string().optional(),
+  prepareVersion: z.string().optional(),
+});
+
+export const ArchiveHashSchema = z.object({
+  algorithm: z.literal("sha256"),
+  value: z.string(),
+});
+
+export const ExportInventoryItemSchema = z.object({
+  role: z.string(),
+  path: z.string(),
+  generatedAt: z.string(),
+  byteSize: z.number(),
+  checksum: ArchiveHashSchema,
+  exportVersion: z.string(),
 });
 
 export const PerceptualStateSchema = z.object({
@@ -128,6 +169,10 @@ export const ArchiveEntrySchema = z.object({
   status: DraftStatusSchema.default("published"),
   metadata: ArchiveMetadataFieldsSchema,
   assets: ArchiveAssetsSchema,
+  derivatives: z.array(DerivativeAssetSchema).default([]),
+  exports: z.array(ExportInventoryItemSchema).default([]),
+  source: z.lazy(() => DraftSourceSchema).optional(),
+  processing: DraftProcessingSchema.optional(),
   perception: ArchivePerceptionSchema,
   export: ArchiveExportSettingsSchema,
   provenance: ProvenanceRecordSchema,
@@ -135,6 +180,8 @@ export const ArchiveEntrySchema = z.object({
   updatedAt: z.string(),
   publishedAt: z.string().optional(),
   mintedAt: z.string().optional(),
+  hiddenAt: z.string().optional(),
+  withdrawnAt: z.string().optional(),
 });
 
 export const ArchiveStatesFileSchema = z.object({
@@ -165,14 +212,56 @@ export const ArchiveDraftSchema = z.object({
   provenance: ProvenanceRecordSchema.optional(),
   customBackground: z.string().optional(),
   export: ArchiveExportSettingsSchema.partial().optional(),
+  processing: DraftProcessingSchema.optional(),
 });
 
 export const DraftSourceSchema = z.object({
+  kind: SourceKindSchema.default("migration-required"),
   originalFilename: z.string().optional(),
   storedFilename: z.string().optional(),
   mimeType: z.string().optional(),
   byteSize: z.number().optional(),
   importedAt: z.string().optional(),
+});
+
+export const ArchiveRedirectSchema = z.object({
+  from: z.string(),
+  to: z.string(),
+  accessionId: z.string().optional(),
+  createdAt: z.string(),
+  reason: z.string().default("slug-evolution"),
+});
+
+export const ArchiveRedirectsFileSchema = z.object({
+  version: z.literal(ARCHIVE_VERSION),
+  redirects: z.array(ArchiveRedirectSchema).default([]),
+});
+
+export const AccessionManifestSchema = z.object({
+  archiveVersion: z.literal(ARCHIVE_VERSION),
+  manifestVersion: z.literal("manifest-v1"),
+  accessionId: z.string().optional(),
+  slug: z.string(),
+  generatedAt: z.string(),
+  updatedAt: z.string(),
+  source: DraftSourceSchema.optional(),
+  prepared: DraftProcessingSchema.optional(),
+  derivatives: z.array(DerivativeAssetSchema).default([]),
+  exports: z.array(ExportInventoryItemSchema).default([]),
+  perceptualStateCount: z.number(),
+  provenanceSummary: z.object({
+    mintLinks: z.number(),
+    auctionLinks: z.number(),
+    marketplaceLinks: z.number(),
+  }),
+  exportPreset: ArchiveExportSettingsSchema.shape.preset,
+  visibilityStatus: DraftStatusSchema,
+  integrity: z.object({
+    source: ArchiveHashSchema.optional(),
+    prepared: ArchiveHashSchema.optional(),
+    derivatives: z.record(z.string(), ArchiveHashSchema).default({}),
+    html: ArchiveHashSchema.optional(),
+  }),
 });
 
 export const AccessionDraftSchema = z.object({
@@ -183,7 +272,8 @@ export const AccessionDraftSchema = z.object({
   slug: z.string().min(1),
   slugLocked: z.boolean().default(false),
   slugHistory: z.array(z.string()).default([]),
-  source: DraftSourceSchema.default({}),
+  source: DraftSourceSchema.default({ kind: "migration-required" }),
+  processing: DraftProcessingSchema.default({}),
   artwork: ArchiveDraftSchema.shape.artwork,
   provenance: ProvenanceRecordSchema,
   export: ArchiveExportSettingsSchema,
@@ -193,7 +283,9 @@ export const AccessionDraftSchema = z.object({
   generatedAt: z.string().optional(),
   publishedAt: z.string().optional(),
   mintedAt: z.string().optional(),
+  hiddenAt: z.string().optional(),
   withdrawnAt: z.string().optional(),
+  deletedAt: z.string().optional(),
 });
 
 export const AccessionDraftUpdateSchema = AccessionDraftSchema.partial().extend({
@@ -216,6 +308,12 @@ export const SlugUpdateSchema = z.object({
 export type ProvenanceRecord = z.infer<typeof ProvenanceRecordSchema>;
 export type ProvenanceLink = z.infer<typeof ProvenanceLinkSchema>;
 export type DraftStatus = z.infer<typeof DraftStatusSchema>;
+export type SourceKind = z.infer<typeof SourceKindSchema>;
+export type DerivativeRole = z.infer<typeof DerivativeRoleSchema>;
+export type DerivativeAsset = z.infer<typeof DerivativeAssetSchema>;
+export type DraftProcessing = z.infer<typeof DraftProcessingSchema>;
+export type ArchiveHash = z.infer<typeof ArchiveHashSchema>;
+export type ExportInventoryItem = z.infer<typeof ExportInventoryItemSchema>;
 export type ArchiveAssets = z.infer<typeof ArchiveAssetsSchema>;
 export type ArchivePerception = z.infer<typeof ArchivePerceptionSchema>;
 export type ArchiveEntry = z.infer<typeof ArchiveEntrySchema>;
@@ -226,6 +324,9 @@ export type AccessionDraftUpdate = z.infer<typeof AccessionDraftUpdateSchema>;
 export type CreateAccessionDraftInput = z.infer<typeof CreateAccessionDraftSchema>;
 export type SlugUpdateInput = z.infer<typeof SlugUpdateSchema>;
 export type DraftSource = z.infer<typeof DraftSourceSchema>;
+export type ArchiveRedirect = z.infer<typeof ArchiveRedirectSchema>;
+export type ArchiveRedirectsFile = z.infer<typeof ArchiveRedirectsFileSchema>;
+export type AccessionManifest = z.infer<typeof AccessionManifestSchema>;
 
 export function emptyProvenance(): ProvenanceRecord {
   return { mint: [], auction: [], marketplace: [] };
@@ -284,6 +385,13 @@ export function sourceFilenameForUpload(filename: string): string {
     ? filename.slice(filename.lastIndexOf(".")).toLowerCase()
     : "";
   return `original${ext.replace(/[^a-z0-9.]/g, "") || ".bin"}`;
+}
+
+export function archiveMasterFilename(filename: string): string {
+  const ext = filename.includes(".")
+    ? filename.slice(filename.lastIndexOf(".")).toLowerCase()
+    : "";
+  return `master${ext.replace(/[^a-z0-9.]/g, "") || ".bin"}`;
 }
 
 export function formatAccessionId(year: number, sequence: number): string {

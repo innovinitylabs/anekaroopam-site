@@ -5,6 +5,7 @@ import {
   type ArchiveEntry,
 } from "./schema";
 import { contentArchiveDir } from "./paths";
+import { isPublicArchiveEntry } from "./visibility";
 
 const ARCHIVE_ROOT = path.join(process.cwd(), "content", "archive");
 
@@ -39,12 +40,16 @@ export async function loadArchiveEntry(slug: string): Promise<ArchiveEntry | nul
   }
 }
 
-export async function getAllArchiveEntries(): Promise<ArchiveEntry[]> {
+export async function getAllArchiveEntries(options?: {
+  includeHidden?: boolean;
+}): Promise<ArchiveEntry[]> {
   const slugs = await listArchiveSlugs();
   const entries: ArchiveEntry[] = [];
   for (const slug of slugs) {
     const entry = await loadArchiveEntry(slug);
-    if (entry) entries.push(entry);
+    if (entry && (options?.includeHidden || isPublicArchiveEntry(entry))) {
+      entries.push(entry);
+    }
   }
   return entries;
 }

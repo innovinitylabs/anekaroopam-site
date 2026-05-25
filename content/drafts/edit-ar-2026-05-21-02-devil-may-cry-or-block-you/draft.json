@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "draftId": "edit-ar-2026-05-21-02-devil-may-cry-or-block-you",
+  "accessionId": "AR-2026-05-21-02-devil-may-cry-or-block-you",
+  "status": "published",
+  "slug": "2026-05-21-02-devil-may-cry-or-block-you",
+  "slugLocked": true,
+  "slugHistory": [],
+  "source": {
+    "kind": "migration-required"
+  },
+  "artwork": {
+    "id": "2026-05-21-02-devil-may-cry-or-block-you",
+    "metadata": {
+      "accessionId": "AR-2026-05-21-02-devil-may-cry-or-block-you",
+      "title": "02_Devil May Cry Or Block You",
+      "year": 2026,
+      "artistWebsite": "https://valipokkann.in"
+    },
+    "imageSrc": "",
+    "states": [
+      {
+        "id": "ps_fzlaxirn",
+        "name": "devil may cry",
+        "angle": 0,
+        "caption": ""
+      },
+      {
+        "id": "ps_u7w3mvw0",
+        "name": "or block you",
+        "angle": 180,
+        "caption": ""
+      }
+    ],
+    "background": "paper",
+    "initialAngle": 0,
+    "snapToState": true,
+    "showMetadataOverlay": true
+  },
+  "provenance": {
+    "mint": [],
+    "auction": [],
+    "marketplace": []
+  },
+  "export": {
+    "standaloneHtml": "perception.html",
+    "includeWebpFallback": true,
+    "preset": "archival"
+  },
+  "createdAt": "2026-05-21T06:02:33.139Z",
+  "updatedAt": "2026-05-21T09:10:59.776Z",
+  "generatedAt": "2026-05-21T06:02:33.139Z",
+  "publishedAt": "2026-05-21T06:02:33.139Z"
+}

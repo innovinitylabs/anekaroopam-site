@@ -22,7 +22,8 @@ export function SiteNav() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
-    setMobileOpen(false);
+    const timeout = window.setTimeout(() => setMobileOpen(false), 0);
+    return () => window.clearTimeout(timeout);
   }, [pathname]);
 
   return (

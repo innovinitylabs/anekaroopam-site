@@ -2,15 +2,13 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { DisplayTitle } from "@/components/site/DisplayTitle";
 import { FadeIn } from "@/components/site/FadeIn";
 import { hasTamilScript } from "@/lib/typography/tamil";
 import type { PerceptionArtwork } from "@/lib/perception/types";
 import {
   filterArtworks,
-  getArchiveProcesses,
-  getArchiveYears,
 } from "@/lib/content/artworks";
 
 export function ArchiveGrid({
@@ -22,27 +20,38 @@ export function ArchiveGrid({
   const [process, setProcess] = useState("");
   const [query, setQuery] = useState("");
 
-  const years = getArchiveYears();
-  const processes = getArchiveProcesses();
+  const years = Array.from(
+    new Set(
+      artworks
+        .map((artwork) => artwork.metadata.year)
+        .filter((value): value is number => typeof value === "number"),
+    ),
+  ).sort((a, b) => Number(b) - Number(a));
+  const processes = Array.from(
+    new Set(
+      artworks
+        .map((artwork) => artwork.metadata.process)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ).sort();
 
-  const filtered = useMemo(() => {
-    const base = filterArtworks(
-      {
-        year: year === "" ? undefined : year,
-        process: process || undefined,
-        state: query || undefined,
-      },
-      artworks,
-    );
-    if (!query) return base;
-    return base.filter(
-      (a) =>
-        a.metadata.title.toLowerCase().includes(query.toLowerCase()) ||
-        a.states.some((s) =>
-          s.name.toLowerCase().includes(query.toLowerCase()),
-        ),
-    );
-  }, [year, process, query, artworks]);
+  const base = filterArtworks(
+    {
+      year: year === "" ? undefined : year,
+      process: process || undefined,
+      state: query || undefined,
+    },
+    artworks,
+  );
+  const filtered = !query
+    ? base
+    : base.filter(
+        (a) =>
+          a.metadata.title.toLowerCase().includes(query.toLowerCase()) ||
+          a.states.some((s) =>
+            s.name.toLowerCase().includes(query.toLowerCase()),
+          ),
+      );
 
   return (
     <>

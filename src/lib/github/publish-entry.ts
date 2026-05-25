@@ -122,21 +122,6 @@ export async function updateArchiveProvenanceOnGitHub(
   });
   const commitSha = ref.data.object.sha;
 
-  let fileSha: string | undefined;
-  try {
-    const existing = await octokit.repos.getContent({
-      owner: config.owner,
-      repo: config.repo,
-      path: filePath,
-      ref: config.branch,
-    });
-    if (!Array.isArray(existing.data) && "sha" in existing.data) {
-      fileSha = existing.data.sha;
-    }
-  } catch {
-    /* new file */
-  }
-
   const { data: blob } = await octokit.git.createBlob({
     owner: config.owner,
     repo: config.repo,

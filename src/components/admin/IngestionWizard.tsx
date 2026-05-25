@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { EmbeddedPreparePanel } from "@/components/admin/EmbeddedPreparePanel";
 import { ImageDropZone } from "@/components/perception-tools/ImageDropZone";
 import { PerceptionCanvas } from "@/components/perception/PerceptionCanvas";
 import {
@@ -13,7 +14,7 @@ import {
   defaultOrientationArtwork,
   useOrientationArtwork,
 } from "@/lib/perception/use-orientation-artwork";
-import { saveIngestDraftSession, savePrepareSession } from "@/lib/export-engine/session";
+import { saveIngestDraftSession } from "@/lib/export-engine/session";
 import { hydrateArtworkPreview } from "@/lib/export-engine/session-artwork";
 import {
   buildArchiveSlug,
@@ -42,9 +43,24 @@ const STEPS = [
 
 type StepId = (typeof STEPS)[number];
 
-const PREPARE_URL = "/perceive/tools/prepare";
-
 type DraftResponse = { draft?: AccessionDraft; error?: string };
+
+const STEP_TOOLTIPS: Record<StepId, string> = {
+  Upload:
+    "Deposit the original master image into this draft's preserved source folder.",
+  Prepare:
+    "Normalize rotation and write an orientation-safe prepared master into working/.",
+  Orientation:
+    "Define perceptual states, snap behavior, and the viewing background for export.",
+  Metadata:
+    "Edit accession title, date, process, and other archival metadata fields.",
+  Generate:
+    "Write metadata, states, derivatives, manifest, and standalone HTML to the archive.",
+  Publish:
+    "Commit the generated archive bundle to GitHub when repository credentials are set.",
+  Provenance:
+    "Record mint, auction, and marketplace links after the work is published or minted.",
+};
 
 function artworkForStorage(
   artwork: PerceptionArtwork,
@@ -84,6 +100,7 @@ export function IngestionWizard({
   const [slugLocked, setSlugLocked] = useState(false);
   const [status, setStatus] = useState("draft");
   const [provenance, setProvenance] = useState<ProvenanceRecord>(emptyProvenance());
+  const [currentDraft, setCurrentDraft] = useState<AccessionDraft | null>(null);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -103,6 +120,30 @@ export function IngestionWizard({
     onChange: setArtwork,
     uploadDraftId: draftId || "pending-draft",
   });
+
+  const applyDraft = useCallback((draft: AccessionDraft) => {
+    const objectUrl = resolveObjectUrlFromAnyTab(draft.draftId);
+    setDraftId(draft.draftId);
+    setAccessionId(draft.accessionId);
+    setStatus(draft.status);
+    setCurrentDraft(draft);
+    setSlug(draft.slug);
+    setSlugLocked(draft.slugLocked);
+    setProvenance(draft.provenance);
+    const draftArtwork = {
+      ...draft.artwork,
+      metadata: {
+        ...draft.artwork.metadata,
+        accessionId: draft.accessionId,
+      },
+    };
+    setArtwork(
+      objectUrl
+        ? hydrateArtworkPreview(draftArtwork, objectUrl)
+        : { ...draftArtwork, imageSrc: "" },
+    );
+    setDraftLoaded(true);
+  }, []);
 
   useEffect(() => {
     installUploadRegistryBridge();
@@ -141,37 +182,15 @@ export function IngestionWizard({
     return () => {
       cancelled = true;
     };
-  }, [initialDraftId]);
-
-  const applyDraft = (draft: AccessionDraft) => {
-    const objectUrl = resolveObjectUrlFromAnyTab(draft.draftId);
-    setDraftId(draft.draftId);
-    setAccessionId(draft.accessionId);
-    setStatus(draft.status);
-    setSlug(draft.slug);
-    setSlugLocked(draft.slugLocked);
-    setProvenance(draft.provenance);
-    const draftArtwork = {
-      ...draft.artwork,
-      metadata: {
-        ...draft.artwork.metadata,
-        accessionId: draft.accessionId,
-      },
-    };
-    setArtwork(
-      objectUrl
-        ? hydrateArtworkPreview(draftArtwork, objectUrl)
-        : { ...draftArtwork, imageSrc: "" },
-    );
-    setDraftLoaded(true);
-  };
+  }, [applyDraft, initialDraftId]);
 
   useEffect(() => {
     if (!draftLoaded || slugLocked) return;
     const date =
       artwork.metadata.date ?? new Date().toISOString().slice(0, 10);
     const title = artwork.metadata.title || "untitled";
-    setSlug(buildArchiveSlug(date, title));
+    const timeout = window.setTimeout(() => setSlug(buildArchiveSlug(date, title)), 0);
+    return () => window.clearTimeout(timeout);
   }, [artwork.metadata.date, artwork.metadata.title, draftLoaded, slugLocked]);
 
   useEffect(() => {
@@ -209,6 +228,7 @@ export function IngestionWizard({
       throw new Error(data.error ?? "Draft save failed");
     }
     setStatus(data.draft.status);
+    setCurrentDraft(data.draft);
     return data.draft;
   }, [accessionId, controller.artwork, draftId, draftLoaded, provenance, slug, slugLocked]);
 
@@ -265,24 +285,12 @@ export function IngestionWizard({
       if (!res.ok || !data.draft) {
         setError(data.error ?? "Source could not be preserved");
       } else {
-        setStatus(data.draft.status);
+        applyDraft(data.draft);
       }
       setStep("Prepare");
     },
-    [draftId],
+    [accessionId, applyDraft, draftId],
   );
-
-  const openPrepareInNewTab = () => {
-    if (!draftId || (!sourceFile && !controller.artwork.imageSrc)) return;
-    savePrepareSession({
-      artwork: controller.artwork,
-      customBackground: controller.customBg,
-      uploadDraftId: draftId,
-      sourceFileName: sourceFile?.name,
-      ingestDraftId: draftId,
-    });
-    window.open(`${PREPARE_URL}?ingest=${encodeURIComponent(draftId)}`, "_blank");
-  };
 
   const handleGenerate = async () => {
     if (!draftId) return;
@@ -404,6 +412,7 @@ export function IngestionWizard({
           <button
             key={label}
             type="button"
+            title={STEP_TOOLTIPS[label]}
             onClick={() => setStep(label)}
             className={`px-2 py-1 text-[0.58rem] tracking-[0.16em] uppercase border ${
               step === label
@@ -424,11 +433,15 @@ export function IngestionWizard({
             </span>
             <input
               value={slug}
+              title="Public path segment for this accession. Auto-generated from date and title unless locked."
               onChange={(e) => setSlug(normalizeArchiveSlug(e.target.value))}
               className="w-full border-b border-[var(--border)] bg-transparent py-1 text-[0.85rem] outline-none"
             />
           </label>
-          <label className="flex items-center gap-2 text-[0.68rem] tracking-[0.12em] uppercase text-[var(--muted)]">
+          <label
+            title="Freeze the slug so changes to title or date no longer rewrite it automatically."
+            className="flex items-center gap-2 text-[0.68rem] tracking-[0.12em] uppercase text-[var(--muted)]"
+          >
             <input
               type="checkbox"
               checked={slugLocked}
@@ -438,6 +451,7 @@ export function IngestionWizard({
           </label>
           <button
             type="button"
+            title="Check the slug is allowed and not already used, then save it to this draft."
             onClick={handleSlugSave}
             className="border border-[var(--border)] px-3 py-2 text-[0.62rem] tracking-[0.14em] uppercase"
           >
@@ -481,33 +495,15 @@ export function IngestionWizard({
             2. Archival preparation
           </h2>
           <p className="text-[0.85rem] leading-relaxed text-[var(--muted)]">
-            Review encoding in Prepare before accession. Server-side Sharp will produce
-            committed AVIF derivatives on generate.
+            Prepare runs inside this draft and writes canonical working files under
+            <code className="ml-1 text-[0.8rem]">content/drafts/{draftId}/working/</code>.
           </p>
-          {!controller.artwork.imageSrc && (
-            <p className="border border-[var(--border)] p-4 text-[0.78rem] text-[var(--muted)]">
-              This draft can still generate from its preserved source. Re-upload the
-              source only if you need browser-side Prepare preview in this tab.
-            </p>
-          )}
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={openPrepareInNewTab}
-              disabled={!controller.artwork.imageSrc}
-              className="border border-[var(--border)] px-4 py-2 text-[0.68rem] tracking-[0.14em] uppercase disabled:opacity-30"
-            >
-              Open in Prepare
-            </button>
-            <button
-              type="button"
-              onClick={openPrepareInNewTab}
-              disabled={!controller.artwork.imageSrc}
-              className="border border-[var(--border)] px-4 py-2 text-[0.68rem] tracking-[0.14em] uppercase disabled:opacity-30"
-            >
-              Prepare (new tab)
-            </button>
-          </div>
+          <EmbeddedPreparePanel
+            draft={currentDraft}
+            previewSrc={controller.artwork.imageSrc}
+            onPrepared={applyDraft}
+            onError={(message) => setError(message || null)}
+          />
         </section>
       )}
 
@@ -561,6 +557,7 @@ export function IngestionWizard({
           <button
             type="button"
             disabled={generating || !draftId}
+            title="Generate archive files locally from the prepared source, orientation, and metadata."
             onClick={handleGenerate}
             className="border border-[var(--ink)] px-5 py-3 text-[0.68rem] tracking-[0.16em] uppercase disabled:opacity-40"
           >
@@ -606,6 +603,7 @@ export function IngestionWizard({
               <button
                 type="button"
                 disabled={publishing}
+                title="Push content/archive and public/archive to the linked Git repository for deployment."
                 onClick={handlePublish}
                 className="border border-[var(--border)] px-5 py-3 text-[0.68rem] tracking-[0.16em] uppercase disabled:opacity-40"
               >
@@ -662,6 +660,7 @@ export function IngestionWizard({
             <button
               type="button"
               disabled={publishing}
+              title="Write mint provenance links into the published archive metadata record."
               onClick={async () => {
                 setPublishing(true);
                 setError(null);
@@ -692,6 +691,7 @@ export function IngestionWizard({
           type="button"
           onClick={goBack}
           disabled={stepIndex === 0}
+          title="Return to the previous accession step without discarding draft changes."
           className="text-[0.68rem] tracking-[0.14em] uppercase opacity-50 disabled:opacity-20"
         >
           Previous
@@ -700,6 +700,7 @@ export function IngestionWizard({
           type="button"
           onClick={goNext}
           disabled={stepIndex >= STEPS.length - 1}
+          title="Advance to the next accession step. Draft changes autosave in the background."
           className="text-[0.68rem] tracking-[0.14em] uppercase"
         >
           Next

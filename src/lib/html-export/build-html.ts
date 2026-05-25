@@ -5,7 +5,7 @@ import {
   primaryOverlayDetails,
 } from "@/lib/perception/metadata";
 import { mimeForFormat } from "@/lib/image-processing/format-support";
-import type { EmbeddedImageAsset } from "./types";
+import type { EmbeddedImageAsset, StandaloneArchiveMeta } from "./types";
 
 function escapeHtml(value: string): string {
   return value
@@ -47,6 +47,7 @@ export interface BuildHtmlInput {
   payload: ExportPayload;
   embedded?: EmbeddedImageAsset;
   fallbacks?: EmbeddedImageAsset[];
+  archiveMeta?: StandaloneArchiveMeta;
 }
 
 export function buildStandaloneHtml(
@@ -60,6 +61,7 @@ export function buildStandaloneHtml(
     ? undefined
     : (input as BuildHtmlInput).embedded;
   const fallbacks = isLegacy ? [] : ((input as BuildHtmlInput).fallbacks ?? []);
+  const archiveMeta = isLegacy ? undefined : (input as BuildHtmlInput).archiveMeta;
 
   const { artwork } = payload;
   const imageSrc = embedded?.dataUrl ?? artwork.imageSrc;
@@ -86,6 +88,12 @@ export function buildStandaloneHtml(
     primaryDetails: primaryOverlayDetails(artwork.metadata, overlayFields),
     advancedMetadata: advancedMetadataEntries(artwork.metadata),
     embedFormat: embedded?.format ?? null,
+    standaloneRuntimeVersion: archiveMeta?.standaloneVersion ?? "standalone-runtime-v1",
+  });
+  const archiveMetaJson = JSON.stringify({
+    standaloneVersion: archiveMeta?.standaloneVersion ?? "standalone-runtime-v1",
+    manifest: archiveMeta?.manifest ?? null,
+    runtime: archiveMeta?.runtime ?? null,
   });
 
   const title = escapeHtml(artwork.metadata.title);
@@ -112,9 +120,8 @@ export function buildStandaloneHtml(
   #meta.dark { color: rgba(232,228,220,0.72); }
   #meta.hidden { opacity: 0; }
   #meta.interactive { pointer-events: auto; }
-  @import url('https://fonts.googleapis.com/css2?family=Anek+Tamil:wght@100..800&display=swap');
   #meta h1 { font-size: 0.72rem; letter-spacing: 0.28em; text-transform: uppercase; font-weight: 400; }
-  #meta h1.tamil-title { font-family: 'Anek Tamil', sans-serif; font-weight: 300; letter-spacing: 0.08em; text-transform: none; font-size: 0.95rem; }
+  #meta h1.tamil-title { font-family: Georgia, serif; font-weight: 300; letter-spacing: 0.08em; text-transform: none; font-size: 0.95rem; }
   #meta .state { margin-top: 0.65rem; font-size: 0.95rem; letter-spacing: 0.06em; }
   #meta .caption { margin-top: 0.35rem; font-size: 0.82rem; font-style: italic; opacity: 0.85; max-width: 36rem; line-height: 1.55; }
   #meta .detail { margin-top: 0.5rem; font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.55; }
@@ -190,6 +197,8 @@ export function buildStandaloneHtml(
 <script>
 (function(){
   var CONFIG = ${configJson};
+  var ARCHIVE_META = ${archiveMetaJson};
+  window.__ANEKAROOPAM_ARCHIVE__ = ARCHIVE_META;
   var stage = document.getElementById('stage');
   var transformEl = document.getElementById('transform');
   var img = document.getElementById('artwork');

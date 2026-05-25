@@ -19,8 +19,8 @@ function computeDimensions(
   maxWidth?: number,
   maxHeight?: number,
 ): { width: number; height: number } {
-  let width = sw;
-  let height = sh;
+  const width = sw;
+  const height = sh;
   if (!maxWidth && !maxHeight) return { width, height };
 
   const limitW = maxWidth ?? width;

@@ -1,7 +1,15 @@
 import type { PerceptionArtwork } from "@/lib/perception/types";
 import type { ArchiveEntry } from "@/lib/archive/schema";
 import { archiveEntryToPerceptionArtwork } from "@/lib/archive/adapters";
-import { loadArchiveEntry, listArchiveSlugs } from "@/lib/archive/load-entry";
+import {
+  getAllArchiveEntries,
+  loadArchiveEntry,
+} from "@/lib/archive/load-entry";
+import {
+  buildAccessionRuntime,
+  hydrateAccessionRuntime,
+  type AccessionRuntime,
+} from "@/lib/archive/runtime";
 import {
   archiveArtworks,
   getArtworkById as getLegacyArtworkById,
@@ -21,20 +29,31 @@ export async function getArchiveEntryBySlug(
   return loadArchiveEntry(slug);
 }
 
+export async function getAccessionRuntimeBySlug(
+  slug: string,
+): Promise<AccessionRuntime | null> {
+  return hydrateAccessionRuntime(slug);
+}
+
 export async function listAllArchiveSlugs(): Promise<string[]> {
-  const fsSlugs = await listArchiveSlugs();
+  const fsSlugs = (await getAllArchiveEntries()).map((entry) => entry.slug);
   const legacyIds = archiveArtworks.map((a) => a.id);
   return [...new Set([...fsSlugs, ...legacyIds])];
 }
 
 export async function listAllArtworks(): Promise<PerceptionArtwork[]> {
-  const slugs = await listAllArchiveSlugs();
-  const works: PerceptionArtwork[] = [];
-  for (const slug of slugs) {
-    const w = await getArtworkBySlug(slug);
-    if (w) works.push(w);
-  }
-  return works;
+  const entries = await getAllArchiveEntries();
+  const works: PerceptionArtwork[] = entries.map((entry) => ({
+    ...archiveEntryToPerceptionArtwork(entry),
+    imageSrc:
+      buildAccessionRuntime(entry).derivatives.find((d) => d.role === "thumb")?.path ??
+      entry.assets.thumb,
+  }));
+  const fsSlugs = new Set(entries.map((entry) => entry.slug));
+  return [
+    ...works,
+    ...archiveArtworks.filter((artwork) => !fsSlugs.has(artwork.id)),
+  ];
 }
 
 export { archiveArtworks, getArchiveYears, getArchiveProcesses, filterArtworks } from "./artworks";
