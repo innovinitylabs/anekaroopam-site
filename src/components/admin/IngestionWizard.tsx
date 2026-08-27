@@ -551,8 +551,10 @@ export function IngestionWizard({
             5–7. Generate archive bundle
           </h2>
           <p className="text-[0.85rem] text-[var(--muted)]">
-            Writes metadata, states, notes, perception.html to content/archive and
-            AVIF mirrors to public/archive.
+            Writes the local archive bundle: metadata, states, notes, perception.html,
+            public derivatives, original source/, and prepared/. Marks the record
+            generated. This is not a GitHub publish; the work can appear on this
+            local site until you commit.
           </p>
           <button
             type="button"
@@ -597,8 +599,9 @@ export function IngestionWizard({
           ) : (
             <>
               <p className="text-[0.85rem] text-[var(--muted)]">
-                Pushes content/archive and public/archive to GitHub when
-                GITHUB_ARCHIVE_TOKEN is configured. Vercel redeploys on push.
+                Marks the local record published, then pushes content/archive and
+                public/archive to GitHub when GITHUB_ARCHIVE_TOKEN is configured.
+                Vercel redeploys on push.
               </p>
               <button
                 type="button"

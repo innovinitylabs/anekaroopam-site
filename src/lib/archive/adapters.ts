@@ -12,6 +12,7 @@ import {
   defaultArchiveAssets,
   emptyProvenance,
 } from "./schema";
+import { archiveStatusFromDraft } from "./archive-policy";
 
 export function perceptionArtworkToArchiveEntry(
   artwork: PerceptionArtwork,
@@ -105,7 +106,10 @@ export function draftToArchiveEntry(draft: ArchiveDraft): ArchiveEntry {
     draft.accessionId,
   );
   entry.accessionId = draft.accessionId;
-  entry.status = draft.status === "minted" ? "minted" : "published";
+  entry.status = archiveStatusFromDraft(draft.status);
+  if (entry.status !== "published" && entry.status !== "minted") {
+    delete entry.publishedAt;
+  }
   if (draft.export) {
     entry.export = { ...entry.export, ...draft.export };
   }

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { isAdminIngestEnabled } from "@/lib/archive/admin-guard";
 import { publishArchiveEntryToGitHub } from "@/lib/github/publish-entry";
 import { getGitHubArchiveConfig } from "@/lib/github/types";
-import { updateDraftStatus } from "@/lib/archive/draft-store";
+import { markArchiveRecordPublished, updateDraftStatus } from "@/lib/archive/draft-store";
 
 export const runtime = "nodejs";
 
@@ -27,7 +27,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing slug" }, { status: 400 });
     }
 
-    const result = await publishArchiveEntryToGitHub(body.slug.trim());
+    const slug = body.slug.trim();
+    const entry = await markArchiveRecordPublished(slug);
+    const result = await publishArchiveEntryToGitHub(entry.slug);
     if (body.draftId) {
       await updateDraftStatus(body.draftId, "published");
     }

@@ -49,3 +49,10 @@ export function publicArchiveDir(slug: string): string {
 export function publicArchiveUrl(slug: string, filename: string): string {
   return `/archive/${slug}/${filename}`;
 }
+
+export function repoRelativePath(filePath: string): string {
+  const absolute = path.isAbsolute(filePath)
+    ? filePath
+    : path.resolve(REPO_ROOT, filePath);
+  return path.relative(REPO_ROOT, absolute).split(path.sep).join("/");
+}

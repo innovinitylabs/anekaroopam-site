@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --experimental-strip-types --test src/lib/archive/*.test.ts"
   },
   "dependencies": {
     "@jsquash/avif": "^2.1.1",

@@ -1,4 +1,5 @@
 export * from "./schema";
+export * from "./archive-policy";
 export * from "./adapters";
 export * from "./paths";
 export * from "./image-specs";

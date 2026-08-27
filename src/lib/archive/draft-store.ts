@@ -35,8 +35,14 @@ import {
   accessionDraftToArchiveDraft,
   archiveEntryToAccessionDraft,
 } from "./adapters";
+import {
+  archiveStatusFromDraft,
+  bytesForArchiveDerivativeGenerate,
+  bytesForArchiveSourceDeposit,
+} from "./archive-policy";
 import { runArchiveExport } from "./export-orchestrator";
 import { loadArchiveEntry } from "./load-entry";
+import { exportMintPackage } from "./mint-package";
 import { addArchiveRedirect, assertSlugAllowed, redirectTargetExists } from "./redirects";
 import {
   prepareDraftSource,
@@ -446,6 +452,29 @@ export async function updateArchiveVisibility(
   return saveArchiveEntry(updated);
 }
 
+export async function markArchiveRecordPublished(
+  slug: string,
+): Promise<ArchiveEntry> {
+  const entry = await loadArchiveEntry(slug);
+  if (!entry) throw new Error(`Archive entry not found: ${slug}`);
+  if (
+    entry.status === "hidden" ||
+    entry.status === "withdrawn" ||
+    entry.status === "minted"
+  ) {
+    return entry;
+  }
+  const timestamp = nowIso();
+  return saveArchiveEntry(
+    ArchiveEntrySchema.parse({
+      ...entry,
+      status: "published",
+      publishedAt: entry.publishedAt ?? timestamp,
+      updatedAt: timestamp,
+    }),
+  );
+}
+
 export async function storeDraftSource(
   draftId: string,
   file: File,
@@ -528,10 +557,11 @@ export async function readDraftSourceBuffer(draft: AccessionDraft): Promise<Buff
 
 async function preserveDraftSourceInArchive(draft: AccessionDraft): Promise<void> {
   if (!draft.source.storedFilename) return;
+  const originalBuffer = await readDraftSourceBuffer(draft);
+  const preparedBuffer = await readPreparedDraftBuffer(draft);
   const sourceDir = contentArchiveSourceDir(draft.slug);
   await fs.mkdir(sourceDir, { recursive: true });
-  const sourceBuffer =
-    (await readPreparedDraftBuffer(draft)) ?? (await readDraftSourceBuffer(draft));
+  const sourceBuffer = bytesForArchiveSourceDeposit(originalBuffer, preparedBuffer);
   const storedFilename = archiveMasterFilename(
     draft.source.originalFilename ?? draft.source.storedFilename,
   );
@@ -541,7 +571,6 @@ async function preserveDraftSourceInArchive(draft: AccessionDraft): Promise<void
     kind: "original",
     storedFilename,
   });
-  const preparedBuffer = await readPreparedDraftBuffer(draft);
   if (preparedBuffer) {
     const preparedDir = contentArchivePreparedDir(draft.slug);
     await fs.mkdir(preparedDir, { recursive: true });
@@ -556,10 +585,17 @@ export async function generateArchiveFromDraft(
   if (!draft) throw new Error(`Draft not found: ${draftId}`);
   await validateSlugUnique(draft.slug, draft.draftId, draft.accessionId);
 
-  const sourceBuffer = await readDraftSourceBuffer(draft);
+  const originalBuffer = await readDraftSourceBuffer(draft);
+  const preparedBuffer = await readPreparedDraftBuffer(draft);
+  const sourceBuffer = bytesForArchiveDerivativeGenerate(
+    originalBuffer,
+    preparedBuffer,
+  );
   const existingEntry = await loadArchiveEntry(draft.slug);
+  const archiveDraft = accessionDraftToArchiveDraft(draft);
+  archiveDraft.status = archiveStatusFromDraft("generated");
   const result = await runArchiveExport({
-    draft: accessionDraftToArchiveDraft(draft),
+    draft: archiveDraft,
     sourceBuffer,
     existingEntry: existingEntry ?? undefined,
     source: {
@@ -586,6 +622,13 @@ export async function generateArchiveFromDraft(
     generatedAt: nowIso(),
   });
 
+  try {
+    await exportMintPackage(draft.slug);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Mint package failed";
+    result.warnings.push(`Mint package skipped: ${message}`);
+  }
+
   return result;
 }
 
@@ -605,7 +648,10 @@ export async function regeneratePublishedEntryFromDraft(
   if (!existingEntry) throw new Error(`Archive entry not found: ${draft.slug}`);
 
   const sourceBuffer = draft.source.storedFilename
-    ? (await readPreparedDraftBuffer(draft)) ?? (await readDraftSourceBuffer(draft))
+    ? bytesForArchiveDerivativeGenerate(
+        await readDraftSourceBuffer(draft),
+        await readPreparedDraftBuffer(draft),
+      )
     : await readArchiveSourceBuffer(existingEntry);
   const source = draft.source.storedFilename ? draft.source : existingEntry.source;
 

@@ -1,6 +1,8 @@
 import type { ArchiveEntry, DraftStatus } from "./schema";
 
 export function isPublicArchiveStatus(status: DraftStatus | undefined): boolean {
+  // Local generate writes status "generated". Those records remain visible on
+  // this site. GitHub publish is a separate step that marks them "published".
   return status !== "hidden" && status !== "withdrawn";
 }
 
