@@ -121,6 +121,7 @@ export function ExportHtmlSection({
           Embedded format
         </span>
         <select
+          title="Image format embedded inside the standalone HTML file."
           className="mt-1 min-h-10 w-full border-b border-[var(--border)] bg-transparent py-1 text-sm sm:min-h-0"
           value={format}
           onChange={(e) => setFormat(e.target.value as ImageFormat)}
@@ -132,7 +133,10 @@ export function ExportHtmlSection({
           ))}
         </select>
       </label>
-      <label className="flex min-h-10 items-center gap-2 text-[0.68rem] sm:min-h-0">
+      <label
+        title="Include a WebP source in the HTML picture element for browsers without AVIF support."
+        className="flex min-h-10 items-center gap-2 text-[0.68rem] sm:min-h-0"
+      >
         <input
           type="checkbox"
           checked={enableFallback}
@@ -150,6 +154,7 @@ export function ExportHtmlSection({
       <button
         type="button"
         disabled={!imageSrc || exporting}
+        title="Build a self-contained HTML file with embedded image data and orientation runtime."
         onClick={handleExport}
         className="w-full border border-[var(--border)] py-3 text-[0.68rem] tracking-[0.14em] uppercase transition-colors hover:border-[var(--foreground)] disabled:opacity-30 sm:py-2"
       >

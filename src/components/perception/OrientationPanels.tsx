@@ -22,6 +22,7 @@ export function PerceptualStatesPanel({
         <button
           type="button"
           onClick={addState}
+          title="Add another named viewing angle with optional caption."
           className="text-[0.62rem] tracking-[0.14em] uppercase opacity-60 hover:opacity-100"
         >
           Add
@@ -35,7 +36,10 @@ export function PerceptualStatesPanel({
           onRemove={() => removeState(state.id)}
         />
       ))}
-      <label className="mt-4 flex items-center gap-2 text-[0.68rem] tracking-wide">
+      <label
+        title="When enabled, rotation settles on the nearest defined perceptual state."
+        className="mt-4 flex items-center gap-2 text-[0.68rem] tracking-wide"
+      >
         <input
           type="checkbox"
           checked={artwork.snapToState ?? false}
@@ -66,6 +70,7 @@ export function BackgroundPanel({
           <button
             key={key}
             type="button"
+            title={`Set viewing background to ${BACKGROUND_PRESETS[key].label}.`}
             onClick={() => setBackground(key)}
             className={`px-2 py-1 text-[0.62rem] tracking-wide uppercase border ${
               artwork.background === key
@@ -87,6 +92,7 @@ export function BackgroundPanel({
       )}
       <button
         type="button"
+        title="Use a custom background color for preview and export."
         onClick={() => setArtwork((p) => ({ ...p, background: "custom" }))}
         className={`mt-2 text-[0.62rem] tracking-wide uppercase ${
           artwork.background === "custom" ? "opacity-100" : "opacity-40"
@@ -139,6 +145,7 @@ function StateRow({
         <button
           type="button"
           onClick={onRemove}
+          title="Remove this perceptual state from the artwork."
           className="min-h-9 px-2 text-[0.62rem] opacity-40 hover:opacity-100"
           aria-label="Remove state"
         >
@@ -180,6 +187,7 @@ export function ImportZone({
 
   return (
     <label
+      title="Import a high-resolution image to begin orientation and export."
       className={`flex cursor-pointer flex-col items-center justify-center border border-dashed border-[var(--border)] text-center transition-colors ${
         compact ? "p-6" : "absolute inset-0 m-5 sm:m-8"
       } ${dragOver ? "bg-[var(--surface-elevated)]" : ""}`}

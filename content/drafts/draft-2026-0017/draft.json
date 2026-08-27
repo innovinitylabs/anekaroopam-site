@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "draftId": "draft-2026-0017",
+  "accessionId": "AR-2026-0017",
+  "status": "prepared",
+  "slug": "2026-05-25-mightosis",
+  "slugLocked": false,
+  "slugHistory": [
+    "2026-05-25-ar-2026-0017",
+    "2026-05-25",
+    "2026-05-25mightosis"
+  ],
+  "source": {
+    "kind": "migration-required"
+  },
+  "processing": {},
+  "artwork": {
+    "id": "draft-2026-0017",
+    "metadata": {
+      "accessionId": "AR-2026-0017",
+      "title": "",
+      "year": 2026,
+      "date": "2026-05-25"
+    },
+    "imageSrc": "",
+    "states": [
+      {
+        "id": "s1",
+        "name": "",
+        "angle": 0,
+        "caption": ""
+      }
+    ],
+    "background": "paper",
+    "initialAngle": 0,
+    "snapToState": true,
+    "showMetadataOverlay": true
+  },
+  "provenance": {
+    "mint": [],
+    "auction": [],
+    "marketplace": []
+  },
+  "export": {
+    "standaloneHtml": "perception.html",
+    "includeWebpFallback": true,
+    "preset": "archival"
+  },
+  "createdAt": "2026-05-25T07:44:25.337Z",
+  "updatedAt": "2026-05-25T07:45:50.572Z",
+  "preparedAt": "2026-05-25T07:45:49.841Z"
+}

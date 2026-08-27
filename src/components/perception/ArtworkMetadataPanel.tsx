@@ -74,6 +74,7 @@ export function ArtworkMetadataPanel({
         <button
           type="button"
           onClick={() => setAdvancedOpen((o) => !o)}
+          title="Show or hide extended archival fields such as dimensions, links, and perceptual notes."
           className="group flex w-full items-center gap-2 py-3 text-center text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)] transition-opacity hover:opacity-100 sm:gap-3 sm:py-2 sm:text-[0.62rem] sm:tracking-[0.2em]"
           aria-expanded={advancedOpen}
         >

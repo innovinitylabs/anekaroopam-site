@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "slug": "2026-05-19-02-devil-may-cry-or-block-you",
+  "metadata": {
+    "title": "02_Devil May Cry Or Block You",
+    "year": 2026,
+    "date": "2026-05-19",
+    "process": "Valiroopam",
+    "postProcessing": "GPT 5.5 for replacing background scanned photo to archival paper",
+    "captureMethod": "Camera",
+    "artistWebsite": "https://valipokkann.in"
+  },
+  "assets": {
+    "artwork": "/archive/2026-05-19-02-devil-may-cry-or-block-you/artwork.avif",
+    "preview": "/archive/2026-05-19-02-devil-may-cry-or-block-you/preview.avif",
+    "social": "/archive/2026-05-19-02-devil-may-cry-or-block-you/social.avif",
+    "thumb": "/archive/2026-05-19-02-devil-may-cry-or-block-you/thumb.avif"
+  },
+  "perception": {
+    "states": [
+      {
+        "id": "ps_011184b8",
+        "name": "Devil May Cry",
+        "angle": 0,
+        "caption": ""
+      },
+      {
+        "id": "ps_x1x9jzhj",
+        "name": "Or Block You",
+        "angle": 180,
+        "caption": ""
+      }
+    ],
+    "background": "paper",
+    "initialAngle": 0,
+    "snapToState": true,
+    "showMetadataOverlay": true
+  },
+  "export": {
+    "standaloneHtml": "perception.html",
+    "includeWebpFallback": true
+  },
+  "provenance": {
+    "platform": "Transient Labs",
+    "url": "https://www.transient.xyz/@valipokkann",
+    "chain": ""
+  },
+  "createdAt": "2026-05-21T05:53:45.729Z",
+  "updatedAt": "2026-05-21T05:58:26.244Z"
+}

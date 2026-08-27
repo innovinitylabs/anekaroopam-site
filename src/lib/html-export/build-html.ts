@@ -354,7 +354,7 @@ export function buildStandaloneHtml(
     }, 3200);
   }
   stage.addEventListener('click', function(e) {
-    if (suppressClick) {
+    if (dragging || suppressClick) {
       suppressClick = false;
       return;
     }
@@ -377,34 +377,47 @@ export function buildStandaloneHtml(
   }
   stage.addEventListener('pointerdown', function(e) {
     if (e.detail > 1) return;
+    dragging = false;
     pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
     if (Object.keys(pointers).length === 2) {
       pinchStart = { distance: pointerDistance(), zoom: zoom };
       suppressClick = true;
     }
-    dragging = false; lastX = e.clientX; lastY = e.clientY;
+    lastX = e.clientX;
+    lastY = e.clientY;
     stage.setPointerCapture(e.pointerId);
   });
   stage.addEventListener('pointermove', function(e) {
+    if (!stage.hasPointerCapture(e.pointerId)) return;
     pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
     if (pinchStart && Object.keys(pointers).length >= 2) {
       var distance = pointerDistance();
       if (pinchStart.distance > 0) {
         zoom = Math.min(4, Math.max(0.4, pinchStart.zoom * (distance / pinchStart.distance)));
-        applyTransform(); pulseUi();
+        applyTransform();
+        pulseUi();
       }
       suppressClick = true;
       return;
     }
-    panX += e.clientX - lastX; panY += e.clientY - lastY;
-    if (Math.abs(e.clientX - lastX) > 1 || Math.abs(e.clientY - lastY) > 1) {
+    var dx = e.clientX - lastX;
+    var dy = e.clientY - lastY;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
       dragging = true;
       suppressClick = true;
     }
-    lastX = e.clientX; lastY = e.clientY;
-    applyTransform(); pulseUi();
+    if (!dragging) return;
+    panX += dx;
+    panY += dy;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    applyTransform();
+    pulseUi();
   });
   function endPointer(e) {
+    if (stage.hasPointerCapture(e.pointerId)) {
+      try { stage.releasePointerCapture(e.pointerId); } catch (err) {}
+    }
     delete pointers[e.pointerId];
     if (Object.keys(pointers).length < 2) pinchStart = null;
     setTimeout(function() { dragging = false; }, 0);
