@@ -39,6 +39,7 @@ import {
   archiveStatusFromDraft,
   bytesForArchiveDerivativeGenerate,
   bytesForArchiveSourceDeposit,
+  keepExplicitPatchKeys,
 } from "./archive-policy";
 import { runArchiveExport } from "./export-orchestrator";
 import { loadArchiveEntry } from "./load-entry";
@@ -371,24 +372,27 @@ export async function updateAccessionDraft(
   if (!existing) throw new Error(`Draft not found: ${draftId}`);
 
   const parsed = AccessionDraftUpdateSchema.parse(patch);
-  const nextSlug = parsed.slug
-    ? assertSlugAllowed(parsed.slug)
+  const assigned = keepExplicitPatchKeys(patch, parsed);
+  const nextSlug = typeof assigned.slug === "string"
+    ? assertSlugAllowed(assigned.slug)
     : existing.slug;
   if (nextSlug !== existing.slug) {
     await validateSlugUnique(nextSlug, draftId);
   }
 
+  const assignedArtwork = assigned.artwork as AccessionDraft["artwork"] | undefined;
+
   const updated = AccessionDraftSchema.parse({
     ...existing,
-    ...parsed,
+    ...assigned,
     draftId: existing.draftId,
     accessionId: existing.accessionId,
     slug: nextSlug,
-    artwork: parsed.artwork
+    artwork: assignedArtwork
       ? {
-          ...parsed.artwork,
+          ...assignedArtwork,
           metadata: {
-            ...parsed.artwork.metadata,
+            ...assignedArtwork.metadata,
             accessionId: existing.accessionId,
           },
         }

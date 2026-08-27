@@ -26,3 +26,17 @@ export function bytesForArchiveDerivativeGenerate(
 ): Buffer {
   return prepared ?? original;
 }
+
+export function keepExplicitPatchKeys(
+  patch: object,
+  parsed: object,
+): Record<string, unknown> {
+  const assigned: Record<string, unknown> = {};
+  const parsedRecord = parsed as Record<string, unknown>;
+  for (const key of Object.keys(patch)) {
+    if (Object.prototype.hasOwnProperty.call(parsed, key)) {
+      assigned[key] = parsedRecord[key];
+    }
+  }
+  return assigned;
+}

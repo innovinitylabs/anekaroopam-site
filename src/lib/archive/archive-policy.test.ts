@@ -4,7 +4,9 @@ import {
   archiveStatusFromDraft,
   bytesForArchiveDerivativeGenerate,
   bytesForArchiveSourceDeposit,
+  keepExplicitPatchKeys,
 } from "./archive-policy.ts";
+import { AccessionDraftUpdateSchema } from "./schema.ts";
 
 describe("archiveStatusFromDraft", () => {
   it("maps generate-time draft statuses to generated, not published", () => {
@@ -38,5 +40,19 @@ describe("archive deposit vs derivative buffers", () => {
   it("falls back to original bytes for derivatives when prepared is absent", () => {
     const original = Buffer.from("original-bytes");
     assert.equal(bytesForArchiveDerivativeGenerate(original, null), original);
+  });
+});
+
+describe("keepExplicitPatchKeys", () => {
+  it("does not keep defaulted source when the patch did not set source", () => {
+    const patch = {
+      status: "prepared" as const,
+      processing: { preparedSource: "working/master-prepared.avif" },
+    };
+    const parsed = AccessionDraftUpdateSchema.parse(patch);
+    assert.equal(parsed.source?.kind, "migration-required");
+    const assigned = keepExplicitPatchKeys(patch, parsed);
+    assert.equal("source" in assigned, false);
+    assert.equal(assigned.status, "prepared");
   });
 });
