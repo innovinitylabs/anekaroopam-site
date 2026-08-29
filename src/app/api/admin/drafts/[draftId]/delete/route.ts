@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { isAdminIngestEnabled } from "@/lib/archive/admin-guard";
+import { requireAdminIngest } from "@/lib/archive/admin-ingest-response";
 import { deleteDraft } from "@/lib/archive/draft-store";
 
 export const runtime = "nodejs";
@@ -12,9 +12,8 @@ const DeleteDraftBodySchema = z.object({
 type Context = { params: Promise<{ draftId: string }> };
 
 export async function DELETE(request: Request, { params }: Context) {
-  if (!isAdminIngestEnabled()) {
-    return NextResponse.json({ error: "Admin ingestion disabled" }, { status: 403 });
-  }
+  const denied = requireAdminIngest(request);
+  if (denied) return denied;
 
   try {
     const { draftId } = await params;

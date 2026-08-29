@@ -25,7 +25,7 @@ function buildPictureMarkup(
         arr.findIndex((a) => a.format === asset.format) === index,
     )
     .sort((a, b) => {
-      const order: Record<string, number> = { avif: 0, webp: 1, png: 2, jpeg: 3 };
+      const order: Record<string, number> = { webp: 0, avif: 1, png: 2, jpeg: 3 };
       return order[a.format] - order[b.format];
     })
     .map(
@@ -35,7 +35,9 @@ function buildPictureMarkup(
     .join("\n      ");
 
   const fallback =
-    [...fallbacks, primary].find((a) => a.format === "png") ?? primary;
+    [...fallbacks, primary].find((a) => a.format === "jpeg") ??
+    [...fallbacks, primary].find((a) => a.format === "webp") ??
+    primary;
 
   return `<picture>
       ${sources}

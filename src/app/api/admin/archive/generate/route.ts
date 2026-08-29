@@ -1,14 +1,13 @@
 import { NextResponse } from "next/server";
-import { isAdminIngestEnabled } from "@/lib/archive/admin-guard";
+import { requireAdminIngest } from "@/lib/archive/admin-ingest-response";
 import { ArchiveDraftSchema } from "@/lib/archive/schema";
 import { runArchiveExport } from "@/lib/archive/export-orchestrator";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  if (!isAdminIngestEnabled()) {
-    return NextResponse.json({ error: "Admin ingestion disabled" }, { status: 403 });
-  }
+  const denied = requireAdminIngest(request);
+  if (denied) return denied;
 
   try {
     const form = await request.formData();

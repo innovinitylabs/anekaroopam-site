@@ -13,6 +13,19 @@ export interface ArchiveImageBuffers {
   thumbJpg: Buffer;
 }
 
+let testPipelineHook: ((sourceBuffer: Buffer) => Promise<ArchiveImageBuffers>) | undefined;
+
+/** Test-only override for deterministic export integration tests. */
+export function setArchiveImagePipelineForTests(
+  hook?: (sourceBuffer: Buffer) => Promise<ArchiveImageBuffers>,
+): void {
+  testPipelineHook = hook;
+}
+
+export function isArchiveImagePipelineTestMode(): boolean {
+  return testPipelineHook !== undefined;
+}
+
 async function encodeVariant(
   pipeline: sharp.Sharp,
   spec: (typeof ARCHIVE_IMAGE_OUTPUTS)[ArchiveImageVariant],
@@ -61,6 +74,10 @@ async function variantPipeline(
 export async function runArchiveImagePipeline(
   sourceBuffer: Buffer,
 ): Promise<ArchiveImageBuffers> {
+  if (testPipelineHook) {
+    return testPipelineHook(sourceBuffer);
+  }
+
   const [artwork, previewAvif, previewWebp, socialJpg, thumbJpg] = await Promise.all([
     variantPipeline(sourceBuffer, "artwork"),
     variantPipeline(sourceBuffer, "previewAvif"),
@@ -84,6 +101,26 @@ export async function derivativeAssetFromBuffer(
   generatedAt: string,
 ): Promise<DerivativeAsset> {
   const spec = ARCHIVE_IMAGE_OUTPUTS[variant];
+  if (testPipelineHook) {
+    const role =
+      variant === "thumbJpg"
+        ? "thumb"
+        : variant === "socialJpg"
+          ? "social"
+          : variant === "artwork"
+            ? "artwork"
+            : "preview";
+    return {
+      role,
+      path: publicPath,
+      format: spec.format,
+      width: 1,
+      height: 1,
+      byteSize: buffer.length,
+      generatedAt,
+    };
+  }
+
   const meta = await sharp(buffer).metadata();
   const role =
     variant === "thumbJpg"

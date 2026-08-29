@@ -1,19 +1,18 @@
 import { NextResponse } from "next/server";
-import { isAdminIngestEnabled } from "@/lib/archive/admin-guard";
-import { regenerateArchiveDerivatives } from "@/lib/archive/draft-store";
+import { requireAdminIngest } from "@/lib/archive/admin-ingest-response";
+import { regenerateDraftArchive } from "@/lib/archive/draft-store";
 
 export const runtime = "nodejs";
 
 type Context = { params: Promise<{ draftId: string }> };
 
-export async function POST(_request: Request, { params }: Context) {
-  if (!isAdminIngestEnabled()) {
-    return NextResponse.json({ error: "Admin ingestion disabled" }, { status: 403 });
-  }
+export async function POST(request: Request, { params }: Context) {
+  const denied = requireAdminIngest(request);
+  if (denied) return denied;
 
   try {
     const { draftId } = await params;
-    const result = await regenerateArchiveDerivatives(draftId);
+    const result = await regenerateDraftArchive(draftId);
     return NextResponse.json({
       slug: result.slug,
       files: result.files,

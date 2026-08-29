@@ -1,9 +1,11 @@
 import path from "path";
 
-const REPO_ROOT = path.join(process.cwd());
+function repoRoot(): string {
+  return process.cwd();
+}
 
 export function contentArchiveDir(slug: string): string {
-  return path.join(REPO_ROOT, "content", "archive", slug);
+  return path.join(repoRoot(), "content", "archive", slug);
 }
 
 export function contentArchiveSourceDir(slug: string): string {
@@ -23,11 +25,11 @@ export function contentArchiveMintPackageDir(slug: string): string {
 }
 
 export function contentArchiveRedirectsPath(): string {
-  return path.join(REPO_ROOT, "content", "archive", "redirects.json");
+  return path.join(repoRoot(), "content", "archive", "redirects.json");
 }
 
 export function contentDraftsDir(): string {
-  return path.join(REPO_ROOT, "content", "drafts");
+  return path.join(repoRoot(), "content", "drafts");
 }
 
 export function contentDraftDir(draftId: string): string {
@@ -43,7 +45,7 @@ export function contentDraftWorkingDir(draftId: string): string {
 }
 
 export function publicArchiveDir(slug: string): string {
-  return path.join(REPO_ROOT, "public", "archive", slug);
+  return path.join(repoRoot(), "public", "archive", slug);
 }
 
 export function publicArchiveUrl(slug: string, filename: string): string {
@@ -51,8 +53,9 @@ export function publicArchiveUrl(slug: string, filename: string): string {
 }
 
 export function repoRelativePath(filePath: string): string {
+  const root = repoRoot();
   const absolute = path.isAbsolute(filePath)
     ? filePath
-    : path.resolve(REPO_ROOT, filePath);
-  return path.relative(REPO_ROOT, absolute).split(path.sep).join("/");
+    : path.resolve(root, filePath);
+  return path.relative(root, absolute).split(path.sep).join("/");
 }

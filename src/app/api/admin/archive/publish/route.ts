@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
-import { isAdminIngestEnabled } from "@/lib/archive/admin-guard";
+import { requireAdminIngest } from "@/lib/archive/admin-ingest-response";
+import { loadArchiveEntry } from "@/lib/archive/load-entry";
+import { markArchiveRecordPublished, updateDraftStatus } from "@/lib/archive/draft-store";
 import { publishArchiveEntryToGitHub } from "@/lib/github/publish-entry";
 import { getGitHubArchiveConfig } from "@/lib/github/types";
-import { markArchiveRecordPublished, updateDraftStatus } from "@/lib/archive/draft-store";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  if (!isAdminIngestEnabled()) {
-    return NextResponse.json({ error: "Admin ingestion disabled" }, { status: 403 });
-  }
+  const denied = requireAdminIngest(request);
+  if (denied) return denied;
 
   if (!getGitHubArchiveConfig()) {
     return NextResponse.json(
@@ -28,8 +28,13 @@ export async function POST(request: Request) {
     }
 
     const slug = body.slug.trim();
-    const entry = await markArchiveRecordPublished(slug);
+    const entry = await loadArchiveEntry(slug);
+    if (!entry) {
+      return NextResponse.json({ error: "Archive entry not found" }, { status: 404 });
+    }
+
     const result = await publishArchiveEntryToGitHub(entry.slug);
+    await markArchiveRecordPublished(entry.slug);
     if (body.draftId) {
       await updateDraftStatus(body.draftId, "published");
     }

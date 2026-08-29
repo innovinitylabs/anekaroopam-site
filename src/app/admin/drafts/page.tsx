@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArchiveEntryActions } from "@/components/admin/ArchiveEntryActions";
+import { DraftDeleteButton } from "@/components/admin/DraftDeleteButton";
 import {
   draftSourcePublicLabel,
   listAccessionDrafts,
@@ -88,12 +89,15 @@ export default async function AdminDraftsPage() {
                           Prepared: {draft.processing.preparedSource ? "yes" : "not yet"}
                         </p>
                       </div>
-                      <Link
-                        href={`/admin/new?draft=${encodeURIComponent(draft.draftId)}`}
-                        className="border border-[var(--border)] px-4 py-2 text-[0.68rem] tracking-[0.14em] uppercase"
-                      >
-                        Resume
-                      </Link>
+                      <div className="flex flex-col items-end gap-2">
+                        <Link
+                          href={`/admin/new?draft=${encodeURIComponent(draft.draftId)}`}
+                          className="border border-[var(--border)] px-4 py-2 text-[0.68rem] tracking-[0.14em] uppercase"
+                        >
+                          Resume
+                        </Link>
+                        <DraftDeleteButton draftId={draft.draftId} />
+                      </div>
                     </div>
                   </li>
                 ))}
@@ -147,6 +151,7 @@ export default async function AdminDraftsPage() {
                             slug={entry.slug}
                             hasSource={sourceReady}
                             status={entry.status}
+                            mintedAt={entry.mintedAt}
                           />
                         </div>
                         <div className="flex flex-wrap gap-2">
