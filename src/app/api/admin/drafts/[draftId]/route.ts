@@ -1,19 +1,19 @@
 import { NextResponse } from "next/server";
-import { isAdminIngestEnabled } from "@/lib/archive/admin-guard";
+import { requireAdminIngest } from "@/lib/archive/admin-ingest-response";
 import {
   loadAccessionDraft,
   updateAccessionDraft,
 } from "@/lib/archive/draft-store";
+import { loadArchiveEntry } from "@/lib/archive/load-entry";
 import { AccessionDraftUpdateSchema } from "@/lib/archive/schema";
 
 export const runtime = "nodejs";
 
 type Context = { params: Promise<{ draftId: string }> };
 
-export async function GET(_request: Request, { params }: Context) {
-  if (!isAdminIngestEnabled()) {
-    return NextResponse.json({ error: "Admin ingestion disabled" }, { status: 403 });
-  }
+export async function GET(request: Request, { params }: Context) {
+  const denied = requireAdminIngest(request);
+  if (denied) return denied;
 
   const { draftId } = await params;
   const draft = await loadAccessionDraft(draftId);
@@ -21,13 +21,16 @@ export async function GET(_request: Request, { params }: Context) {
     return NextResponse.json({ error: "Draft not found" }, { status: 404 });
   }
 
-  return NextResponse.json({ draft });
+  const archiveEntry = await loadArchiveEntry(draft.slug);
+  return NextResponse.json({
+    draft,
+    archiveStatus: archiveEntry?.status ?? null,
+  });
 }
 
 export async function PATCH(request: Request, { params }: Context) {
-  if (!isAdminIngestEnabled()) {
-    return NextResponse.json({ error: "Admin ingestion disabled" }, { status: 403 });
-  }
+  const denied = requireAdminIngest(request);
+  if (denied) return denied;
 
   try {
     const { draftId } = await params;

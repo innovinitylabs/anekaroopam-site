@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isAdminIngestEnabled } from "@/lib/archive/admin-guard";
+import { requireAdminIngest } from "@/lib/archive/admin-ingest-response";
 import {
   createAccessionDraft,
   listAccessionDrafts,
@@ -8,19 +8,17 @@ import { CreateAccessionDraftSchema } from "@/lib/archive/schema";
 
 export const runtime = "nodejs";
 
-export async function GET() {
-  if (!isAdminIngestEnabled()) {
-    return NextResponse.json({ error: "Admin ingestion disabled" }, { status: 403 });
-  }
+export async function GET(request: Request) {
+  const denied = requireAdminIngest(request);
+  if (denied) return denied;
 
   const drafts = await listAccessionDrafts();
   return NextResponse.json({ drafts });
 }
 
 export async function POST(request: Request) {
-  if (!isAdminIngestEnabled()) {
-    return NextResponse.json({ error: "Admin ingestion disabled" }, { status: 403 });
-  }
+  const denied = requireAdminIngest(request);
+  if (denied) return denied;
 
   try {
     const body = (await request.json().catch(() => ({}))) as unknown;

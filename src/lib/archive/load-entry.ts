@@ -7,15 +7,17 @@ import {
 import { contentArchiveDir } from "./paths";
 import { isPublicArchiveEntry } from "./visibility";
 
-const ARCHIVE_ROOT = path.join(process.cwd(), "content", "archive");
+function archiveRoot(): string {
+  return path.join(process.cwd(), "content", "archive");
+}
 
 export async function listArchiveSlugs(): Promise<string[]> {
   try {
-    const entries = await fs.readdir(ARCHIVE_ROOT, { withFileTypes: true });
+    const entries = await fs.readdir(archiveRoot(), { withFileTypes: true });
     const slugs: string[] = [];
     for (const ent of entries) {
       if (!ent.isDirectory() || ent.name.startsWith(".")) continue;
-      const metaPath = path.join(ARCHIVE_ROOT, ent.name, "metadata.json");
+      const metaPath = path.join(archiveRoot(), ent.name, "metadata.json");
       try {
         await fs.access(metaPath);
         slugs.push(ent.name);

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { isAdminIngestEnabled } from "@/lib/archive/admin-guard";
+import { AdminUnlock } from "@/components/admin/AdminUnlock";
 import Link from "next/link";
 
 export const metadata = {
@@ -45,7 +46,7 @@ export default function AdminLayout({
           </span>
         </div>
       </header>
-      {children}
+      <AdminUnlock>{children}</AdminUnlock>
     </div>
   );
 }

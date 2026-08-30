@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { NextResponse } from "next/server";
-import { isAdminIngestEnabled } from "@/lib/archive/admin-guard";
+import { requireAdminIngest } from "@/lib/archive/admin-ingest-response";
 import {
   ArchiveEntrySchema,
   ProvenanceRecordSchema,
@@ -14,9 +14,8 @@ import { updateArchiveProvenanceOnGitHub } from "@/lib/github/publish-entry";
 export const runtime = "nodejs";
 
 export async function PATCH(request: Request) {
-  if (!isAdminIngestEnabled()) {
-    return NextResponse.json({ error: "Admin ingestion disabled" }, { status: 403 });
-  }
+  const denied = requireAdminIngest(request);
+  if (denied) return denied;
 
   try {
     const body = (await request.json()) as {

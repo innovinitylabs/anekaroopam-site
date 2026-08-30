@@ -1,6 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { adminFetch } from "@/components/admin/admin-fetch";
+import {
+  formatWizardStatusHeader,
+  generateEndpointKind,
+  isExistingArchiveBundle,
+  isRegenerateBlocked,
+  usesSyncOnPublishStep,
+} from "@/components/admin/admin-workflow-state";
 import { EmbeddedPreparePanel } from "@/components/admin/EmbeddedPreparePanel";
 import { ImageDropZone } from "@/components/perception-tools/ImageDropZone";
 import { PerceptionCanvas } from "@/components/perception/PerceptionCanvas";
@@ -21,6 +29,7 @@ import {
   emptyProvenance,
   normalizeArchiveSlug,
   type AccessionDraft,
+  type DraftStatus,
   type ProvenanceRecord,
 } from "@/lib/archive/schema";
 import {
@@ -43,7 +52,11 @@ const STEPS = [
 
 type StepId = (typeof STEPS)[number];
 
-type DraftResponse = { draft?: AccessionDraft; error?: string };
+type DraftResponse = {
+  draft?: AccessionDraft;
+  archiveStatus?: DraftStatus | null;
+  error?: string;
+};
 
 const STEP_TOOLTIPS: Record<StepId, string> = {
   Upload:
@@ -87,6 +100,22 @@ function firstMint(provenance: ProvenanceRecord) {
   );
 }
 
+type SyncUiState =
+  | "idle"
+  | "local_changed"
+  | "publish_pending"
+  | "syncing"
+  | "synced"
+  | "sync_failed";
+
+function isExistingArchiveDraft(
+  draft: AccessionDraft | null,
+  draftId: string,
+  archiveStatus: DraftStatus | null,
+): boolean {
+  return isExistingArchiveBundle(draft, draftId, archiveStatus);
+}
+
 export function IngestionWizard({
   initialDraftId,
 }: {
@@ -101,6 +130,7 @@ export function IngestionWizard({
   const [status, setStatus] = useState("draft");
   const [provenance, setProvenance] = useState<ProvenanceRecord>(emptyProvenance());
   const [currentDraft, setCurrentDraft] = useState<AccessionDraft | null>(null);
+  const [archiveStatus, setArchiveStatus] = useState<DraftStatus | null>(null);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -111,6 +141,18 @@ export function IngestionWizard({
     warnings: string[];
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [syncUiState, setSyncUiState] = useState<SyncUiState>("idle");
+  const [lastSyncCommitSha, setLastSyncCommitSha] = useState<string | null>(null);
+
+  const isExistingArchive = useMemo(
+    () => isExistingArchiveDraft(currentDraft, draftId, archiveStatus),
+    [archiveStatus, currentDraft, draftId],
+  );
+
+  const deployUsesSync = useMemo(
+    () => usesSyncOnPublishStep(currentDraft, draftId, archiveStatus),
+    [archiveStatus, currentDraft, draftId],
+  );
 
   const initialArtwork = useMemo(() => defaultOrientationArtwork(), []);
 
@@ -157,20 +199,24 @@ export function IngestionWizard({
 
     async function loadOrCreateDraft() {
       setError(null);
+      if (!initialDraftId) {
+        if (!cancelled) setDraftLoaded(true);
+        return;
+      }
+
       setDraftLoaded(false);
       try {
-        const res = initialDraftId
-          ? await fetch(`/api/admin/drafts/${encodeURIComponent(initialDraftId)}`)
-          : await fetch("/api/admin/drafts", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({}),
-            });
+        const res = await adminFetch(
+          `/api/admin/drafts/${encodeURIComponent(initialDraftId)}`,
+        );
         const data = (await res.json()) as DraftResponse;
         if (!res.ok || !data.draft) {
           throw new Error(data.error ?? "Draft could not be loaded");
         }
-        if (!cancelled) applyDraft(data.draft);
+        if (!cancelled) {
+          applyDraft(data.draft);
+          setArchiveStatus(data.archiveStatus ?? null);
+        }
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : "Draft load failed");
@@ -211,9 +257,33 @@ export function IngestionWizard({
     provenance,
   ]);
 
+  useEffect(() => {
+    if (!draftLoaded || !draftId) return;
+    let cancelled = false;
+
+    async function refreshArchiveStatus() {
+      try {
+        const res = await adminFetch(
+          `/api/admin/drafts/${encodeURIComponent(draftId)}`,
+        );
+        const data = (await res.json()) as DraftResponse;
+        if (!cancelled && res.ok) {
+          setArchiveStatus(data.archiveStatus ?? null);
+        }
+      } catch {
+        /* archive status is informational only */
+      }
+    }
+
+    void refreshArchiveStatus();
+    return () => {
+      cancelled = true;
+    };
+  }, [draftId, draftLoaded, slug]);
+
   const saveDraft = useCallback(async () => {
     if (!draftLoaded || !draftId) return null;
-    const res = await fetch(`/api/admin/drafts/${encodeURIComponent(draftId)}`, {
+    const res = await adminFetch(`/api/admin/drafts/${encodeURIComponent(draftId)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -256,8 +326,8 @@ export function IngestionWizard({
 
   const handleSourceFile = useCallback(
     async (file: File) => {
-      if (!draftId) return;
-      const entry = registerTransientUpload(draftId, file);
+      const uploadKey = draftId || "pending-draft";
+      const entry = registerTransientUpload(uploadKey, file);
       setSourceFile(file);
       setArtwork((prev) =>
         hydrateArtworkPreview(
@@ -277,16 +347,23 @@ export function IngestionWizard({
       setUploadInputKey((k) => k + 1);
       const form = new FormData();
       form.append("source", file);
-      const res = await fetch(
-        `/api/admin/drafts/${encodeURIComponent(draftId)}/source`,
-        { method: "POST", body: form },
-      );
+
+      const res = draftId
+        ? await adminFetch(
+            `/api/admin/drafts/${encodeURIComponent(draftId)}/source`,
+            { method: "POST", body: form },
+          )
+        : await adminFetch("/api/admin/drafts/from-source", {
+            method: "POST",
+            body: form,
+          });
+
       const data = (await res.json()) as DraftResponse;
       if (!res.ok || !data.draft) {
         setError(data.error ?? "Source could not be preserved");
-      } else {
-        applyDraft(data.draft);
+        return;
       }
+      applyDraft(data.draft);
       setStep("Prepare");
     },
     [accessionId, applyDraft, draftId],
@@ -297,13 +374,21 @@ export function IngestionWizard({
     setGenerating(true);
     setError(null);
     setResult(null);
+    setSyncUiState("idle");
+    setLastSyncCommitSha(null);
 
     try {
       await saveDraft();
-      const res = await fetch(
-        `/api/admin/drafts/${encodeURIComponent(draftId)}/generate`,
-        { method: "POST" },
+      const endpointKind = generateEndpointKind(
+        currentDraft,
+        draftId,
+        archiveStatus,
       );
+      const endpoint =
+        endpointKind === "regenerate"
+          ? `/api/admin/drafts/${encodeURIComponent(draftId)}/regenerate`
+          : `/api/admin/drafts/${encodeURIComponent(draftId)}/generate`;
+      const res = await adminFetch(endpoint, { method: "POST" });
       const data = (await res.json()) as {
         slug?: string;
         files?: { path: string; bytes: number }[];
@@ -311,17 +396,34 @@ export function IngestionWizard({
         error?: string;
       };
       if (!res.ok) {
-        throw new Error(data.error ?? "Generation failed");
+        throw new Error(
+          data.error ??
+            (endpointKind === "regenerate"
+              ? "Regeneration failed"
+              : "Generation failed"),
+        );
       }
       setResult({
         slug: data.slug ?? slug,
         files: data.files ?? [],
         warnings: data.warnings ?? [],
       });
-      setStatus("generated");
+      const nextArchiveStatus: DraftStatus =
+        deployUsesSync || isExistingArchive
+          ? (archiveStatus ?? currentDraft?.status ?? "generated")
+          : "generated";
+      setArchiveStatus(nextArchiveStatus);
+      if (deployUsesSync) {
+        setSyncUiState("local_changed");
+      } else if (isExistingArchive) {
+        setSyncUiState("publish_pending");
+      } else {
+        setStatus("generated");
+        setSyncUiState("idle");
+      }
       setStep("Publish");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Generation failed");
+      setError(e instanceof Error ? e.message : "Archive export failed");
     } finally {
       setGenerating(false);
     }
@@ -332,7 +434,7 @@ export function IngestionWizard({
     setPublishing(true);
     setError(null);
     try {
-      const res = await fetch("/api/admin/archive/publish", {
+      const res = await adminFetch("/api/admin/archive/publish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ slug: result.slug, draftId }),
@@ -342,8 +444,36 @@ export function IngestionWizard({
         throw new Error(data.error ?? "Publish failed");
       }
       setStatus("published");
+      setArchiveStatus("published");
+      setSyncUiState("synced");
+      if (data.commitSha) setLastSyncCommitSha(data.commitSha);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Publish failed");
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const handleSync = async () => {
+    const targetSlug = result?.slug ?? slug;
+    if (!targetSlug) return;
+    setPublishing(true);
+    setError(null);
+    setSyncUiState("syncing");
+    try {
+      const res = await adminFetch(
+        `/api/admin/archive/${encodeURIComponent(targetSlug)}/sync`,
+        { method: "POST" },
+      );
+      const data = (await res.json()) as { error?: string; commitSha?: string };
+      if (!res.ok) {
+        throw new Error(data.error ?? "Sync failed");
+      }
+      setSyncUiState("synced");
+      if (data.commitSha) setLastSyncCommitSha(data.commitSha);
+    } catch (e) {
+      setSyncUiState("sync_failed");
+      setError(e instanceof Error ? e.message : "Sync failed");
     } finally {
       setPublishing(false);
     }
@@ -353,7 +483,7 @@ export function IngestionWizard({
     if (!draftId) return;
     setError(null);
     try {
-      const res = await fetch(
+      const res = await adminFetch(
         `/api/admin/drafts/${encodeURIComponent(draftId)}/slug`,
         {
           method: "PATCH",
@@ -385,6 +515,23 @@ export function IngestionWizard({
   };
 
   const mint = firstMint(provenance);
+  const provenanceSlug = result?.slug ?? slug;
+
+  const syncStatusMessage = (() => {
+    if (syncUiState === "local_changed") {
+      return "Local bundle updated. Sync to GitHub to deploy.";
+    }
+    if (syncUiState === "publish_pending") {
+      return "Local bundle updated. Publish on the next step to promote lifecycle on GitHub.";
+    }
+    if (syncUiState === "syncing") return "Syncing to GitHub...";
+    if (syncUiState === "synced" && lastSyncCommitSha) {
+      return `Synchronized (${lastSyncCommitSha.slice(0, 7)}).`;
+    }
+    if (syncUiState === "synced") return "Synchronized to GitHub.";
+    if (syncUiState === "sync_failed") return "Sync failed. Local archive is unchanged.";
+    return null;
+  })();
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-12">
@@ -400,7 +547,11 @@ export function IngestionWizard({
           Exports and public assets are derivatives.
         </p>
         <p className="mt-3 text-[0.68rem] tracking-[0.14em] uppercase text-[var(--muted)]">
-          {draftId || "Preparing draft"} · {status}
+          {formatWizardStatusHeader({
+            draftId,
+            draftStatus: status,
+            archiveStatus,
+          })}
         </p>
       </header>
 
@@ -548,21 +699,45 @@ export function IngestionWizard({
       {step === "Generate" && (
         <section className="space-y-6">
           <h2 className="text-[0.62rem] tracking-[0.18em] uppercase text-[var(--muted)]">
-            5–7. Generate archive bundle
+            {isExistingArchive
+              ? "5–7. Regenerate archive bundle"
+              : "5–7. Generate archive bundle"}
           </h2>
           <p className="text-[0.85rem] text-[var(--muted)]">
-            Writes metadata, states, notes, perception.html to content/archive and
-            AVIF mirrors to public/archive.
+            {isExistingArchive
+              ? deployUsesSync
+                ? "Updates the local archive bundle from your edits. The deposited original source is preserved. This does not sync to GitHub until you explicitly sync."
+                : "Updates the local archive bundle from your edits. The deposited original source is preserved. Use Publish on the next step to promote lifecycle on GitHub."
+              : "Writes the local archive bundle: metadata, states, notes, perception.html, public derivatives, original source/, and prepared/. Marks the record generated. This is not a GitHub publish; the work can appear on this local site until you commit."}
           </p>
           <button
             type="button"
-            disabled={generating || !draftId}
-            title="Generate archive files locally from the prepared source, orientation, and metadata."
+            disabled={
+              generating ||
+              !draftId ||
+              isRegenerateBlocked(status, archiveStatus)
+            }
+            title={
+              isRegenerateBlocked(status, archiveStatus)
+                ? "Withdrawn archives cannot be regenerated. Restore first."
+                : isExistingArchive
+                  ? "Regenerate archive files locally from edited metadata and orientation."
+                  : "Generate archive files locally from the prepared source, orientation, and metadata."
+            }
             onClick={handleGenerate}
             className="border border-[var(--ink)] px-5 py-3 text-[0.68rem] tracking-[0.16em] uppercase disabled:opacity-40"
           >
-            {generating ? "Generating..." : "Generate archive bundle"}
+            {generating
+              ? isExistingArchive
+                ? "Regenerating..."
+                : "Generating..."
+              : isExistingArchive
+                ? "Regenerate archive bundle"
+                : "Generate archive bundle"}
           </button>
+          {syncStatusMessage && (
+            <p className="text-[0.78rem] text-[var(--muted)]">{syncStatusMessage}</p>
+          )}
           {result && (
             <div className="mt-6 space-y-2 border border-[var(--border)] p-4 text-[0.78rem]">
               <p className="tracking-wide uppercase text-[var(--muted)]">
@@ -588,27 +763,45 @@ export function IngestionWizard({
       {step === "Publish" && (
         <section className="space-y-6">
           <h2 className="text-[0.62rem] tracking-[0.18em] uppercase text-[var(--muted)]">
-            8. Commit to archive repository
+            {deployUsesSync
+              ? "8. Sync to GitHub"
+              : "8. Commit to archive repository"}
           </h2>
           {!result ? (
             <p className="text-[0.85rem] text-[var(--muted)]">
-              Generate the bundle first.
+              {isExistingArchive
+                ? "Regenerate the bundle first."
+                : "Generate the bundle first."}
             </p>
           ) : (
             <>
               <p className="text-[0.85rem] text-[var(--muted)]">
-                Pushes content/archive and public/archive to GitHub when
-                GITHUB_ARCHIVE_TOKEN is configured. Vercel redeploys on push.
+                {deployUsesSync
+                  ? "Push the current content/archive and public/archive bundle to GitHub. This does not change lifecycle status."
+                  : "Marks the local record published, then pushes content/archive and public/archive to GitHub when GITHUB_ARCHIVE_TOKEN is configured. Vercel redeploys on push."}
               </p>
               <button
                 type="button"
                 disabled={publishing}
-                title="Push content/archive and public/archive to the linked Git repository for deployment."
-                onClick={handlePublish}
+                title={
+                  deployUsesSync
+                    ? "Synchronize the regenerated archive bundle to GitHub for deployment."
+                    : "Push content/archive and public/archive to the linked Git repository for deployment."
+                }
+                onClick={deployUsesSync ? handleSync : handlePublish}
                 className="border border-[var(--border)] px-5 py-3 text-[0.68rem] tracking-[0.16em] uppercase disabled:opacity-40"
               >
-                {publishing ? "Publishing..." : "Commit to GitHub"}
+                {publishing
+                  ? deployUsesSync
+                    ? "Syncing..."
+                    : "Publishing..."
+                  : deployUsesSync
+                    ? "Sync to GitHub"
+                    : "Commit to GitHub"}
               </button>
+              {syncStatusMessage && (
+                <p className="text-[0.78rem] text-[var(--muted)]">{syncStatusMessage}</p>
+              )}
             </>
           )}
         </section>
@@ -656,7 +849,7 @@ export function IngestionWizard({
               placeholder="Ethereum"
             />
           </label>
-          {result?.slug && mint.url.trim() && (
+          {provenanceSlug && mint.url.trim() && (
             <button
               type="button"
               disabled={publishing}
@@ -665,10 +858,10 @@ export function IngestionWizard({
                 setPublishing(true);
                 setError(null);
                 try {
-                  const res = await fetch("/api/admin/archive/provenance", {
+                  const res = await adminFetch("/api/admin/archive/provenance", {
                     method: "PATCH",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ slug: result.slug, provenance }),
+                    body: JSON.stringify({ slug: provenanceSlug, provenance }),
                   });
                   const data = (await res.json()) as { error?: string };
                   if (!res.ok) throw new Error(data.error ?? "Update failed");

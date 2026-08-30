@@ -1,5 +1,6 @@
 "use client";
 
+import { adminFetch } from "@/components/admin/admin-fetch";
 import { useState } from "react";
 import type { AccessionDraft } from "@/lib/archive/schema";
 
@@ -23,7 +24,7 @@ export function EmbeddedPreparePanel({
     setPreparing(true);
     onError("");
     try {
-      const res = await fetch(
+      const res = await adminFetch(
         `/api/admin/drafts/${encodeURIComponent(draft.draftId)}/prepare`,
         { method: "POST" },
       );

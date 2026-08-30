@@ -30,14 +30,32 @@ import {
   contentDraftSourceDir,
   contentDraftWorkingDir,
   contentDraftsDir,
+  publicArchiveDir,
 } from "./paths";
 import {
   accessionDraftToArchiveDraft,
   archiveEntryToAccessionDraft,
 } from "./adapters";
+import {
+  archiveStatusFromDraft,
+  assertArchiveDiscardable,
+  bytesForArchiveDerivativeGenerate,
+  bytesForArchiveSourceDeposit,
+  hasDepositedArchiveSource,
+  keepExplicitPatchKeys,
+  preferDraftSourceForRegenerate,
+  shouldDepositDraftSourceInArchive,
+} from "./archive-policy";
 import { runArchiveExport } from "./export-orchestrator";
 import { loadArchiveEntry } from "./load-entry";
-import { addArchiveRedirect, assertSlugAllowed, redirectTargetExists } from "./redirects";
+import { exportMintPackage } from "./mint-package";
+import {
+  addArchiveRedirect,
+  assertSlugAllowed,
+  redirectTargetExists,
+  removeArchiveRedirectsForSlug,
+} from "./redirects";
+import { assertArchiveRegenerable } from "./visibility";
 import {
   prepareDraftSource,
   readPreparedDraftBuffer,
@@ -263,6 +281,18 @@ export async function createAccessionDraft(
   return draft;
 }
 
+export async function createAccessionDraftFromSource(
+  file: File,
+): Promise<AccessionDraft> {
+  const draft = await createAccessionDraft();
+  try {
+    return await storeDraftSource(draft.draftId, file);
+  } catch (error) {
+    await fs.rm(contentDraftDir(draft.draftId), { recursive: true, force: true });
+    throw error;
+  }
+}
+
 export async function saveAccessionDraft(
   draft: AccessionDraft,
 ): Promise<AccessionDraft> {
@@ -328,6 +358,92 @@ export async function prepareAccessionDraft(
   });
 }
 
+/**
+ * True when draft.source metadata claims an original deposit and the file
+ * is actually readable under content/drafts/{id}/source/.
+ */
+export async function draftSourceBytesExist(
+  draft: AccessionDraft,
+): Promise<boolean> {
+  if (draft.source.kind !== "original" || !draft.source.storedFilename) {
+    return false;
+  }
+  try {
+    await fs.access(
+      path.join(contentDraftSourceDir(draft.draftId), draft.source.storedFilename),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function materializeArchiveAssetsIntoDraft(
+  entry: ArchiveEntry,
+  draftId: string,
+): Promise<{
+  source: AccessionDraft["source"];
+  processing: AccessionDraft["processing"];
+}> {
+  await ensureDraftFolders(draftId);
+
+  let source: AccessionDraft["source"] = { kind: "migration-required" };
+  let processing: AccessionDraft["processing"] = entry.processing
+    ? { ...entry.processing }
+    : {};
+
+  if (entry.source?.kind === "original" && entry.source.storedFilename) {
+    const archivePath = path.join(
+      contentArchiveSourceDir(entry.slug),
+      entry.source.storedFilename,
+    );
+    const draftStored = sourceFilenameForUpload(
+      entry.source.originalFilename ?? entry.source.storedFilename,
+    );
+    const draftPath = path.join(contentDraftSourceDir(draftId), draftStored);
+    try {
+      await fs.copyFile(archivePath, draftPath);
+      const stat = await fs.stat(draftPath);
+      source = {
+        kind: "original",
+        originalFilename: entry.source.originalFilename,
+        storedFilename: draftStored,
+        mimeType: entry.source.mimeType,
+        byteSize: entry.source.byteSize ?? stat.size,
+        importedAt: entry.source.importedAt ?? nowIso(),
+      };
+    } catch {
+      source = entry.source.storedFilename
+        ? { ...entry.source }
+        : { kind: "migration-required" };
+    }
+  }
+
+  const preparedName = entry.processing?.preparedSource
+    ? path.basename(entry.processing.preparedSource)
+    : "master-prepared.avif";
+  const archivePreparedPath = path.join(
+    contentArchivePreparedDir(entry.slug),
+    preparedName,
+  );
+  const draftPreparedPath = path.join(
+    contentDraftWorkingDir(draftId),
+    "master-prepared.avif",
+  );
+  try {
+    await fs.copyFile(archivePreparedPath, draftPreparedPath);
+    processing = {
+      ...processing,
+      preparedSource: "working/master-prepared.avif",
+      preparedAt: processing.preparedAt ?? nowIso(),
+    };
+  } catch {
+    /* prepared is optional for hydrate */
+  }
+
+  return { source, processing };
+}
+
 export async function hydrateDraftFromArchiveSlug(
   slug: string,
 ): Promise<AccessionDraft> {
@@ -336,7 +452,7 @@ export async function hydrateDraftFromArchiveSlug(
 
   const hydrated = archiveEntryToAccessionDraft(entry);
   const existing = await loadAccessionDraft(hydrated.draftId);
-  const draft = existing
+  let draft = existing
     ? AccessionDraftSchema.parse({
         ...existing,
         ...hydrated,
@@ -344,6 +460,41 @@ export async function hydrateDraftFromArchiveSlug(
         updatedAt: nowIso(),
       })
     : hydrated;
+
+  const bytesReady = await draftSourceBytesExist(draft);
+  if (!bytesReady) {
+    const materialized = await materializeArchiveAssetsIntoDraft(
+      entry,
+      draft.draftId,
+    );
+    draft = AccessionDraftSchema.parse({
+      ...draft,
+      source: materialized.source,
+      processing: {
+        ...draft.processing,
+        ...materialized.processing,
+      },
+      updatedAt: nowIso(),
+    });
+  } else if (
+    draft.processing.preparedSource &&
+    !(await readPreparedDraftBuffer(draft))
+  ) {
+    const materialized = await materializeArchiveAssetsIntoDraft(
+      entry,
+      draft.draftId,
+    );
+    if (materialized.processing.preparedSource) {
+      draft = AccessionDraftSchema.parse({
+        ...draft,
+        processing: {
+          ...draft.processing,
+          ...materialized.processing,
+        },
+        updatedAt: nowIso(),
+      });
+    }
+  }
 
   return saveAccessionDraft(draft);
 }
@@ -365,24 +516,27 @@ export async function updateAccessionDraft(
   if (!existing) throw new Error(`Draft not found: ${draftId}`);
 
   const parsed = AccessionDraftUpdateSchema.parse(patch);
-  const nextSlug = parsed.slug
-    ? assertSlugAllowed(parsed.slug)
+  const assigned = keepExplicitPatchKeys(patch, parsed);
+  const nextSlug = typeof assigned.slug === "string"
+    ? assertSlugAllowed(assigned.slug)
     : existing.slug;
   if (nextSlug !== existing.slug) {
     await validateSlugUnique(nextSlug, draftId);
   }
 
+  const assignedArtwork = assigned.artwork as AccessionDraft["artwork"] | undefined;
+
   const updated = AccessionDraftSchema.parse({
     ...existing,
-    ...parsed,
+    ...assigned,
     draftId: existing.draftId,
     accessionId: existing.accessionId,
     slug: nextSlug,
-    artwork: parsed.artwork
+    artwork: assignedArtwork
       ? {
-          ...parsed.artwork,
+          ...assignedArtwork,
           metadata: {
-            ...parsed.artwork.metadata,
+            ...assignedArtwork.metadata,
             accessionId: existing.accessionId,
           },
         }
@@ -435,15 +589,45 @@ export async function updateArchiveVisibility(
 ): Promise<ArchiveEntry> {
   const entry = await loadArchiveEntry(slug);
   if (!entry) throw new Error(`Archive entry not found: ${slug}`);
+  const updated = buildArchiveVisibilityUpdate(entry, status);
+  return saveArchiveEntry(updated);
+}
+
+export function buildArchiveVisibilityUpdate(
+  entry: ArchiveEntry,
+  status: DraftStatus,
+): ArchiveEntry {
   const timestamp = nowIso();
-  const updated = ArchiveEntrySchema.parse({
+  return ArchiveEntrySchema.parse({
     ...entry,
     status,
     hiddenAt: status === "hidden" ? timestamp : entry.hiddenAt,
     withdrawnAt: status === "withdrawn" ? timestamp : entry.withdrawnAt,
     updatedAt: timestamp,
   });
-  return saveArchiveEntry(updated);
+}
+
+export async function markArchiveRecordPublished(
+  slug: string,
+): Promise<ArchiveEntry> {
+  const entry = await loadArchiveEntry(slug);
+  if (!entry) throw new Error(`Archive entry not found: ${slug}`);
+  if (
+    entry.status === "hidden" ||
+    entry.status === "withdrawn" ||
+    entry.status === "minted"
+  ) {
+    return entry;
+  }
+  const timestamp = nowIso();
+  return saveArchiveEntry(
+    ArchiveEntrySchema.parse({
+      ...entry,
+      status: "published",
+      publishedAt: entry.publishedAt ?? timestamp,
+      updatedAt: timestamp,
+    }),
+  );
 }
 
 export async function storeDraftSource(
@@ -470,12 +654,24 @@ export async function storeDraftSource(
   });
 }
 
+export class ArchiveSourceImmutableError extends Error {
+  constructor() {
+    super(
+      "Archive source is immutable once deposited. Update the draft source instead.",
+    );
+    this.name = "ArchiveSourceImmutableError";
+  }
+}
+
 export async function storeArchiveSource(
   slug: string,
   file: File,
 ): Promise<ArchiveEntry> {
   const entry = await loadArchiveEntry(slug);
   if (!entry) throw new Error(`Archive entry not found: ${slug}`);
+  if (hasDepositedArchiveSource(entry)) {
+    throw new ArchiveSourceImmutableError();
+  }
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const storedFilename = archiveMasterFilename(file.name);
@@ -528,10 +724,11 @@ export async function readDraftSourceBuffer(draft: AccessionDraft): Promise<Buff
 
 async function preserveDraftSourceInArchive(draft: AccessionDraft): Promise<void> {
   if (!draft.source.storedFilename) return;
+  const originalBuffer = await readDraftSourceBuffer(draft);
+  const preparedBuffer = await readPreparedDraftBuffer(draft);
   const sourceDir = contentArchiveSourceDir(draft.slug);
   await fs.mkdir(sourceDir, { recursive: true });
-  const sourceBuffer =
-    (await readPreparedDraftBuffer(draft)) ?? (await readDraftSourceBuffer(draft));
+  const sourceBuffer = bytesForArchiveSourceDeposit(originalBuffer, preparedBuffer);
   const storedFilename = archiveMasterFilename(
     draft.source.originalFilename ?? draft.source.storedFilename,
   );
@@ -541,7 +738,6 @@ async function preserveDraftSourceInArchive(draft: AccessionDraft): Promise<void
     kind: "original",
     storedFilename,
   });
-  const preparedBuffer = await readPreparedDraftBuffer(draft);
   if (preparedBuffer) {
     const preparedDir = contentArchivePreparedDir(draft.slug);
     await fs.mkdir(preparedDir, { recursive: true });
@@ -556,10 +752,17 @@ export async function generateArchiveFromDraft(
   if (!draft) throw new Error(`Draft not found: ${draftId}`);
   await validateSlugUnique(draft.slug, draft.draftId, draft.accessionId);
 
-  const sourceBuffer = await readDraftSourceBuffer(draft);
   const existingEntry = await loadArchiveEntry(draft.slug);
+  if (existingEntry) {
+    assertArchiveRegenerable(existingEntry);
+  }
+
+  const originalBuffer = await readDraftSourceBuffer(draft);
+  const sourceBuffer = bytesForArchiveDerivativeGenerate(originalBuffer, null);
+  const archiveDraft = accessionDraftToArchiveDraft(draft);
+  archiveDraft.status = archiveStatusFromDraft("generated");
   const result = await runArchiveExport({
-    draft: accessionDraftToArchiveDraft(draft),
+    draft: archiveDraft,
     sourceBuffer,
     existingEntry: existingEntry ?? undefined,
     source: {
@@ -570,7 +773,9 @@ export async function generateArchiveFromDraft(
       ),
     },
   });
-  await preserveDraftSourceInArchive(draft);
+  if (shouldDepositDraftSourceInArchive(existingEntry)) {
+    await preserveDraftSourceInArchive(draft);
+  }
   const previousSlug = draft.slugHistory.at(-1);
   if (previousSlug && previousSlug !== draft.slug) {
     await addArchiveRedirect(previousSlug, draft.slug, draft.accessionId);
@@ -586,13 +791,84 @@ export async function generateArchiveFromDraft(
     generatedAt: nowIso(),
   });
 
+  try {
+    await exportMintPackage(draft.slug);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Mint package failed";
+    result.warnings.push(`Mint package skipped: ${message}`);
+  }
+
   return result;
 }
 
+export async function regenerateDraftArchive(
+  draftId: string,
+): Promise<Awaited<ReturnType<typeof runArchiveExport>>> {
+  const draft = await loadAccessionDraft(draftId);
+  if (!draft) throw new Error(`Draft not found: ${draftId}`);
+
+  const existingEntry = await loadArchiveEntry(draft.slug);
+  if (existingEntry) {
+    assertArchiveRegenerable(existingEntry);
+    return regeneratePublishedEntryFromDraft(draftId);
+  }
+  return generateArchiveFromDraft(draftId);
+}
+
+/** @deprecated Use regenerateDraftArchive */
 export async function regenerateArchiveDerivatives(
   draftId: string,
 ): Promise<Awaited<ReturnType<typeof runArchiveExport>>> {
-  return generateArchiveFromDraft(draftId);
+  return regenerateDraftArchive(draftId);
+}
+
+/** Canonical source-byte resolution for existing-archive export/regeneration. */
+export async function resolveRegenerateSource(
+  draft: AccessionDraft,
+  existingEntry: ArchiveEntry,
+): Promise<{
+  sourceBuffer: Buffer;
+  source: NonNullable<ArchiveEntry["source"]>;
+  usedDraftBytes: boolean;
+}> {
+  if (hasDepositedArchiveSource(existingEntry)) {
+    const archiveBuffer = await readArchiveSourceBuffer(existingEntry);
+    if (!existingEntry.source) {
+      throw new Error("source_required: Deposit an original source before regeneration.");
+    }
+    return {
+      sourceBuffer: bytesForArchiveDerivativeGenerate(archiveBuffer, null),
+      source: existingEntry.source,
+      usedDraftBytes: false,
+    };
+  }
+
+  if (
+    preferDraftSourceForRegenerate(
+      Boolean(draft.source.storedFilename),
+      await draftSourceBytesExist(draft),
+    )
+  ) {
+    const originalBuffer = await readDraftSourceBuffer(draft);
+    return {
+      sourceBuffer: bytesForArchiveDerivativeGenerate(originalBuffer, null),
+      source: {
+        ...draft.source,
+        kind: draft.source.kind ?? "original",
+      },
+      usedDraftBytes: true,
+    };
+  }
+
+  const archiveBuffer = await readArchiveSourceBuffer(existingEntry);
+  if (!existingEntry.source) {
+    throw new Error("source_required: Deposit an original source before regeneration.");
+  }
+  return {
+    sourceBuffer: archiveBuffer,
+    source: existingEntry.source,
+    usedDraftBytes: false,
+  };
 }
 
 export async function regeneratePublishedEntryFromDraft(
@@ -603,26 +879,32 @@ export async function regeneratePublishedEntryFromDraft(
 
   const existingEntry = await loadArchiveEntry(draft.slug);
   if (!existingEntry) throw new Error(`Archive entry not found: ${draft.slug}`);
+  assertArchiveRegenerable(existingEntry);
 
-  const sourceBuffer = draft.source.storedFilename
-    ? (await readPreparedDraftBuffer(draft)) ?? (await readDraftSourceBuffer(draft))
-    : await readArchiveSourceBuffer(existingEntry);
-  const source = draft.source.storedFilename ? draft.source : existingEntry.source;
+  const resolved = await resolveRegenerateSource(draft, existingEntry);
 
   const result = await runArchiveExport({
     draft: accessionDraftToArchiveDraft(draft),
-    sourceBuffer,
+    sourceBuffer: resolved.sourceBuffer,
     existingEntry,
-    source,
+    source: resolved.source,
   });
-  if (draft.source.storedFilename) {
+  if (resolved.usedDraftBytes && shouldDepositDraftSourceInArchive(existingEntry)) {
     await preserveDraftSourceInArchive(draft);
   }
 
+  const archiveStatus = existingEntry.status as DraftStatus;
   await updateAccessionDraft(draftId, {
-    status: "published",
+    status: archiveStatus,
     generatedAt: nowIso(),
   });
+
+  try {
+    await exportMintPackage(draft.slug);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Mint package failed";
+    result.warnings.push(`Mint package skipped: ${message}`);
+  }
 
   return result;
 }
@@ -678,6 +960,85 @@ export async function renamePublishedArchiveSlug(
   await fs.rm(oldDir, { recursive: true, force: true });
 
   return updated;
+}
+
+export class ArchiveDiscardNotFoundError extends Error {
+  constructor(slug: string) {
+    super(`Archive not found: ${slug}`);
+    this.name = "ArchiveDiscardNotFoundError";
+  }
+}
+
+export class ArchiveDiscardConfirmationError extends Error {
+  constructor() {
+    super("Discard requires exact slug confirmation.");
+    this.name = "ArchiveDiscardConfirmationError";
+  }
+}
+
+/**
+ * Discard a never-published generated archive (local content + public derivatives).
+ * Keeps associated drafts (Option B) but resets generated drafts to prepared/draft.
+ */
+export async function discardGeneratedArchive(
+  slug: string,
+  confirmation: string,
+): Promise<{ slug: string; accessionId?: string }> {
+  const normalized = assertSlugAllowed(slug);
+  const entry = await loadArchiveEntry(normalized);
+  if (!entry) {
+    throw new ArchiveDiscardNotFoundError(normalized);
+  }
+  if (confirmation !== entry.slug) {
+    throw new ArchiveDiscardConfirmationError();
+  }
+  assertArchiveDiscardable(entry);
+
+  // Re-load immediately before FS delete (TOCTOU).
+  const fresh = await loadArchiveEntry(entry.slug);
+  if (!fresh) {
+    throw new ArchiveDiscardNotFoundError(entry.slug);
+  }
+  assertArchiveDiscardable(fresh);
+  if (confirmation !== fresh.slug) {
+    throw new ArchiveDiscardConfirmationError();
+  }
+
+  const accessionId = fresh.accessionId ?? fresh.metadata.accessionId;
+  const discardSlug = fresh.slug;
+
+  await fs.rm(publicArchiveDir(discardSlug), { recursive: true, force: true });
+  await fs.rm(contentArchiveDir(discardSlug), { recursive: true, force: true });
+  await removeArchiveRedirectsForSlug(discardSlug);
+  await resetDraftsAfterArchiveDiscard(discardSlug, accessionId);
+
+  return { slug: discardSlug, accessionId };
+}
+
+async function resetDraftsAfterArchiveDiscard(
+  slug: string,
+  accessionId?: string,
+): Promise<void> {
+  const drafts = await listAccessionDrafts();
+  for (const draft of drafts) {
+    const matches =
+      draft.slug === slug ||
+      (Boolean(accessionId) && draft.accessionId === accessionId);
+    if (!matches) continue;
+    if (draft.status !== "generated") continue;
+
+    const prepared = await readPreparedDraftBuffer(draft);
+    const nextStatus: DraftStatus = prepared ? "prepared" : "draft";
+    const withoutGeneratedAt: AccessionDraft = { ...draft };
+    delete withoutGeneratedAt.generatedAt;
+    await saveAccessionDraft(
+      AccessionDraftSchema.parse({
+        ...withoutGeneratedAt,
+        status: nextStatus,
+        updatedAt: nowIso(),
+      }),
+    );
+  }
 }
 
 export function draftSourcePublicLabel(draft: AccessionDraft): string {
