@@ -822,7 +822,8 @@ export async function regenerateArchiveDerivatives(
   return regenerateDraftArchive(draftId);
 }
 
-async function resolveRegenerateSource(
+/** Canonical source-byte resolution for existing-archive export/regeneration. */
+export async function resolveRegenerateSource(
   draft: AccessionDraft,
   existingEntry: ArchiveEntry,
 ): Promise<{

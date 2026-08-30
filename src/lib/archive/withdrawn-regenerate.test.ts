@@ -13,8 +13,9 @@ import {
   loadAccessionDraft,
   saveAccessionDraft,
   saveArchiveEntry,
+  storeDraftSource,
 } from "./draft-store.ts";
-import { accessionDraftToArchiveDraft } from "./adapters.ts";
+import { accessionDraftToArchiveDraft, archiveEntryToAccessionDraft } from "./adapters.ts";
 import { loadArchiveEntry } from "./load-entry.ts";
 import {
   contentArchiveDir,
@@ -748,5 +749,194 @@ describe("withdrawn generate enforcement", () => {
     const data = (await res.json()) as { error?: string };
     assert.match(data.error ?? "", /withdrawn and cannot be regenerated/);
     assert.equal(pipelineCalls, 0);
+  });
+
+  describe("archive generate route source authority", () => {
+    let capturedSource: Buffer | null = null;
+
+    function installCapturingPipelineMock(marker = "RAW-ROUTE"): void {
+      capturedSource = null;
+      pipelineCalls = 0;
+      setArchiveImagePipelineForTests(async (sourceBuffer: Buffer) => {
+        capturedSource = sourceBuffer;
+        pipelineCalls += 1;
+        return fakeBuffers(marker);
+      });
+    }
+
+    async function postArchiveGenerate(
+      archiveDraft: ReturnType<typeof accessionDraftToArchiveDraft>,
+      sourceBytes: Buffer,
+    ): Promise<Response> {
+      const form = new FormData();
+      form.append(
+        "source",
+        new File([sourceBytes], "upload.jpg", { type: "image/jpeg" }),
+      );
+      form.append("draft", JSON.stringify(archiveDraft));
+      const POST = await loadArchiveGeneratePost();
+      return POST(
+        new Request("http://localhost/api/admin/archive/generate", {
+          method: "POST",
+          headers: { Authorization: "Bearer test-secret" },
+          body: form,
+        }),
+      );
+    }
+
+    it("first-time form generation succeeds", async () => {
+      enableAdmin();
+      installCapturingPipelineMock("RAW-FIRST");
+      const draft = await seedFirstTimeDraft("2026-01-01-raw-first");
+      const archiveDraft = accessionDraftToArchiveDraft(draft);
+
+      const res = await postArchiveGenerate(
+        archiveDraft,
+        Buffer.from("first-raw-source"),
+      );
+
+      assert.equal(res.status, 200);
+      assert.ok(pipelineCalls > 0);
+      assert.equal(capturedSource?.toString(), "first-raw-source");
+    });
+
+    it("existing published uses archive source after form supplies different bytes", async () => {
+      enableAdmin();
+      installCapturingPipelineMock("RAW-REGEN-SOURCE");
+      const slug = "2026-01-01-raw-gen-archive-source";
+      const editDraftId = "edit-raw-gen-archive-source";
+      const archiveBytes = Buffer.from("ARCHIVE-ORIGINAL-RAW");
+      const formBytesB = Buffer.from("FORM-UPLOAD-RAW");
+      await writeCanonicalPublic(slug, "BEFORE");
+      await writeArchiveSource(slug, archiveBytes);
+      await saveArchiveEntry(entryFixture(slug));
+      await seedEditDraft(slug, editDraftId, "published");
+      const draft = await loadAccessionDraft(editDraftId);
+      assert.ok(draft);
+      const archiveDraft = accessionDraftToArchiveDraft(draft);
+
+      const res = await postArchiveGenerate(archiveDraft, formBytesB);
+
+      assert.equal(res.status, 200);
+      const onDisk = await fs.readFile(
+        path.join(contentArchiveSourceDir(slug), "master.jpg"),
+      );
+      assert.equal(onDisk.toString(), archiveBytes.toString());
+      assert.ok(capturedSource);
+      assert.equal(capturedSource!.toString(), archiveBytes.toString());
+      assert.notEqual(capturedSource!.toString(), formBytesB.toString());
+      const after = await loadArchiveEntry(slug);
+      assert.equal(after?.status, "published");
+    });
+
+    it("existing archive without workspace draft uses archiveEntry stub for source resolution", async () => {
+      enableAdmin();
+      installCapturingPipelineMock("RAW-STUB");
+      const slug = "2026-01-01-raw-gen-stub";
+      const archiveBytes = Buffer.from("ARCHIVE-STUB-SOURCE");
+      const formBytesB = Buffer.from("FORM-STUB-UPLOAD");
+      await writeCanonicalPublic(slug, "BEFORE");
+      await writeArchiveSource(slug, archiveBytes);
+      await saveArchiveEntry(entryFixture(slug));
+      const archiveDraft = accessionDraftToArchiveDraft(
+        archiveEntryToAccessionDraft(entryFixture(slug)),
+      );
+
+      const res = await postArchiveGenerate(archiveDraft, formBytesB);
+
+      assert.equal(res.status, 200);
+      assert.equal(capturedSource?.toString(), archiveBytes.toString());
+    });
+
+    it("existing minted and hidden preserve status and timestamps", async () => {
+      enableAdmin();
+      const cases: Array<{
+        status: ArchiveEntry["status"];
+        slug: string;
+        editDraftId: string;
+        overrides: Record<string, unknown>;
+      }> = [
+        {
+          status: "minted",
+          slug: "2026-01-01-raw-gen-minted",
+          editDraftId: "edit-raw-gen-minted",
+          overrides: {
+            mintedAt: "2026-01-03T00:00:00.000Z",
+            publishedAt: "2026-01-02T00:00:00.000Z",
+          },
+        },
+        {
+          status: "hidden",
+          slug: "2026-01-01-raw-gen-hidden",
+          editDraftId: "edit-raw-gen-hidden",
+          overrides: {
+            hiddenAt: "2026-01-04T00:00:00.000Z",
+            publishedAt: "2026-01-02T00:00:00.000Z",
+          },
+        },
+      ];
+
+      for (const { status, slug, editDraftId, overrides } of cases) {
+        installCapturingPipelineMock(`RAW-${status}`);
+        await writeCanonicalPublic(slug, `BEFORE-${status}`);
+        await writeArchiveSource(slug, Buffer.from(`source-${slug}`));
+        await saveArchiveEntry(entryFixture(slug, { status, ...overrides }));
+        await seedEditDraft(slug, editDraftId, status);
+        const draft = await loadAccessionDraft(editDraftId);
+        assert.ok(draft);
+        const archiveDraft = accessionDraftToArchiveDraft(draft);
+
+        const res = await postArchiveGenerate(
+          archiveDraft,
+          Buffer.from(`form-${editDraftId}`),
+        );
+
+        assert.equal(res.status, 200, `route should succeed for ${status}`);
+        const entry = await loadArchiveEntry(slug);
+        assert.equal(entry?.status, status, `status preserved for ${status}`);
+        if (overrides.publishedAt) {
+          assert.equal(entry?.publishedAt, overrides.publishedAt);
+        }
+        if (overrides.hiddenAt) {
+          assert.equal(entry?.hiddenAt, overrides.hiddenAt);
+        }
+        if (overrides.mintedAt) {
+          assert.equal(entry?.mintedAt, overrides.mintedAt);
+        }
+      }
+    });
+
+    it("draft re-upload does not affect archive source on subsequent form generate", async () => {
+      enableAdmin();
+      installCapturingPipelineMock("RAW-REUPLOAD");
+      const slug = "2026-01-01-raw-gen-reupload";
+      const editDraftId = "edit-raw-gen-reupload";
+      const archiveBytes = Buffer.from("ARCHIVE-ORIGINAL-REUPLOAD");
+      const draftBytesB = Buffer.from("DRAFT-REUPLOAD-RAW");
+      await writeCanonicalPublic(slug, "BEFORE");
+      await writeArchiveSource(slug, archiveBytes);
+      await saveArchiveEntry(entryFixture(slug));
+      await seedEditDraft(slug, editDraftId, "published");
+
+      await storeDraftSource(
+        editDraftId,
+        new File([draftBytesB], "reupload.jpg", { type: "image/jpeg" }),
+      );
+
+      const draft = await loadAccessionDraft(editDraftId);
+      assert.ok(draft);
+      const archiveDraft = accessionDraftToArchiveDraft(draft);
+      const res = await postArchiveGenerate(
+        archiveDraft,
+        Buffer.from("FORM-BYTES-SHOULD-NOT-WIN"),
+      );
+
+      assert.equal(res.status, 200);
+      assert.equal(capturedSource?.toString(), archiveBytes.toString());
+      const onDisk = await fs.readFile(
+        path.join(contentArchiveSourceDir(slug), "master.jpg"),
+      );
+      assert.equal(onDisk.toString(), archiveBytes.toString());
+    });
   });
 });
