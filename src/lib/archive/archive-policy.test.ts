@@ -12,6 +12,10 @@ import {
   shouldDepositDraftSourceInArchive,
 } from "./archive-policy.ts";
 import {
+  assertArchiveRegenerable,
+  canRegenerateStatus,
+} from "./visibility.ts";
+import {
   AccessionDraftUpdateSchema,
   ARCHIVE_VERSION,
   ArchiveEntrySchema,
@@ -132,6 +136,31 @@ describe("preferDraftSourceForRegenerate", () => {
     assert.equal(preferDraftSourceForRegenerate(true, true), true);
     assert.equal(preferDraftSourceForRegenerate(true, false), false);
     assert.equal(preferDraftSourceForRegenerate(false, false), false);
+  });
+});
+
+describe("canRegenerateStatus / assertArchiveRegenerable", () => {
+  it("refuses withdrawn archives", () => {
+    assert.equal(canRegenerateStatus("withdrawn"), false);
+    assert.throws(
+      () =>
+        assertArchiveRegenerable(
+          sampleEntry({
+            status: "withdrawn",
+            withdrawnAt: "2026-01-05T00:00:00.000Z",
+          }),
+        ),
+      /withdrawn and cannot be regenerated/,
+    );
+  });
+
+  it("allows generated, published, minted, and hidden", () => {
+    for (const status of ["generated", "published", "minted", "hidden"] as const) {
+      assert.equal(canRegenerateStatus(status), true);
+      assert.doesNotThrow(() =>
+        assertArchiveRegenerable(sampleEntry({ status })),
+      );
+    }
   });
 });
 

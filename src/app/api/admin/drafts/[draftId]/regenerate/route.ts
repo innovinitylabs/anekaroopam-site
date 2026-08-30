@@ -6,6 +6,19 @@ export const runtime = "nodejs";
 
 type Context = { params: Promise<{ draftId: string }> };
 
+function regenerateErrorStatus(message: string): number {
+  if (
+    message.startsWith("source_required") ||
+    message.includes("withdrawn and cannot be regenerated")
+  ) {
+    return 409;
+  }
+  if (message.includes("Draft not found") || message.includes("Archive entry not found")) {
+    return 404;
+  }
+  return 500;
+}
+
 export async function POST(request: Request, { params }: Context) {
   const denied = requireAdminIngest(request);
   if (denied) return denied;
@@ -20,6 +33,9 @@ export async function POST(request: Request, { params }: Context) {
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Regeneration failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: message },
+      { status: regenerateErrorStatus(message) },
+    );
   }
 }

@@ -1,9 +1,18 @@
 import { NextResponse } from "next/server";
 import { requireAdminIngest } from "@/lib/archive/admin-ingest-response";
-import { ArchiveDraftSchema } from "@/lib/archive/schema";
 import { runArchiveExport } from "@/lib/archive/export-orchestrator";
+import { loadArchiveEntry } from "@/lib/archive/load-entry";
+import { ArchiveDraftSchema } from "@/lib/archive/schema";
+import { assertArchiveRegenerable } from "@/lib/archive/visibility";
 
 export const runtime = "nodejs";
+
+function exportErrorStatus(message: string): number {
+  if (message.includes("withdrawn and cannot be regenerated")) {
+    return 409;
+  }
+  return 500;
+}
 
 export async function POST(request: Request) {
   const denied = requireAdminIngest(request);
@@ -25,7 +34,16 @@ export async function POST(request: Request) {
     const draft = ArchiveDraftSchema.parse(draftJson);
     const sourceBuffer = Buffer.from(await source.arrayBuffer());
 
-    const result = await runArchiveExport({ draft, sourceBuffer });
+    const existingEntry = await loadArchiveEntry(draft.slug);
+    if (existingEntry) {
+      assertArchiveRegenerable(existingEntry);
+    }
+
+    const result = await runArchiveExport({
+      draft,
+      sourceBuffer,
+      existingEntry: existingEntry ?? undefined,
+    });
 
     return NextResponse.json({
       slug: result.slug,
@@ -34,6 +52,9 @@ export async function POST(request: Request) {
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Export failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: message },
+      { status: exportErrorStatus(message) },
+    );
   }
 }

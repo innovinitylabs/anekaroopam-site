@@ -55,6 +55,7 @@ import {
   redirectTargetExists,
   removeArchiveRedirectsForSlug,
 } from "./redirects";
+import { assertArchiveRegenerable } from "./visibility";
 import {
   prepareDraftSource,
   readPreparedDraftBuffer,
@@ -653,12 +654,24 @@ export async function storeDraftSource(
   });
 }
 
+export class ArchiveSourceImmutableError extends Error {
+  constructor() {
+    super(
+      "Archive source is immutable once deposited. Update the draft source instead.",
+    );
+    this.name = "ArchiveSourceImmutableError";
+  }
+}
+
 export async function storeArchiveSource(
   slug: string,
   file: File,
 ): Promise<ArchiveEntry> {
   const entry = await loadArchiveEntry(slug);
   if (!entry) throw new Error(`Archive entry not found: ${slug}`);
+  if (hasDepositedArchiveSource(entry)) {
+    throw new ArchiveSourceImmutableError();
+  }
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const storedFilename = archiveMasterFilename(file.name);
@@ -739,9 +752,13 @@ export async function generateArchiveFromDraft(
   if (!draft) throw new Error(`Draft not found: ${draftId}`);
   await validateSlugUnique(draft.slug, draft.draftId, draft.accessionId);
 
+  const existingEntry = await loadArchiveEntry(draft.slug);
+  if (existingEntry) {
+    assertArchiveRegenerable(existingEntry);
+  }
+
   const originalBuffer = await readDraftSourceBuffer(draft);
   const sourceBuffer = bytesForArchiveDerivativeGenerate(originalBuffer, null);
-  const existingEntry = await loadArchiveEntry(draft.slug);
   const archiveDraft = accessionDraftToArchiveDraft(draft);
   archiveDraft.status = archiveStatusFromDraft("generated");
   const result = await runArchiveExport({
@@ -792,6 +809,7 @@ export async function regenerateDraftArchive(
 
   const existingEntry = await loadArchiveEntry(draft.slug);
   if (existingEntry) {
+    assertArchiveRegenerable(existingEntry);
     return regeneratePublishedEntryFromDraft(draftId);
   }
   return generateArchiveFromDraft(draftId);
@@ -860,6 +878,7 @@ export async function regeneratePublishedEntryFromDraft(
 
   const existingEntry = await loadArchiveEntry(draft.slug);
   if (!existingEntry) throw new Error(`Archive entry not found: ${draft.slug}`);
+  assertArchiveRegenerable(existingEntry);
 
   const resolved = await resolveRegenerateSource(draft, existingEntry);
 

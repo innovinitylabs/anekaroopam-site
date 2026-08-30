@@ -36,6 +36,15 @@ export function canRegenerateStatus(status: DraftStatus | undefined): boolean {
   return status !== "withdrawn";
 }
 
+/** Throws when an archive must not be regenerated. */
+export function assertArchiveRegenerable(entry: ArchiveEntry): void {
+  if (!canRegenerateStatus(entry.status)) {
+    throw new Error(
+      "Archive is withdrawn and cannot be regenerated. Restore it before regenerating.",
+    );
+  }
+}
+
 export function resolveVisibilityRestoreTarget(
   entry: ArchiveEntry,
 ): "minted" | "published" {

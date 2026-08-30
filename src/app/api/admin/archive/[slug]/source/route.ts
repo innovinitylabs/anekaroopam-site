@@ -1,10 +1,21 @@
 import { NextResponse } from "next/server";
 import { requireAdminIngest } from "@/lib/archive/admin-ingest-response";
-import { storeArchiveSource } from "@/lib/archive/draft-store";
+import {
+  ArchiveSourceImmutableError,
+  storeArchiveSource,
+} from "@/lib/archive/draft-store";
 
 export const runtime = "nodejs";
 
 type Context = { params: Promise<{ slug: string }> };
+
+function sourceErrorStatus(e: unknown): number {
+  if (e instanceof ArchiveSourceImmutableError) return 409;
+  if (e instanceof Error && e.message.includes("Archive entry not found")) {
+    return 404;
+  }
+  return 500;
+}
 
 export async function POST(request: Request, { params }: Context) {
   const denied = requireAdminIngest(request);
@@ -22,6 +33,9 @@ export async function POST(request: Request, { params }: Context) {
     return NextResponse.json({ entry });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Source deposit failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: message },
+      { status: sourceErrorStatus(e) },
+    );
   }
 }

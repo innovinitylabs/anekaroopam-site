@@ -182,7 +182,7 @@ export function ArchiveEntryActions({
       <button
         type="button"
         onClick={regenerate}
-        disabled={busy || !hasSource}
+        disabled={busy || !hasSource || status === "withdrawn"}
         className="border border-[var(--border)] px-3 py-2 text-[0.62rem] tracking-[0.14em] uppercase disabled:opacity-30"
       >
         Regenerate

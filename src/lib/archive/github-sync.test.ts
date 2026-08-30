@@ -505,30 +505,45 @@ describe("published edit: regenerateDraftArchive and source immutability", () =>
     assert.notEqual(entry?.status, "generated");
   });
 
-  for (const [visibility, editDraftId] of [
-    ["hidden", "edit-sync-hidden"],
-    ["withdrawn", "edit-sync-withdrawn"],
-  ] as const) {
-    it(`regenerateDraftArchive preserves ${visibility} status`, async () => {
-      installPipelineMock("VIS");
-      const slug = `2026-01-01-regen-draft-${visibility}`;
-      const hiddenAt =
-        visibility === "hidden" ? "2026-01-04T00:00:00.000Z" : undefined;
-      const withdrawnAt =
-        visibility === "withdrawn" ? "2026-01-05T00:00:00.000Z" : undefined;
-      await writeCanonicalPublic(slug, "BEFORE");
-      await writeArchiveSource(slug, Buffer.from(`archive-${visibility}`));
-      await saveArchiveEntry(
-        entryFixture(slug, { status: visibility, hiddenAt, withdrawnAt }),
-      );
-      await seedEditDraft(slug, "AR-2026-0101", editDraftId, { status: visibility });
-
-      await regenerateDraftArchive(editDraftId);
-
-      const entry = await loadArchiveEntry(slug);
-      assert.equal(entry?.status, visibility);
+  it("regenerateDraftArchive preserves hidden status", async () => {
+    installPipelineMock("VIS");
+    const slug = "2026-01-01-regen-draft-hidden";
+    const hiddenAt = "2026-01-04T00:00:00.000Z";
+    await writeCanonicalPublic(slug, "BEFORE");
+    await writeArchiveSource(slug, Buffer.from("archive-hidden"));
+    await saveArchiveEntry(entryFixture(slug, { status: "hidden", hiddenAt }));
+    await seedEditDraft(slug, "AR-2026-0101", "edit-sync-hidden", {
+      status: "hidden",
     });
-  }
+
+    await regenerateDraftArchive("edit-sync-hidden");
+
+    const entry = await loadArchiveEntry(slug);
+    assert.equal(entry?.status, "hidden");
+  });
+
+  it("regenerateDraftArchive refuses withdrawn archives", async () => {
+    installPipelineMock("VIS");
+    const slug = "2026-01-01-regen-draft-withdrawn";
+    const withdrawnAt = "2026-01-05T00:00:00.000Z";
+    await writeCanonicalPublic(slug, "BEFORE");
+    await writeArchiveSource(slug, Buffer.from("archive-withdrawn"));
+    await saveArchiveEntry(
+      entryFixture(slug, { status: "withdrawn", withdrawnAt }),
+    );
+    await seedEditDraft(slug, "AR-2026-0101", "edit-sync-withdrawn", {
+      status: "withdrawn",
+    });
+
+    await assert.rejects(
+      () => regenerateDraftArchive("edit-sync-withdrawn"),
+      /withdrawn and cannot be regenerated/,
+    );
+
+    const entry = await loadArchiveEntry(slug);
+    assert.equal(entry?.status, "withdrawn");
+    assert.equal(entry?.withdrawnAt, withdrawnAt);
+  });
 
   it("archive source bytes unchanged when draft has different re-uploaded source", async () => {
     installPipelineMock("IMMUT");

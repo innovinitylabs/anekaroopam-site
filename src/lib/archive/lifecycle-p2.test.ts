@@ -306,33 +306,46 @@ describe("P2 lifecycle: published regeneration and mint package", () => {
     assert.equal(entry?.exports?.[0]?.role, "metadata");
   });
 
-  it("preserves hidden and withdrawn archive visibility on regeneration", async () => {
+  it("preserves hidden archive visibility on regeneration", async () => {
     installPipelineMock("VIS");
-    for (const [visibility, editDraftId] of [
-      ["hidden", "edit-p2-hidden"],
-      ["withdrawn", "edit-p2-withdrawn"],
-    ] as const) {
-      const slug = `2026-01-01-p2-${visibility}`;
-      const hiddenAt =
-        visibility === "hidden" ? "2026-01-04T00:00:00.000Z" : undefined;
-      const withdrawnAt =
-        visibility === "withdrawn" ? "2026-01-05T00:00:00.000Z" : undefined;
-      await writeCanonicalPublic(slug, "BEFORE");
-      await writeArchiveSource(slug, Buffer.from(`archive-source-${visibility}`));
-      await saveArchiveEntry(
-        entryFixture(slug, { status: visibility, hiddenAt, withdrawnAt }),
-      );
-      await seedEditDraft(slug, "AR-2026-0101", editDraftId, {
-        status: visibility,
-      });
+    const slug = "2026-01-01-p2-hidden";
+    const hiddenAt = "2026-01-04T00:00:00.000Z";
+    await writeCanonicalPublic(slug, "BEFORE");
+    await writeArchiveSource(slug, Buffer.from("archive-source-hidden"));
+    await saveArchiveEntry(entryFixture(slug, { status: "hidden", hiddenAt }));
+    await seedEditDraft(slug, "AR-2026-0101", "edit-p2-hidden", {
+      status: "hidden",
+    });
 
-      await regeneratePublishedEntryFromDraft(editDraftId);
+    await regeneratePublishedEntryFromDraft("edit-p2-hidden");
 
-      const entry = await loadArchiveEntry(slug);
-      assert.equal(entry?.status, visibility);
-      const draft = await loadAccessionDraft(editDraftId);
-      assert.equal(draft?.status, visibility);
-    }
+    const entry = await loadArchiveEntry(slug);
+    assert.equal(entry?.status, "hidden");
+    const draft = await loadAccessionDraft("edit-p2-hidden");
+    assert.equal(draft?.status, "hidden");
+  });
+
+  it("refuses regeneration of withdrawn archives", async () => {
+    installPipelineMock("WITHDRAWN-BLOCK");
+    const slug = "2026-01-01-p2-withdrawn";
+    const withdrawnAt = "2026-01-05T00:00:00.000Z";
+    await writeCanonicalPublic(slug, "BEFORE");
+    await writeArchiveSource(slug, Buffer.from("archive-source-withdrawn"));
+    await saveArchiveEntry(
+      entryFixture(slug, { status: "withdrawn", withdrawnAt }),
+    );
+    await seedEditDraft(slug, "AR-2026-0101", "edit-p2-withdrawn", {
+      status: "withdrawn",
+    });
+
+    await assert.rejects(
+      () => regeneratePublishedEntryFromDraft("edit-p2-withdrawn"),
+      /withdrawn and cannot be regenerated/,
+    );
+
+    const entry = await loadArchiveEntry(slug);
+    assert.equal(entry?.status, "withdrawn");
+    assert.equal(entry?.withdrawnAt, withdrawnAt);
   });
 
   it("does not downgrade published or minted archives to generated", async () => {

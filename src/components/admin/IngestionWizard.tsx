@@ -639,11 +639,17 @@ export function IngestionWizard({
           </p>
           <button
             type="button"
-            disabled={generating || !draftId}
+            disabled={
+              generating ||
+              !draftId ||
+              currentDraft?.status === "withdrawn"
+            }
             title={
-              isExistingArchive
-                ? "Regenerate archive files locally from edited metadata and orientation."
-                : "Generate archive files locally from the prepared source, orientation, and metadata."
+              currentDraft?.status === "withdrawn"
+                ? "Withdrawn archives cannot be regenerated. Restore first."
+                : isExistingArchive
+                  ? "Regenerate archive files locally from edited metadata and orientation."
+                  : "Generate archive files locally from the prepared source, orientation, and metadata."
             }
             onClick={handleGenerate}
             className="border border-[var(--ink)] px-5 py-3 text-[0.68rem] tracking-[0.16em] uppercase disabled:opacity-40"
