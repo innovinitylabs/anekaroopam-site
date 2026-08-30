@@ -1,5 +1,6 @@
 "use client";
 
+import { showPublishToGitHubAction } from "@/components/admin/admin-workflow-state";
 import { adminFetch } from "@/components/admin/admin-fetch";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -53,11 +54,35 @@ export function ArchiveEntryActions({
       if (!res.ok) throw new Error(data.error ?? "Sync failed");
       setMessage(
         data.commitSha
-          ? `Synced to GitHub (${data.commitSha.slice(0, 7)})`
-          : "Synced to GitHub",
+          ? `Synced to GitHub (${data.commitSha.slice(0, 7)}). Lifecycle status unchanged.`
+          : "Synced to GitHub. Lifecycle status unchanged.",
       );
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Sync failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const publishToGitHub = async () => {
+    setBusy(true);
+    setMessage("");
+    try {
+      const res = await adminFetch("/api/admin/archive/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug }),
+      });
+      const data = (await res.json()) as { error?: string; commitSha?: string };
+      if (!res.ok) throw new Error(data.error ?? "Publish failed");
+      setMessage(
+        data.commitSha
+          ? `Published to GitHub (${data.commitSha.slice(0, 7)}). Status is now published.`
+          : "Published to GitHub. Status is now published.",
+      );
+      router.refresh();
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Publish failed");
     } finally {
       setBusy(false);
     }
@@ -191,10 +216,22 @@ export function ArchiveEntryActions({
         type="button"
         onClick={syncToGitHub}
         disabled={busy}
+        title="Push the current archive bundle to GitHub without changing lifecycle status."
         className="border border-[var(--border)] px-3 py-2 text-[0.62rem] tracking-[0.14em] uppercase disabled:opacity-30"
       >
         Sync to GitHub
       </button>
+      {showPublishToGitHubAction(status) && (
+        <button
+          type="button"
+          onClick={publishToGitHub}
+          disabled={busy}
+          title="Promote this generated archive to published and push to GitHub."
+          className="border border-[var(--border)] px-3 py-2 text-[0.62rem] tracking-[0.14em] uppercase disabled:opacity-30"
+        >
+          Publish to GitHub
+        </button>
+      )}
       <button
         type="button"
         onClick={() => runArchiveAction("mint-package", "Mint package exported")}

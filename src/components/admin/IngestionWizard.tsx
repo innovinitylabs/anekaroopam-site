@@ -2,6 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { adminFetch } from "@/components/admin/admin-fetch";
+import {
+  formatWizardStatusHeader,
+  generateEndpointKind,
+  isExistingArchiveBundle,
+  isRegenerateBlocked,
+  usesSyncOnPublishStep,
+} from "@/components/admin/admin-workflow-state";
 import { EmbeddedPreparePanel } from "@/components/admin/EmbeddedPreparePanel";
 import { ImageDropZone } from "@/components/perception-tools/ImageDropZone";
 import { PerceptionCanvas } from "@/components/perception/PerceptionCanvas";
@@ -22,6 +29,7 @@ import {
   emptyProvenance,
   normalizeArchiveSlug,
   type AccessionDraft,
+  type DraftStatus,
   type ProvenanceRecord,
 } from "@/lib/archive/schema";
 import {
@@ -44,7 +52,11 @@ const STEPS = [
 
 type StepId = (typeof STEPS)[number];
 
-type DraftResponse = { draft?: AccessionDraft; error?: string };
+type DraftResponse = {
+  draft?: AccessionDraft;
+  archiveStatus?: DraftStatus | null;
+  error?: string;
+};
 
 const STEP_TOOLTIPS: Record<StepId, string> = {
   Upload:
@@ -88,20 +100,20 @@ function firstMint(provenance: ProvenanceRecord) {
   );
 }
 
-type SyncUiState = "idle" | "local_changed" | "syncing" | "synced" | "sync_failed";
+type SyncUiState =
+  | "idle"
+  | "local_changed"
+  | "publish_pending"
+  | "syncing"
+  | "synced"
+  | "sync_failed";
 
 function isExistingArchiveDraft(
   draft: AccessionDraft | null,
   draftId: string,
+  archiveStatus: DraftStatus | null,
 ): boolean {
-  if (draftId.startsWith("edit-")) return true;
-  const draftStatus = draft?.status;
-  return (
-    draftStatus === "published" ||
-    draftStatus === "minted" ||
-    draftStatus === "hidden" ||
-    draftStatus === "withdrawn"
-  );
+  return isExistingArchiveBundle(draft, draftId, archiveStatus);
 }
 
 export function IngestionWizard({
@@ -118,6 +130,7 @@ export function IngestionWizard({
   const [status, setStatus] = useState("draft");
   const [provenance, setProvenance] = useState<ProvenanceRecord>(emptyProvenance());
   const [currentDraft, setCurrentDraft] = useState<AccessionDraft | null>(null);
+  const [archiveStatus, setArchiveStatus] = useState<DraftStatus | null>(null);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -132,8 +145,13 @@ export function IngestionWizard({
   const [lastSyncCommitSha, setLastSyncCommitSha] = useState<string | null>(null);
 
   const isExistingArchive = useMemo(
-    () => isExistingArchiveDraft(currentDraft, draftId),
-    [currentDraft, draftId],
+    () => isExistingArchiveDraft(currentDraft, draftId, archiveStatus),
+    [archiveStatus, currentDraft, draftId],
+  );
+
+  const deployUsesSync = useMemo(
+    () => usesSyncOnPublishStep(currentDraft, draftId, archiveStatus),
+    [archiveStatus, currentDraft, draftId],
   );
 
   const initialArtwork = useMemo(() => defaultOrientationArtwork(), []);
@@ -195,7 +213,10 @@ export function IngestionWizard({
         if (!res.ok || !data.draft) {
           throw new Error(data.error ?? "Draft could not be loaded");
         }
-        if (!cancelled) applyDraft(data.draft);
+        if (!cancelled) {
+          applyDraft(data.draft);
+          setArchiveStatus(data.archiveStatus ?? null);
+        }
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : "Draft load failed");
@@ -235,6 +256,30 @@ export function IngestionWizard({
     sourceFile?.name,
     provenance,
   ]);
+
+  useEffect(() => {
+    if (!draftLoaded || !draftId) return;
+    let cancelled = false;
+
+    async function refreshArchiveStatus() {
+      try {
+        const res = await adminFetch(
+          `/api/admin/drafts/${encodeURIComponent(draftId)}`,
+        );
+        const data = (await res.json()) as DraftResponse;
+        if (!cancelled && res.ok) {
+          setArchiveStatus(data.archiveStatus ?? null);
+        }
+      } catch {
+        /* archive status is informational only */
+      }
+    }
+
+    void refreshArchiveStatus();
+    return () => {
+      cancelled = true;
+    };
+  }, [draftId, draftLoaded, slug]);
 
   const saveDraft = useCallback(async () => {
     if (!draftLoaded || !draftId) return null;
@@ -334,9 +379,15 @@ export function IngestionWizard({
 
     try {
       await saveDraft();
-      const endpoint = isExistingArchive
-        ? `/api/admin/drafts/${encodeURIComponent(draftId)}/regenerate`
-        : `/api/admin/drafts/${encodeURIComponent(draftId)}/generate`;
+      const endpointKind = generateEndpointKind(
+        currentDraft,
+        draftId,
+        archiveStatus,
+      );
+      const endpoint =
+        endpointKind === "regenerate"
+          ? `/api/admin/drafts/${encodeURIComponent(draftId)}/regenerate`
+          : `/api/admin/drafts/${encodeURIComponent(draftId)}/generate`;
       const res = await adminFetch(endpoint, { method: "POST" });
       const data = (await res.json()) as {
         slug?: string;
@@ -345,20 +396,32 @@ export function IngestionWizard({
         error?: string;
       };
       if (!res.ok) {
-        throw new Error(data.error ?? (isExistingArchive ? "Regeneration failed" : "Generation failed"));
+        throw new Error(
+          data.error ??
+            (endpointKind === "regenerate"
+              ? "Regeneration failed"
+              : "Generation failed"),
+        );
       }
       setResult({
         slug: data.slug ?? slug,
         files: data.files ?? [],
         warnings: data.warnings ?? [],
       });
-      if (isExistingArchive) {
+      const nextArchiveStatus: DraftStatus =
+        deployUsesSync || isExistingArchive
+          ? (archiveStatus ?? currentDraft?.status ?? "generated")
+          : "generated";
+      setArchiveStatus(nextArchiveStatus);
+      if (deployUsesSync) {
         setSyncUiState("local_changed");
-        setStep("Publish");
+      } else if (isExistingArchive) {
+        setSyncUiState("publish_pending");
       } else {
         setStatus("generated");
-        setStep("Publish");
+        setSyncUiState("idle");
       }
+      setStep("Publish");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Archive export failed");
     } finally {
@@ -381,6 +444,7 @@ export function IngestionWizard({
         throw new Error(data.error ?? "Publish failed");
       }
       setStatus("published");
+      setArchiveStatus("published");
       setSyncUiState("synced");
       if (data.commitSha) setLastSyncCommitSha(data.commitSha);
     } catch (e) {
@@ -457,6 +521,9 @@ export function IngestionWizard({
     if (syncUiState === "local_changed") {
       return "Local bundle updated. Sync to GitHub to deploy.";
     }
+    if (syncUiState === "publish_pending") {
+      return "Local bundle updated. Publish on the next step to promote lifecycle on GitHub.";
+    }
     if (syncUiState === "syncing") return "Syncing to GitHub...";
     if (syncUiState === "synced" && lastSyncCommitSha) {
       return `Synchronized (${lastSyncCommitSha.slice(0, 7)}).`;
@@ -480,7 +547,11 @@ export function IngestionWizard({
           Exports and public assets are derivatives.
         </p>
         <p className="mt-3 text-[0.68rem] tracking-[0.14em] uppercase text-[var(--muted)]">
-          {draftId || "Preparing draft"} · {status}
+          {formatWizardStatusHeader({
+            draftId,
+            draftStatus: status,
+            archiveStatus,
+          })}
         </p>
       </header>
 
@@ -634,7 +705,9 @@ export function IngestionWizard({
           </h2>
           <p className="text-[0.85rem] text-[var(--muted)]">
             {isExistingArchive
-              ? "Updates the local archive bundle from your edits. The deposited original source is preserved. This does not sync to GitHub until you explicitly sync."
+              ? deployUsesSync
+                ? "Updates the local archive bundle from your edits. The deposited original source is preserved. This does not sync to GitHub until you explicitly sync."
+                : "Updates the local archive bundle from your edits. The deposited original source is preserved. Use Publish on the next step to promote lifecycle on GitHub."
               : "Writes the local archive bundle: metadata, states, notes, perception.html, public derivatives, original source/, and prepared/. Marks the record generated. This is not a GitHub publish; the work can appear on this local site until you commit."}
           </p>
           <button
@@ -642,10 +715,10 @@ export function IngestionWizard({
             disabled={
               generating ||
               !draftId ||
-              currentDraft?.status === "withdrawn"
+              isRegenerateBlocked(status, archiveStatus)
             }
             title={
-              currentDraft?.status === "withdrawn"
+              isRegenerateBlocked(status, archiveStatus)
                 ? "Withdrawn archives cannot be regenerated. Restore first."
                 : isExistingArchive
                   ? "Regenerate archive files locally from edited metadata and orientation."
@@ -690,7 +763,7 @@ export function IngestionWizard({
       {step === "Publish" && (
         <section className="space-y-6">
           <h2 className="text-[0.62rem] tracking-[0.18em] uppercase text-[var(--muted)]">
-            {isExistingArchive
+            {deployUsesSync
               ? "8. Sync to GitHub"
               : "8. Commit to archive repository"}
           </h2>
@@ -703,7 +776,7 @@ export function IngestionWizard({
           ) : (
             <>
               <p className="text-[0.85rem] text-[var(--muted)]">
-                {isExistingArchive
+                {deployUsesSync
                   ? "Push the current content/archive and public/archive bundle to GitHub. This does not change lifecycle status."
                   : "Marks the local record published, then pushes content/archive and public/archive to GitHub when GITHUB_ARCHIVE_TOKEN is configured. Vercel redeploys on push."}
               </p>
@@ -711,18 +784,18 @@ export function IngestionWizard({
                 type="button"
                 disabled={publishing}
                 title={
-                  isExistingArchive
+                  deployUsesSync
                     ? "Synchronize the regenerated archive bundle to GitHub for deployment."
                     : "Push content/archive and public/archive to the linked Git repository for deployment."
                 }
-                onClick={isExistingArchive ? handleSync : handlePublish}
+                onClick={deployUsesSync ? handleSync : handlePublish}
                 className="border border-[var(--border)] px-5 py-3 text-[0.68rem] tracking-[0.16em] uppercase disabled:opacity-40"
               >
                 {publishing
-                  ? isExistingArchive
+                  ? deployUsesSync
                     ? "Syncing..."
                     : "Publishing..."
-                  : isExistingArchive
+                  : deployUsesSync
                     ? "Sync to GitHub"
                     : "Commit to GitHub"}
               </button>

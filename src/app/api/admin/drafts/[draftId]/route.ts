@@ -4,6 +4,7 @@ import {
   loadAccessionDraft,
   updateAccessionDraft,
 } from "@/lib/archive/draft-store";
+import { loadArchiveEntry } from "@/lib/archive/load-entry";
 import { AccessionDraftUpdateSchema } from "@/lib/archive/schema";
 
 export const runtime = "nodejs";
@@ -20,7 +21,11 @@ export async function GET(request: Request, { params }: Context) {
     return NextResponse.json({ error: "Draft not found" }, { status: 404 });
   }
 
-  return NextResponse.json({ draft });
+  const archiveEntry = await loadArchiveEntry(draft.slug);
+  return NextResponse.json({
+    draft,
+    archiveStatus: archiveEntry?.status ?? null,
+  });
 }
 
 export async function PATCH(request: Request, { params }: Context) {
