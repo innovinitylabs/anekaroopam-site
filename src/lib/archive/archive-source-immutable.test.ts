@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { after, before, describe, it } from "node:test";
 import type { ArchiveImageBuffers } from "./image-pipeline.ts";
 import { setArchiveImagePipelineForTests } from "./image-pipeline.ts";
+import { loadArchiveEntry } from "./load-entry.ts";
 import {
   contentArchiveDir,
   contentArchiveSourceDir,
@@ -20,6 +21,7 @@ import {
 } from "./schema.ts";
 import {
   ArchiveSourceImmutableError,
+  createAccessionDraft,
   regeneratePublishedEntryFromDraft,
   saveAccessionDraft,
   saveArchiveEntry,
@@ -489,5 +491,190 @@ describe("archive source immutability", () => {
     );
 
     assert.equal(res.status, 403);
+  });
+
+  async function loadGeneratePost() {
+    const href = pathToFileURL(
+      path.join(repoRoot, "src/app/api/admin/drafts/[draftId]/generate/route.ts"),
+    ).href;
+    const mod = await import(href);
+    return mod.POST as (
+      request: Request,
+      context: { params: Promise<{ draftId: string }> },
+    ) => Promise<Response>;
+  }
+
+  async function seedFirstTimeDraft(slug: string) {
+    const draft = await createAccessionDraft({
+      slug,
+      title: "First generate route",
+      date: "2026-01-01",
+    });
+    const draftBytes = Buffer.from(`source-${draft.draftId}`);
+    await fs.mkdir(contentDraftSourceDir(draft.draftId), { recursive: true });
+    await fs.writeFile(
+      path.join(contentDraftSourceDir(draft.draftId), "original.jpg"),
+      draftBytes,
+    );
+    return saveAccessionDraft({
+      ...draft,
+      source: {
+        kind: "original",
+        originalFilename: "original.jpg",
+        storedFilename: "original.jpg",
+        mimeType: "image/jpeg",
+        byteSize: draftBytes.length,
+        importedAt: new Date().toISOString(),
+      },
+      status: "prepared",
+    });
+  }
+
+  it("generate route: first-time draft succeeds", async () => {
+    enableAdmin();
+    installPipelineMock("FIRST-ROUTE-GEN");
+    const draft = await seedFirstTimeDraft("2026-01-01-route-first-generate");
+
+    const POST = await loadGeneratePost();
+    const res = await POST(
+      new Request(`http://localhost/api/admin/drafts/${draft.draftId}/generate`, {
+        method: "POST",
+        headers: { Authorization: "Bearer test-secret" },
+      }),
+      { params: Promise.resolve({ draftId: draft.draftId }) },
+    );
+
+    assert.equal(res.status, 200);
+    assert.ok(capturedSource);
+    const entry = await loadArchiveEntry(draft.slug);
+    assert.ok(entry);
+    assert.equal(entry?.status, "generated");
+  });
+
+  it("generate route: existing published uses archive source after draft re-upload", async () => {
+    enableAdmin();
+    installPipelineMock("ROUTE-REGEN-SOURCE");
+    const slug = "2026-01-01-route-gen-archive-source";
+    const editDraftId = "edit-route-gen-archive-source";
+    const archiveBytes = Buffer.from("ARCHIVE-ORIGINAL-ROUTE");
+    const draftBytesB = Buffer.from("DRAFT-REUPLOAD-ROUTE");
+    await writeCanonicalPublic(slug, "BEFORE");
+    await writeArchiveSource(slug, archiveBytes);
+    await saveArchiveEntry(entryFixture(slug));
+    await seedEditDraft(slug, editDraftId, Buffer.from("DRAFT-ORIGINAL-ROUTE"));
+
+    await storeDraftSource(editDraftId, sourceFile("reupload.jpg", draftBytesB));
+
+    const POST = await loadGeneratePost();
+    const res = await POST(
+      new Request(`http://localhost/api/admin/drafts/${editDraftId}/generate`, {
+        method: "POST",
+        headers: { Authorization: "Bearer test-secret" },
+      }),
+      { params: Promise.resolve({ draftId: editDraftId }) },
+    );
+
+    assert.equal(res.status, 200);
+    const onDisk = await fs.readFile(
+      path.join(contentArchiveSourceDir(slug), "master.jpg"),
+    );
+    assert.equal(onDisk.toString(), archiveBytes.toString());
+    assert.ok(capturedSource);
+    assert.equal(capturedSource!.toString(), archiveBytes.toString());
+    assert.notEqual(capturedSource!.toString(), draftBytesB.toString());
+  });
+
+  it("generate route: existing minted and hidden preserve status and timestamps", async () => {
+    enableAdmin();
+    const cases: Array<{
+      status: ArchiveEntry["status"];
+      slug: string;
+      editDraftId: string;
+      overrides: Record<string, unknown>;
+    }> = [
+      {
+        status: "minted",
+        slug: "2026-01-01-route-gen-minted",
+        editDraftId: "edit-route-gen-minted",
+        overrides: {
+          mintedAt: "2026-01-03T00:00:00.000Z",
+          publishedAt: "2026-01-02T00:00:00.000Z",
+        },
+      },
+      {
+        status: "hidden",
+        slug: "2026-01-01-route-gen-hidden",
+        editDraftId: "edit-route-gen-hidden",
+        overrides: {
+          hiddenAt: "2026-01-04T00:00:00.000Z",
+          publishedAt: "2026-01-02T00:00:00.000Z",
+        },
+      },
+    ];
+
+    for (const { status, slug, editDraftId, overrides } of cases) {
+      installPipelineMock(`ROUTE-${status}`);
+      await writeCanonicalPublic(slug, `BEFORE-${status}`);
+      await writeArchiveSource(slug, Buffer.from(`source-${slug}`));
+      await saveArchiveEntry(entryFixture(slug, { status, ...overrides }));
+      await seedEditDraft(slug, editDraftId, Buffer.from(`draft-${editDraftId}`), status);
+
+      const POST = await loadGeneratePost();
+      const res = await POST(
+        new Request(`http://localhost/api/admin/drafts/${editDraftId}/generate`, {
+          method: "POST",
+          headers: { Authorization: "Bearer test-secret" },
+        }),
+        { params: Promise.resolve({ draftId: editDraftId }) },
+      );
+
+      assert.equal(res.status, 200, `route should succeed for ${status}`);
+      const entry = await loadArchiveEntry(slug);
+      assert.equal(entry?.status, status, `status preserved for ${status}`);
+      if (overrides.publishedAt) {
+        assert.equal(entry?.publishedAt, overrides.publishedAt);
+      }
+      if (overrides.hiddenAt) {
+        assert.equal(entry?.hiddenAt, overrides.hiddenAt);
+      }
+      if (overrides.mintedAt) {
+        assert.equal(entry?.mintedAt, overrides.mintedAt);
+      }
+    }
+  });
+
+  it("generate route failure does not mutate archive metadata", async () => {
+    enableAdmin();
+    const slug = "2026-01-01-route-gen-fail-no-mutate";
+    const editDraftId = "edit-route-gen-fail";
+    await writeCanonicalPublic(slug, "KEEP");
+    await writeArchiveSource(slug, Buffer.from("source-keep"));
+    await saveArchiveEntry(entryFixture(slug));
+    await seedEditDraft(slug, editDraftId, Buffer.from("draft-keep"));
+
+    setArchiveImagePipelineForTests(async () => {
+      throw new Error("pipeline failed");
+    });
+
+    const metadataBefore = await fs.readFile(
+      path.join(contentArchiveDir(slug), "metadata.json"),
+      "utf8",
+    );
+
+    const POST = await loadGeneratePost();
+    const res = await POST(
+      new Request(`http://localhost/api/admin/drafts/${editDraftId}/generate`, {
+        method: "POST",
+        headers: { Authorization: "Bearer test-secret" },
+      }),
+      { params: Promise.resolve({ draftId: editDraftId }) },
+    );
+
+    assert.equal(res.status, 500);
+    const metadataAfter = await fs.readFile(
+      path.join(contentArchiveDir(slug), "metadata.json"),
+      "utf8",
+    );
+    assert.equal(metadataAfter, metadataBefore);
   });
 });

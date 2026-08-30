@@ -45,6 +45,20 @@ export function assertArchiveRegenerable(entry: ArchiveEntry): void {
   }
 }
 
+/** Throws when an archive must not be published through the initial publish route. */
+export function assertArchivePublishable(entry: ArchiveEntry): void {
+  if (entry.status === "hidden") {
+    throw new Error(
+      "Archive is hidden and cannot be published. Unhide it before publishing.",
+    );
+  }
+  if (entry.status === "withdrawn") {
+    throw new Error(
+      "Archive is withdrawn and cannot be published. Restore it before publishing.",
+    );
+  }
+}
+
 export function resolveVisibilityRestoreTarget(
   entry: ArchiveEntry,
 ): "minted" | "published" {

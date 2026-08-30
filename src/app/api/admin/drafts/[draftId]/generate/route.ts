@@ -1,16 +1,19 @@
 import { NextResponse } from "next/server";
 import { requireAdminIngest } from "@/lib/archive/admin-ingest-response";
-import { generateArchiveFromDraft } from "@/lib/archive/draft-store";
+import { regenerateDraftArchive } from "@/lib/archive/draft-store";
 
 export const runtime = "nodejs";
 
 type Context = { params: Promise<{ draftId: string }> };
 
 function generateErrorStatus(message: string): number {
-  if (message.includes("withdrawn and cannot be regenerated")) {
+  if (
+    message.startsWith("source_required") ||
+    message.includes("withdrawn and cannot be regenerated")
+  ) {
     return 409;
   }
-  if (message.includes("Draft not found")) {
+  if (message.includes("Draft not found") || message.includes("Archive entry not found")) {
     return 404;
   }
   return 500;
@@ -22,7 +25,7 @@ export async function POST(request: Request, { params }: Context) {
 
   try {
     const { draftId } = await params;
-    const result = await generateArchiveFromDraft(draftId);
+    const result = await regenerateDraftArchive(draftId);
     return NextResponse.json({
       slug: result.slug,
       files: result.files,
