@@ -74,6 +74,23 @@ export async function addArchiveRedirect(
   return redirect;
 }
 
+/**
+ * Remove redirect rows that reference a discarded slug as from or to.
+ * Never deletes redirects.json wholesale.
+ */
+export async function removeArchiveRedirectsForSlug(slug: string): Promise<number> {
+  const normalized = assertSlugAllowed(slug);
+  const file = await loadArchiveRedirects();
+  const redirects = file.redirects.filter(
+    (item) => item.from !== normalized && item.to !== normalized,
+  );
+  const removed = file.redirects.length - redirects.length;
+  if (removed > 0) {
+    await saveArchiveRedirects({ ...file, redirects });
+  }
+  return removed;
+}
+
 export async function resolveArchiveRedirect(
   slug: string,
 ): Promise<ArchiveRedirect | null> {

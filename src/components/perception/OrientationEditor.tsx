@@ -64,6 +64,11 @@ export function OrientationEditor(props: OrientationEditorProps = {}) {
           <button
             type="button"
             onClick={() => setPanelVisible((v) => !v)}
+            title={
+              panelVisible
+                ? "Hide the metadata and states panel on this screen."
+                : "Show metadata, states, background, and export controls."
+            }
             className="absolute right-4 bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-20 border-t border-[var(--border)] px-1 py-3 text-[0.58rem] tracking-[0.18em] uppercase text-[var(--muted)] lg:hidden"
           >
             {panelVisible ? "Hide record" : "Show record"}
@@ -100,6 +105,7 @@ export function OrientationEditor(props: OrientationEditorProps = {}) {
             </h2>
             <Link
               href="/perceive/tools/prepare"
+              title="Open Prepare with this artwork for encoding, sizing, and standalone HTML export."
               onClick={() => {
                 if (!artwork.imageSrc) return;
                 savePrepareSession({
@@ -129,6 +135,7 @@ export function OrientationEditor(props: OrientationEditorProps = {}) {
             <button
               type="button"
               disabled={!artwork.imageSrc}
+              title="Download orientation settings as JSON without the embedded image."
               onClick={handleExportJson}
               className="block w-full border border-[var(--border)] py-3 text-[0.68rem] tracking-[0.14em] uppercase disabled:opacity-30 sm:py-2"
             >

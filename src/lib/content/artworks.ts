@@ -14,6 +14,8 @@ function titleFromFilename(filename: string): string {
   return filename.replace(/\.[^.]+$/, "");
 }
 
+// Legacy public placeholders. Keep this list until filesystem archive listings
+// are canonical. Do not migrate these works into content/archive.
 const ARCHIVE_FILES = [
   {
     id: "the-one-who-is-crown-among-the-kings",

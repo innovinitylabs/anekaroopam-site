@@ -287,6 +287,7 @@ export function PerceptionCanvas({
             e.stopPropagation();
             rotate("ccw");
           }}
+          title="Rotate the artwork counterclockwise."
           className="min-h-11 min-w-11 border-t border-current/25 px-2 text-[0.58rem] tracking-[0.18em] uppercase opacity-80"
           aria-label="Rotate counterclockwise"
         >
@@ -298,6 +299,7 @@ export function PerceptionCanvas({
             e.stopPropagation();
             resetView();
           }}
+          title="Reset rotation, zoom, and pan to the initial view."
           className="min-h-11 min-w-11 border-t border-current/25 px-2 text-[0.58rem] tracking-[0.18em] uppercase opacity-60"
           aria-label="Reset view"
         >
@@ -309,6 +311,7 @@ export function PerceptionCanvas({
             e.stopPropagation();
             rotate("cw");
           }}
+          title="Rotate the artwork clockwise."
           className="min-h-11 min-w-11 border-t border-current/25 px-2 text-[0.58rem] tracking-[0.18em] uppercase opacity-80"
           aria-label="Rotate clockwise"
         >

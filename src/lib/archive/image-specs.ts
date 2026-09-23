@@ -38,3 +38,8 @@ export const ARCHIVE_IMAGE_OUTPUTS = {
 } as const;
 
 export type ArchiveImageVariant = keyof typeof ARCHIVE_IMAGE_OUTPUTS;
+
+/** Canonical public derivative filenames (safe for client + server). */
+export function archiveImageOutputFilenames(): string[] {
+  return Object.values(ARCHIVE_IMAGE_OUTPUTS).map((spec) => spec.filename);
+}

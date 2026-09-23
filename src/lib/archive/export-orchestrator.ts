@@ -13,10 +13,16 @@ import {
   runArchiveImagePipeline,
 } from "./image-pipeline";
 import { ARCHIVE_IMAGE_OUTPUTS } from "./image-specs";
-import { contentArchiveDir, publicArchiveDir } from "./paths";
+import { contentArchiveDir } from "./paths";
 import { buildStandaloneHtmlFromBuffers } from "./standalone-html";
 import { generateAccessionManifest, writeAccessionManifest } from "./manifest";
 import { buildAccessionRuntime } from "./runtime";
+import {
+  finalizePublicPromote,
+  promotePublicDerivatives,
+  rollbackPublicPromote,
+  writePublicDerivativesToStaging,
+} from "./public-derivative-export";
 
 export interface ArchiveExportInput {
   draft: ArchiveDraft;
@@ -41,10 +47,22 @@ async function writeFileEnsuringDir(
   filePath: string,
   data: string | Buffer,
 ): Promise<WrittenFile> {
+  if (testContentWriteHook) {
+    testContentWriteHook(filePath);
+  }
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, data);
   const stat = await fs.stat(filePath);
   return { path: filePath, bytes: stat.size };
+}
+
+let testContentWriteHook: ((filePath: string) => void) | undefined;
+
+/** Test-only hook invoked before each content write during export. */
+export function setArchiveExportContentWriteHookForTests(
+  hook?: (filePath: string) => void,
+): void {
+  testContentWriteHook = hook;
 }
 
 export async function runArchiveExport(
@@ -61,6 +79,7 @@ export async function runArchiveExport(
     hiddenAt: input.existingEntry?.hiddenAt ?? generatedEntry.hiddenAt,
     withdrawnAt: input.existingEntry?.withdrawnAt ?? generatedEntry.withdrawnAt,
     provenance: input.existingEntry?.provenance ?? generatedEntry.provenance,
+    exports: input.existingEntry?.exports ?? generatedEntry.exports,
     accessionId: input.existingEntry?.accessionId ?? generatedEntry.accessionId,
     source: input.source ?? input.existingEntry?.source ?? generatedEntry.source,
     processing: generatedEntry.processing?.preparedSource
@@ -82,7 +101,6 @@ export async function runArchiveExport(
   const files: WrittenFile[] = [];
 
   const buffers = await runArchiveImagePipeline(input.sourceBuffer);
-  const publicDir = publicArchiveDir(entry.slug);
   const contentDir = contentArchiveDir(entry.slug);
   const generatedAt = new Date().toISOString();
   const derivatives = [];
@@ -92,8 +110,6 @@ export async function runArchiveExport(
     Buffer,
   ][]) {
     const filename = ARCHIVE_IMAGE_OUTPUTS[key].filename;
-    const outPath = path.join(publicDir, filename);
-    files.push(await writeFileEnsuringDir(outPath, buffer));
     derivatives.push(
       await derivativeAssetFromBuffer(
         key,
@@ -107,47 +123,69 @@ export async function runArchiveExport(
   entry.derivatives = derivatives;
 
   const bundle = buildArchiveBundleFiles(entry);
-  files.push(
-    await writeFileEnsuringDir(
-      path.join(contentDir, "metadata.json"),
-      bundle.metadataJson,
-    ),
-  );
-  files.push(
-    await writeFileEnsuringDir(
-      path.join(contentDir, "states.json"),
-      bundle.statesJson,
-    ),
-  );
-  files.push(
-    await writeFileEnsuringDir(path.join(contentDir, "notes.md"), bundle.notesMd),
-  );
-
   const runtime = buildAccessionRuntime(entry);
   const preliminaryManifest = await generateAccessionManifest(entry);
   const payload = archiveEntryToExportPayload(entry);
+  const includeWebpFallback = entry.export.includeWebpFallback !== false;
   const html = await buildStandaloneHtmlFromBuffers(
     payload,
     buffers.artwork,
-    buffers.previewAvif,
+    includeWebpFallback ? buffers.previewWebp : undefined,
     {
       manifest: preliminaryManifest,
       runtime,
       standaloneVersion: "standalone-runtime-v1",
     },
   );
-  files.push(
-    await writeFileEnsuringDir(
-      path.join(contentDir, entry.export.standaloneHtml),
-      html,
-    ),
-  );
 
-  const manifest = await writeAccessionManifest(entry);
-  files.push({
-    path: path.join(contentDir, "manifest.json"),
-    bytes: Buffer.byteLength(`${JSON.stringify(manifest, null, 2)}\n`),
-  });
+  const { stagingDir, written: stagedPublic } = await writePublicDerivativesToStaging(
+    entry.slug,
+    buffers,
+  );
+  files.push(...stagedPublic);
+
+  let promoteResult: Awaited<ReturnType<typeof promotePublicDerivatives>>;
+  try {
+    promoteResult = await promotePublicDerivatives(entry.slug, stagingDir);
+  } catch (error) {
+    await rollbackPublicPromote(entry.slug, null);
+    throw error;
+  }
+
+  try {
+    files.push(
+      await writeFileEnsuringDir(
+        path.join(contentDir, "metadata.json"),
+        bundle.metadataJson,
+      ),
+    );
+    files.push(
+      await writeFileEnsuringDir(
+        path.join(contentDir, "states.json"),
+        bundle.statesJson,
+      ),
+    );
+    files.push(
+      await writeFileEnsuringDir(path.join(contentDir, "notes.md"), bundle.notesMd),
+    );
+    files.push(
+      await writeFileEnsuringDir(
+        path.join(contentDir, entry.export.standaloneHtml),
+        html,
+      ),
+    );
+
+    const manifest = await writeAccessionManifest(entry);
+    files.push({
+      path: path.join(contentDir, "manifest.json"),
+      bytes: Buffer.byteLength(`${JSON.stringify(manifest, null, 2)}\n`),
+    });
+
+    await finalizePublicPromote(promoteResult.retiredDir);
+  } catch (error) {
+    await rollbackPublicPromote(entry.slug, promoteResult.retiredDir);
+    throw error;
+  }
 
   if (!entry.metadata.title.trim()) {
     warnings.push("Title is empty; slug may be the only public label.");

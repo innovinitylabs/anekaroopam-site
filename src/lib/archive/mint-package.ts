@@ -6,6 +6,7 @@ import {
   contentArchiveDir,
   contentArchiveMintPackageDir,
   publicArchiveDir,
+  repoRelativePath,
 } from "./paths";
 import {
   ArchiveEntrySchema,
@@ -130,7 +131,7 @@ async function exportInventoryItem(
   if (!checksum) throw new Error(`Checksum failed for export: ${filePath}`);
   return {
     role,
-    path: filePath,
+    path: repoRelativePath(filePath),
     generatedAt,
     byteSize: stat.size,
     checksum,

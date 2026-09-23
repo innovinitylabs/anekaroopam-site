@@ -1,15 +1,19 @@
 import { NextResponse } from "next/server";
-import { isAdminIngestEnabled } from "@/lib/archive/admin-guard";
+import { requireAdminIngest } from "@/lib/archive/admin-ingest-response";
+import {
+  githubStorageAvailable,
+  storeDraftSourceOnGitHub,
+} from "@/lib/archive/draft-github-store";
 import { storeDraftSource } from "@/lib/archive/draft-store";
+import { githubErrorResponse } from "@/lib/archive/github-admin-response";
 
 export const runtime = "nodejs";
 
 type Context = { params: Promise<{ draftId: string }> };
 
 export async function POST(request: Request, { params }: Context) {
-  if (!isAdminIngestEnabled()) {
-    return NextResponse.json({ error: "Admin ingestion disabled" }, { status: 403 });
-  }
+  const denied = requireAdminIngest(request);
+  if (denied) return denied;
 
   try {
     const { draftId } = await params;
@@ -19,9 +23,13 @@ export async function POST(request: Request, { params }: Context) {
       return NextResponse.json({ error: "Missing source file" }, { status: 400 });
     }
 
-    const draft = await storeDraftSource(draftId, source);
+    const draft = githubStorageAvailable()
+      ? await storeDraftSourceOnGitHub(draftId, source)
+      : await storeDraftSource(draftId, source);
     return NextResponse.json({ draft });
   } catch (e) {
+    const github = githubErrorResponse(e);
+    if (github) return github;
     const message = e instanceof Error ? e.message : "Source upload failed";
     return NextResponse.json({ error: message }, { status: 500 });
   }

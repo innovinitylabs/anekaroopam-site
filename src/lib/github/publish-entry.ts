@@ -1,9 +1,54 @@
 import fs from "fs/promises";
 import path from "path";
-import { requireArchiveOctokit } from "./client";
+import { assertSlugAllowed } from "@/lib/archive/redirects";
+import { loadArchiveEntry } from "@/lib/archive/load-entry";
+import {
+  githubStorageAvailable,
+  loadArchiveEntryFromGitHub,
+} from "@/lib/archive/draft-github-store";
 import { contentArchiveDir, publicArchiveDir } from "@/lib/archive/paths";
+import { canonicalPublicDerivativeFilenames } from "@/lib/archive/public-derivative-export";
+import { commitFiles } from "./git-commit";
+import { listRepoPaths, readBranchTipSha, readRepoFile } from "./git-read";
 
-async function collectFiles(dir: string, prefix: string): Promise<{ path: string; content: Buffer }[]> {
+export class ArchiveSyncNotFoundError extends Error {
+  constructor(slug: string) {
+    super(`Archive entry not found: ${slug}`);
+    this.name = "ArchiveSyncNotFoundError";
+  }
+}
+
+export class ArchiveSyncIncompleteError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ArchiveSyncIncompleteError";
+  }
+}
+
+export interface ArchiveGitHubPushResult {
+  commitSha: string;
+  paths: string[];
+}
+
+type GitHubPushHook = (
+  slug: string,
+  commitMessage: string,
+  files: { path: string; content: Buffer }[],
+) => Promise<ArchiveGitHubPushResult>;
+
+let testGitHubPushHook: GitHubPushHook | undefined;
+
+/** Test-only hook invoked instead of Octokit during archive GitHub push. */
+export function setArchiveGitHubPushHookForTests(
+  hook?: GitHubPushHook,
+): void {
+  testGitHubPushHook = hook;
+}
+
+async function collectFiles(
+  dir: string,
+  prefix: string,
+): Promise<{ path: string; content: Buffer }[]> {
   const out: { path: string; content: Buffer }[] = [];
   let entries: { name: string; isFile: () => boolean; isDirectory: () => boolean }[];
   try {
@@ -13,6 +58,7 @@ async function collectFiles(dir: string, prefix: string): Promise<{ path: string
   }
 
   for (const ent of entries) {
+    if (ent.name.startsWith(".")) continue;
     const full = path.join(dir, ent.name);
     const rel = path.posix.join(prefix, ent.name);
     if (ent.isDirectory()) {
@@ -24,12 +70,9 @@ async function collectFiles(dir: string, prefix: string): Promise<{ path: string
   return out;
 }
 
-export async function publishArchiveEntryToGitHub(slug: string): Promise<{
-  commitSha: string;
-  paths: string[];
-}> {
-  const { octokit, config } = requireArchiveOctokit();
-
+async function collectArchiveBundleFiles(
+  slug: string,
+): Promise<{ path: string; content: Buffer }[]> {
   const contentDir = contentArchiveDir(slug);
   const publicDir = publicArchiveDir(slug);
 
@@ -42,127 +85,199 @@ export async function publishArchiveEntryToGitHub(slug: string): Promise<{
     throw new Error(`No archive files found for slug: ${slug}`);
   }
 
-  const ref = await octokit.git.getRef({
-    owner: config.owner,
-    repo: config.repo,
-    ref: `heads/${config.branch}`,
-  });
-  const commitSha = ref.data.object.sha;
+  return files;
+}
 
-  const commit = await octokit.git.getCommit({
-    owner: config.owner,
-    repo: config.repo,
-    commit_sha: commitSha,
-  });
-  const baseTreeSha = commit.data.tree.sha;
+export async function validateArchiveBundleForSync(slug: string): Promise<void> {
+  const normalized = assertSlugAllowed(slug);
+  const entry = await loadArchiveEntry(normalized);
+  if (!entry) {
+    throw new ArchiveSyncNotFoundError(normalized);
+  }
 
-  const blobs = await Promise.all(
-    files.map(async (file) => {
-      const isText =
-        file.path.endsWith(".json") ||
-        file.path.endsWith(".md") ||
-        file.path.endsWith(".html");
-      const { data } = await octokit.git.createBlob({
-        owner: config.owner,
-        repo: config.repo,
-        content: isText
-          ? file.content.toString("utf8")
-          : file.content.toString("base64"),
-        encoding: isText ? "utf-8" : "base64",
-      });
-      return { path: file.path, sha: data.sha };
-    }),
+  const metadataPath = path.join(contentArchiveDir(normalized), "metadata.json");
+  try {
+    await fs.access(metadataPath);
+  } catch {
+    throw new ArchiveSyncIncompleteError(
+      `Archive bundle incomplete: missing metadata.json for ${normalized}`,
+    );
+  }
+
+  for (const filename of canonicalPublicDerivativeFilenames()) {
+    const derivativePath = path.join(publicArchiveDir(normalized), filename);
+    try {
+      await fs.access(derivativePath);
+    } catch {
+      throw new ArchiveSyncIncompleteError(
+        `Archive bundle incomplete: missing public derivative ${filename} for ${normalized}`,
+      );
+    }
+  }
+}
+
+export async function validateArchiveBundleOnGitHub(slug: string): Promise<void> {
+  const normalized = assertSlugAllowed(slug);
+  const entry = await loadArchiveEntryFromGitHub(normalized);
+  if (!entry) {
+    throw new ArchiveSyncNotFoundError(normalized);
+  }
+
+  const metadata = await readRepoFile(
+    `content/archive/${normalized}/metadata.json`,
   );
+  if (!metadata) {
+    throw new ArchiveSyncIncompleteError(
+      `Archive bundle incomplete: missing metadata.json for ${normalized}`,
+    );
+  }
 
-  const { data: tree } = await octokit.git.createTree({
-    owner: config.owner,
-    repo: config.repo,
-    base_tree: baseTreeSha,
-    tree: blobs.map((b) => ({
-      path: b.path,
-      mode: "100644" as const,
-      type: "blob" as const,
-      sha: b.sha,
-    })),
+  for (const filename of canonicalPublicDerivativeFilenames()) {
+    const derivative = await readRepoFile(
+      `public/archive/${normalized}/${filename}`,
+    );
+    if (!derivative) {
+      throw new ArchiveSyncIncompleteError(
+        `Archive bundle incomplete: missing public derivative ${filename} for ${normalized}`,
+      );
+    }
+  }
+}
+
+async function pushArchiveBundleToGitHub(
+  slug: string,
+  commitMessage: string,
+): Promise<ArchiveGitHubPushResult> {
+  const normalized = assertSlugAllowed(slug);
+  const files = await collectArchiveBundleFiles(normalized);
+
+  if (testGitHubPushHook) {
+    return testGitHubPushHook(normalized, commitMessage, files);
+  }
+
+  const result = await commitFiles({
+    message: commitMessage,
+    upserts: files.map((file) => ({ path: file.path, content: file.content })),
   });
-
-  const { data: newCommit } = await octokit.git.createCommit({
-    owner: config.owner,
-    repo: config.repo,
-    message: `archive: accession ${slug}`,
-    tree: tree.sha,
-    parents: [commitSha],
-  });
-
-  await octokit.git.updateRef({
-    owner: config.owner,
-    repo: config.repo,
-    ref: `heads/${config.branch}`,
-    sha: newCommit.sha,
-  });
-
   return {
-    commitSha: newCommit.sha,
-    paths: files.map((f) => f.path),
+    commitSha: result.commitSha,
+    paths: files.map((file) => file.path),
   };
+}
+
+async function collectArchiveBundleFilesFromGitHub(
+  slug: string,
+): Promise<{ path: string; content: Buffer }[]> {
+  const contentPaths = await listRepoPaths(`content/archive/${slug}`);
+  const publicPaths = await listRepoPaths(`public/archive/${slug}`);
+  const files: { path: string; content: Buffer }[] = [];
+
+  for (const filePath of [...contentPaths, ...publicPaths]) {
+    if (filePath.split("/").some((part) => part.startsWith("."))) continue;
+    const content = await readRepoFile(filePath);
+    if (!content) continue;
+    files.push({ path: filePath, content });
+  }
+
+  if (files.length === 0) {
+    throw new Error(`No archive files found for slug: ${slug}`);
+  }
+
+  return files;
+}
+
+export async function publishArchiveEntryToGitHub(
+  slug: string,
+): Promise<ArchiveGitHubPushResult> {
+  return pushArchiveBundleToGitHub(slug, `archive: accession ${slug}`);
+}
+
+/**
+ * Sync pushes an existing archive bundle without changing lifecycle status.
+ * On durable GitHub mode the bundle is already authoritative on the branch tip;
+ * validate completeness and return tip + paths (no status mutation).
+ * Local/non-durable mode still collects from the working tree and pushes.
+ */
+export async function syncArchiveEntryToGitHub(
+  slug: string,
+): Promise<ArchiveGitHubPushResult> {
+  const normalized = assertSlugAllowed(slug);
+
+  if (githubStorageAvailable()) {
+    await validateArchiveBundleOnGitHub(normalized);
+    const files = await collectArchiveBundleFilesFromGitHub(normalized);
+    const commitMessage = `archive: sync ${normalized}`;
+
+    if (testGitHubPushHook) {
+      return testGitHubPushHook(normalized, commitMessage, files);
+    }
+
+    const commitSha = await readBranchTipSha();
+    return {
+      commitSha,
+      paths: files.map((file) => file.path),
+    };
+  }
+
+  await validateArchiveBundleForSync(normalized);
+  return pushArchiveBundleToGitHub(normalized, `archive: sync ${normalized}`);
+}
+
+export interface ArchiveGitHubMetadataPushResult {
+  commitSha: string;
+}
+
+type GitHubMetadataPushHook = (
+  slug: string,
+  commitMessage: string,
+  metadataJson: string,
+  filePath: string,
+) => Promise<ArchiveGitHubMetadataPushResult>;
+
+let testGitHubMetadataPushHook: GitHubMetadataPushHook | undefined;
+
+/** Test-only hook invoked instead of Octokit during metadata-only GitHub push. */
+export function setArchiveGitHubMetadataPushHookForTests(
+  hook?: GitHubMetadataPushHook,
+): void {
+  testGitHubMetadataPushHook = hook;
+}
+
+export async function pushArchiveMetadataToGitHub(
+  slug: string,
+  metadataJson: string,
+  commitMessage: string,
+): Promise<ArchiveGitHubMetadataPushResult> {
+  const normalized = assertSlugAllowed(slug);
+  const filePath = `content/archive/${normalized}/metadata.json`;
+
+  if (testGitHubMetadataPushHook) {
+    return testGitHubMetadataPushHook(normalized, commitMessage, metadataJson, filePath);
+  }
+
+  const result = await commitFiles({
+    message: commitMessage,
+    upserts: [{ path: filePath, content: metadataJson }],
+  });
+  return { commitSha: result.commitSha };
+}
+
+export async function syncArchiveVisibilityToGitHub(
+  slug: string,
+  metadataJson: string,
+  previousStatus: string,
+  nextStatus: string,
+): Promise<ArchiveGitHubMetadataPushResult> {
+  return pushArchiveMetadataToGitHub(
+    slug,
+    metadataJson,
+    `archive: visibility ${slug} ${previousStatus}->${nextStatus}`,
+  );
 }
 
 export async function updateArchiveProvenanceOnGitHub(
   slug: string,
   metadataJson: string,
 ): Promise<{ commitSha: string }> {
-  const { octokit, config } = requireArchiveOctokit();
-
-  const filePath = `content/archive/${slug}/metadata.json`;
-
-  const ref = await octokit.git.getRef({
-    owner: config.owner,
-    repo: config.repo,
-    ref: `heads/${config.branch}`,
-  });
-  const commitSha = ref.data.object.sha;
-
-  const { data: blob } = await octokit.git.createBlob({
-    owner: config.owner,
-    repo: config.repo,
-    content: metadataJson,
-    encoding: "utf-8",
-  });
-
-  const commit = await octokit.git.getCommit({
-    owner: config.owner,
-    repo: config.repo,
-    commit_sha: commitSha,
-  });
-
-  const { data: tree } = await octokit.git.createTree({
-    owner: config.owner,
-    repo: config.repo,
-    base_tree: commit.data.tree.sha,
-    tree: [
-      {
-        path: filePath,
-        mode: "100644",
-        type: "blob",
-        sha: blob.sha,
-      },
-    ],
-  });
-
-  const { data: newCommit } = await octokit.git.createCommit({
-    owner: config.owner,
-    repo: config.repo,
-    message: `archive: provenance ${slug}`,
-    tree: tree.sha,
-    parents: [commitSha],
-  });
-
-  await octokit.git.updateRef({
-    owner: config.owner,
-    repo: config.repo,
-    ref: `heads/${config.branch}`,
-    sha: newCommit.sha,
-  });
-
-  return { commitSha: newCommit.sha };
+  return pushArchiveMetadataToGitHub(slug, metadataJson, `archive: provenance ${slug}`);
 }

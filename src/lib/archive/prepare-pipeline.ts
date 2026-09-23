@@ -21,6 +21,33 @@ export interface PreparedDraftSource {
   height?: number;
 }
 
+export async function encodePreparedMaster(
+  sourceBuffer: Buffer,
+): Promise<{
+  buffer: Buffer;
+  processing: DraftProcessing;
+  byteSize: number;
+  width?: number;
+  height?: number;
+}> {
+  const buffer = await sharp(sourceBuffer, { failOn: "none" })
+    .rotate()
+    .avif({ quality: 86, effort: 6, chromaSubsampling: "4:4:4" })
+    .toBuffer();
+  const meta = await sharp(buffer).metadata();
+  return {
+    buffer,
+    byteSize: buffer.length,
+    width: meta.width,
+    height: meta.height,
+    processing: {
+      preparedSource: "working/master-prepared.avif",
+      preparedAt: new Date().toISOString(),
+      prepareVersion: PREPARE_VERSION,
+    },
+  };
+}
+
 export async function prepareDraftSource(
   draft: AccessionDraft,
 ): Promise<PreparedDraftSource> {
@@ -33,28 +60,15 @@ export async function prepareDraftSource(
     draft.source.storedFilename,
   );
   const sourceBuffer = await fs.readFile(sourcePath);
+  const encoded = await encodePreparedMaster(sourceBuffer);
   const workingDir = contentDraftWorkingDir(draft.draftId);
   await fs.mkdir(workingDir, { recursive: true });
-
   const preparedPath = path.join(workingDir, "master-prepared.avif");
-  const buffer = await sharp(sourceBuffer, { failOn: "none" })
-    .rotate()
-    .avif({ quality: 86, effort: 6, chromaSubsampling: "4:4:4" })
-    .toBuffer();
-  await fs.writeFile(preparedPath, buffer);
+  await fs.writeFile(preparedPath, encoded.buffer);
 
-  const meta = await sharp(buffer).metadata();
   return {
-    buffer,
+    ...encoded,
     filePath: preparedPath,
-    byteSize: buffer.length,
-    width: meta.width,
-    height: meta.height,
-    processing: {
-      preparedSource: "working/master-prepared.avif",
-      preparedAt: new Date().toISOString(),
-      prepareVersion: PREPARE_VERSION,
-    },
   };
 }
 

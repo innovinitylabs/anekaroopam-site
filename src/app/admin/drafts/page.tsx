@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { ArchiveEntryActions } from "@/components/admin/ArchiveEntryActions";
+import { DraftDeleteButton } from "@/components/admin/DraftDeleteButton";
+import { draftSourcePublicLabel } from "@/lib/archive/draft-store";
 import {
-  draftSourcePublicLabel,
-  listAccessionDrafts,
-} from "@/lib/archive/draft-store";
+  listAccessionDraftsDurable,
+  listArchiveEntriesFromGitHub,
+  githubStorageAvailable,
+} from "@/lib/archive/draft-github-store";
 import { getAllArchiveEntries } from "@/lib/archive/load-entry";
 import type { ArchiveEntry, ProvenanceRecord } from "@/lib/archive/schema";
 
@@ -19,8 +22,17 @@ function hasOriginalSource(entry: ArchiveEntry): boolean {
 }
 
 export default async function AdminDraftsPage() {
-  const drafts = await listAccessionDrafts();
-  const entries = await getAllArchiveEntries({ includeHidden: true });
+  const drafts = await listAccessionDraftsDurable();
+  let entries: ArchiveEntry[];
+  if (githubStorageAvailable()) {
+    try {
+      entries = await listArchiveEntriesFromGitHub();
+    } catch {
+      entries = await getAllArchiveEntries({ includeHidden: true });
+    }
+  } else {
+    entries = await getAllArchiveEntries({ includeHidden: true });
+  }
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-12">
@@ -88,12 +100,15 @@ export default async function AdminDraftsPage() {
                           Prepared: {draft.processing.preparedSource ? "yes" : "not yet"}
                         </p>
                       </div>
-                      <Link
-                        href={`/admin/new?draft=${encodeURIComponent(draft.draftId)}`}
-                        className="border border-[var(--border)] px-4 py-2 text-[0.68rem] tracking-[0.14em] uppercase"
-                      >
-                        Resume
-                      </Link>
+                      <div className="flex flex-col items-end gap-2">
+                        <Link
+                          href={`/admin/new?draft=${encodeURIComponent(draft.draftId)}`}
+                          className="border border-[var(--border)] px-4 py-2 text-[0.68rem] tracking-[0.14em] uppercase"
+                        >
+                          Resume
+                        </Link>
+                        <DraftDeleteButton draftId={draft.draftId} />
+                      </div>
                     </div>
                   </li>
                 ))}
@@ -147,6 +162,7 @@ export default async function AdminDraftsPage() {
                             slug={entry.slug}
                             hasSource={sourceReady}
                             status={entry.status}
+                            mintedAt={entry.mintedAt}
                           />
                         </div>
                         <div className="flex flex-wrap gap-2">

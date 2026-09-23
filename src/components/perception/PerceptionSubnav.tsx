@@ -5,9 +5,19 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const items = [
-  { href: "/perceive", label: "Orient", exact: true },
-  { href: "/perceive/tools/prepare", label: "Prepare", exact: false },
-];
+  {
+    href: "/perceive",
+    label: "Orient",
+    exact: true,
+    tip: "Define perceptual states, metadata, and preview rotational viewing.",
+  },
+  {
+    href: "/perceive/tools/prepare",
+    label: "Prepare",
+    exact: false,
+    tip: "Convert, size, and export standalone HTML from the current artwork.",
+  },
+] as const;
 
 export function PerceptionSubnav() {
   const pathname = usePathname();
@@ -25,6 +35,7 @@ export function PerceptionSubnav() {
           <Link
             key={item.href}
             href={item.href}
+            title={item.tip}
             className={cn(
               "-my-3 py-3 text-[0.62rem] tracking-[0.16em] uppercase transition-opacity sm:text-[0.68rem] sm:tracking-[0.2em]",
               active ? "opacity-100" : "opacity-40 hover:opacity-75",

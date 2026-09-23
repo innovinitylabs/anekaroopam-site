@@ -15,6 +15,10 @@ import {
   getArtworkById as getLegacyArtworkById,
 } from "./artworks";
 
+// Filesystem archive entries are canonical. artworks.ts placeholders remain in
+// the listing until a filesystem slug collides with those ids. Do not migrate
+// placeholders into content/archive.
+
 export async function getArtworkBySlug(
   slug: string,
 ): Promise<PerceptionArtwork | undefined> {

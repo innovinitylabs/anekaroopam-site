@@ -8,10 +8,10 @@ import { PerceptionSubnav } from "./PerceptionSubnav";
 import { CreatorCredit } from "./CreatorCredit";
 
 const siteLinks = [
-  { href: "/archive", label: "Archive" },
-  { href: "/manifesto", label: "Manifesto" },
-  { href: "/about", label: "About" },
-];
+  { href: "/archive", label: "Archive", tip: "Browse published perceptual artworks." },
+  { href: "/manifesto", label: "Manifesto", tip: "Read the visual philosophy behind Anekaroopam." },
+  { href: "/about", label: "About", tip: "Artist and project context." },
+] as const;
 
 export function PerceptionShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -24,6 +24,7 @@ export function PerceptionShell({ children }: { children: React.ReactNode }) {
           <Link
             href="/"
             aria-label={BRAND.name}
+            title="Return to the Anekaroopam site home."
             className="min-w-0 shrink font-display text-xs tracking-[0.06em] uppercase opacity-70 transition-opacity hover:opacity-100 sm:text-sm sm:tracking-[0.08em]"
           >
             <AnekaroopamWordmark />
@@ -36,6 +37,7 @@ export function PerceptionShell({ children }: { children: React.ReactNode }) {
             <Link
               key={link.href}
               href={link.href}
+              title={link.tip}
               className="text-[0.62rem] tracking-[0.18em] uppercase text-[var(--muted)] transition-opacity hover:opacity-90"
             >
               {link.label}

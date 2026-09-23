@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Analytics } from "@vercel/analytics/next";
 import { Anek_Tamil, Cormorant_Garamond, Source_Serif_4 } from "next/font/google";
 import { BRAND } from "@/lib/brand";
 import "./globals.css";
@@ -81,7 +82,10 @@ export default function RootLayout({
       lang="en"
       className={`${cormorant.variable} ${sourceSerif.variable} ${anekTamil.variable} h-full`}
     >
-      <body className="flex min-h-full flex-col antialiased">{children}</body>
+      <body className="flex min-h-full flex-col antialiased">
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }

@@ -89,6 +89,7 @@ export function PerceptionMetadata({
           <button
             type="button"
             onClick={() => setAdvancedOpen((o) => !o)}
+            title="Expand full archival metadata on the viewing canvas."
             className="flex w-full items-center gap-2 text-[0.58rem] tracking-[0.18em] uppercase opacity-45 transition-opacity hover:opacity-70"
           >
             <span className="h-px flex-1 bg-current opacity-30" />

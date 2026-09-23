@@ -5,6 +5,7 @@ import {
   type DraftStatus,
 } from "./schema";
 import {
+  canRegenerateStatus,
   isPublicArchiveEntry,
   isPublicArchiveStatus,
   visibilityLabel,
@@ -125,7 +126,7 @@ export function buildAccessionRuntime(entry: ArchiveEntry): AccessionRuntime {
     capabilities: {
       canRenderPublicly: isPublicArchiveStatus(entry.status),
       canRenderDirectRoute: true,
-      canRegenerate: entry.status !== "withdrawn" && hasOriginalSource,
+      canRegenerate: canRegenerateStatus(entry.status) && hasOriginalSource,
       canExportMintPackage: derivatives.length > 0,
       hasOriginalSource,
       hasPreparedSource,
