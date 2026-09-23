@@ -5,6 +5,11 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { after, afterEach, before, describe, it } from "node:test";
 import type { ArchiveImageBuffers } from "./image-pipeline.ts";
+import {
+  ensureTestAdminSessionSecret,
+  mintTestAdminBearer,
+  testAdminAuthHeaders,
+} from "./admin-test-auth.ts";
 import { setArchiveImagePipelineForTests } from "./image-pipeline.ts";
 import {
   buildArchiveVisibilityUpdate,
@@ -209,6 +214,7 @@ describe("withdrawn regenerate API enforcement", () => {
   function enableAdmin(): void {
     process.env.ADMIN_INGEST_ENABLED = "true";
     process.env.ADMIN_INGEST_SECRET = "test-secret";
+    ensureTestAdminSessionSecret();
   }
 
   function installPipelineMock(): void {
@@ -275,7 +281,7 @@ describe("withdrawn regenerate API enforcement", () => {
     const res = await POST(
       new Request(`http://localhost/api/admin/archive/${slug}/regenerate`, {
         method: "POST",
-        headers: { Authorization: "Bearer test-secret" },
+        headers: { Authorization: `Bearer ${mintTestAdminBearer()}` },
       }),
       { params: Promise.resolve({ slug }) },
     );
@@ -332,7 +338,7 @@ describe("withdrawn regenerate API enforcement", () => {
     const res = await POST(
       new Request(`http://localhost/api/admin/archive/${slug}/regenerate`, {
         method: "POST",
-        headers: { Authorization: "Bearer test-secret" },
+        headers: { Authorization: `Bearer ${mintTestAdminBearer()}` },
       }),
       { params: Promise.resolve({ slug }) },
     );
@@ -367,7 +373,7 @@ describe("withdrawn regenerate API enforcement", () => {
     const res = await POST(
       new Request(`http://localhost/api/admin/drafts/${editDraftId}/regenerate`, {
         method: "POST",
-        headers: { Authorization: "Bearer test-secret" },
+        headers: { Authorization: `Bearer ${mintTestAdminBearer()}` },
       }),
       { params: Promise.resolve({ draftId: editDraftId }) },
     );
@@ -439,6 +445,7 @@ describe("withdrawn generate enforcement", () => {
   function enableAdmin(): void {
     process.env.ADMIN_INGEST_ENABLED = "true";
     process.env.ADMIN_INGEST_SECRET = "test-secret";
+    ensureTestAdminSessionSecret();
   }
 
   function installPipelineMock(marker = "GEN-OK"): void {
@@ -645,7 +652,7 @@ describe("withdrawn generate enforcement", () => {
     const res = await POST(
       new Request(`http://localhost/api/admin/drafts/${editDraftId}/generate`, {
         method: "POST",
-        headers: { Authorization: "Bearer test-secret" },
+        headers: { Authorization: `Bearer ${mintTestAdminBearer()}` },
       }),
       { params: Promise.resolve({ draftId: editDraftId }) },
     );
@@ -740,7 +747,7 @@ describe("withdrawn generate enforcement", () => {
     const res = await POST(
       new Request("http://localhost/api/admin/archive/generate", {
         method: "POST",
-        headers: { Authorization: "Bearer test-secret" },
+        headers: { Authorization: `Bearer ${mintTestAdminBearer()}` },
         body: form,
       }),
     );
@@ -778,7 +785,7 @@ describe("withdrawn generate enforcement", () => {
       return POST(
         new Request("http://localhost/api/admin/archive/generate", {
           method: "POST",
-          headers: { Authorization: "Bearer test-secret" },
+          headers: { Authorization: `Bearer ${mintTestAdminBearer()}` },
           body: form,
         }),
       );

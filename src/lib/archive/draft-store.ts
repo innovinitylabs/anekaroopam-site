@@ -30,6 +30,7 @@ import {
   contentDraftSourceDir,
   contentDraftWorkingDir,
   contentDraftsDir,
+  getRepoRoot,
   publicArchiveDir,
 } from "./paths";
 import {
@@ -105,7 +106,7 @@ async function existingDraftIds(): Promise<string[]> {
 }
 
 async function existingArchiveAccessionSequences(year: number): Promise<number[]> {
-  const archiveRoot = path.join(process.cwd(), "content", "archive");
+  const archiveRoot = path.join(getRepoRoot(), "content", "archive");
   try {
     const entries = await fs.readdir(archiveRoot, { withFileTypes: true });
     const sequences: number[] = [];
@@ -780,7 +781,7 @@ export async function generateArchiveFromDraft(
   if (previousSlug && previousSlug !== draft.slug) {
     await addArchiveRedirect(previousSlug, draft.slug, draft.accessionId);
     await fs.rm(contentArchiveDir(previousSlug), { recursive: true, force: true });
-    await fs.rm(path.join(process.cwd(), "public", "archive", previousSlug), {
+    await fs.rm(publicArchiveDir(previousSlug), {
       recursive: true,
       force: true,
     });
@@ -933,8 +934,8 @@ export async function renamePublishedArchiveSlug(
   const nextDir = contentArchiveDir(nextSlug);
   await fs.cp(oldDir, nextDir, { recursive: true });
 
-  const publicOld = path.join(process.cwd(), "public", "archive", slug);
-  const publicNext = path.join(process.cwd(), "public", "archive", nextSlug);
+  const publicOld = publicArchiveDir(slug);
+  const publicNext = publicArchiveDir(nextSlug);
   try {
     await fs.cp(publicOld, publicNext, { recursive: true });
   } catch {

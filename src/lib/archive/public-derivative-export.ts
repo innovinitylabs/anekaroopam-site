@@ -2,8 +2,11 @@ import fs from "fs/promises";
 import path from "path";
 import { randomUUID } from "node:crypto";
 import type { ArchiveImageBuffers } from "./image-pipeline";
-import { ARCHIVE_IMAGE_OUTPUTS } from "./image-specs";
-import { publicArchiveDir } from "./paths";
+import {
+  ARCHIVE_IMAGE_OUTPUTS,
+  archiveImageOutputFilenames,
+} from "./image-specs";
+import { getRepoRoot, publicArchiveDir } from "./paths";
 
 export interface WrittenPublicFile {
   path: string;
@@ -15,16 +18,12 @@ export interface PublicPromoteResult {
   retiredDir: string | null;
 }
 
-function repoRoot(): string {
-  return process.cwd();
-}
-
 export function publicArchiveStagingRoot(): string {
-  return path.join(repoRoot(), "public", "archive", ".staging");
+  return path.join(getRepoRoot(), "public", "archive", ".staging");
 }
 
 export function canonicalPublicDerivativeFilenames(): string[] {
-  return Object.values(ARCHIVE_IMAGE_OUTPUTS).map((spec) => spec.filename);
+  return archiveImageOutputFilenames();
 }
 
 async function pathExists(filePath: string): Promise<boolean> {

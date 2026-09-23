@@ -3,11 +3,16 @@ import { z } from "zod";
 import { requireAdminIngest } from "@/lib/archive/admin-ingest-response";
 import { assertArchiveDiscardable } from "@/lib/archive/archive-policy";
 import {
+  discardGeneratedArchiveOnGitHub,
+  githubStorageAvailable,
+  loadArchiveEntryDurable,
+} from "@/lib/archive/draft-github-store";
+import {
   ArchiveDiscardConfirmationError,
   ArchiveDiscardNotFoundError,
   discardGeneratedArchive,
 } from "@/lib/archive/draft-store";
-import { loadArchiveEntry } from "@/lib/archive/load-entry";
+import { githubErrorResponse } from "@/lib/archive/github-admin-response";
 import { assertSlugAllowed } from "@/lib/archive/redirects";
 
 export const runtime = "nodejs";
@@ -27,7 +32,7 @@ export async function DELETE(request: Request, { params }: Context) {
     const normalized = assertSlugAllowed(rawSlug);
     const body = DiscardBodySchema.parse(await request.json());
 
-    const entry = await loadArchiveEntry(normalized);
+    const entry = await loadArchiveEntryDurable(normalized);
     if (!entry) {
       return NextResponse.json({ error: "Archive not found" }, { status: 404 });
     }
@@ -46,9 +51,13 @@ export async function DELETE(request: Request, { params }: Context) {
       );
     }
 
-    const discarded = await discardGeneratedArchive(entry.slug, body.confirmation);
+    const discarded = githubStorageAvailable()
+      ? await discardGeneratedArchiveOnGitHub(entry.slug, body.confirmation)
+      : await discardGeneratedArchive(entry.slug, body.confirmation);
     return NextResponse.json({ ok: true, discarded });
   } catch (e) {
+    const github = githubErrorResponse(e);
+    if (github) return github;
     if (e instanceof ArchiveDiscardNotFoundError) {
       return NextResponse.json({ error: "Archive not found" }, { status: 404 });
     }

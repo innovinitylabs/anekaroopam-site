@@ -29,9 +29,15 @@ import {
   emptyProvenance,
   normalizeArchiveSlug,
   type AccessionDraft,
+  type ArchiveEntry,
   type DraftStatus,
   type ProvenanceRecord,
 } from "@/lib/archive/schema";
+import {
+  runBrowserArchiveImagePipeline,
+} from "@/lib/archive/browser-image-pipeline";
+import { buildBrowserMetadataPackage } from "@/lib/archive/browser-metadata-package";
+import { postCommitBundle } from "@/lib/archive/commit-bundle-client";
 import {
   installUploadRegistryBridge,
   registerTransientUpload,
@@ -68,9 +74,9 @@ const STEP_TOOLTIPS: Record<StepId, string> = {
   Metadata:
     "Edit accession title, date, process, and other archival metadata fields.",
   Generate:
-    "Write metadata, states, derivatives, manifest, and standalone HTML to the archive.",
+    "Build metadata, states, and public derivatives, then commit them to the archive source of truth.",
   Publish:
-    "Commit the generated archive bundle to GitHub when repository credentials are set.",
+    "Promote or sync the generated archive on GitHub when repository credentials are set.",
   Provenance:
     "Record mint, auction, and marketplace links after the work is published or minted.",
 };
@@ -143,6 +149,24 @@ export function IngestionWizard({
   const [error, setError] = useState<string | null>(null);
   const [syncUiState, setSyncUiState] = useState<SyncUiState>("idle");
   const [lastSyncCommitSha, setLastSyncCommitSha] = useState<string | null>(null);
+  const [durableStorage, setDurableStorage] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/admin/session", { credentials: "include" })
+      .then(async (res) => {
+        const data = (await res.json().catch(() => ({}))) as {
+          durableStorage?: boolean;
+        };
+        if (!cancelled) setDurableStorage(Boolean(data.durableStorage));
+      })
+      .catch(() => {
+        if (!cancelled) setDurableStorage(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const isExistingArchive = useMemo(
     () => isExistingArchiveDraft(currentDraft, draftId, archiveStatus),
@@ -369,6 +393,19 @@ export function IngestionWizard({
     [accessionId, applyDraft, draftId],
   );
 
+  const resolveSourceBlob = useCallback(async (): Promise<Blob> => {
+    if (sourceFile) return sourceFile;
+    const objectUrl = draftId ? resolveObjectUrlFromAnyTab(draftId) : null;
+    if (objectUrl) {
+      const res = await fetch(objectUrl);
+      if (!res.ok) throw new Error("Could not read browser source preview");
+      return res.blob();
+    }
+    throw new Error(
+      "Source image is not available in this browser tab. Re-upload the master, then prepare/generate again.",
+    );
+  }, [draftId, sourceFile]);
+
   const handleGenerate = async () => {
     if (!draftId) return;
     setGenerating(true);
@@ -378,9 +415,82 @@ export function IngestionWizard({
     setLastSyncCommitSha(null);
 
     try {
-      await saveDraft();
+      const saved = await saveDraft();
+      const draftForGenerate = saved ?? currentDraft;
+      if (!draftForGenerate) {
+        throw new Error("Draft is not loaded");
+      }
+
+      if (durableStorage) {
+        const sourceBlob = await resolveSourceBlob();
+        const images = await runBrowserArchiveImagePipeline(sourceBlob);
+
+        let existingEntry: ArchiveEntry | null = null;
+        if (isExistingArchive) {
+          const metaRes = await adminFetch(
+            `/api/admin/archive/${encodeURIComponent(draftForGenerate.slug)}/metadata`,
+          );
+          if (metaRes.ok) {
+            const metaData = (await metaRes.json()) as { entry?: ArchiveEntry };
+            existingEntry = metaData.entry ?? null;
+          }
+        }
+
+        const pack = buildBrowserMetadataPackage({
+          draft: draftForGenerate,
+          existingEntry,
+          derivativeMetas: images.derivatives.map((d) => ({
+            filename: d.filename,
+            width: d.width,
+            height: d.height,
+            byteSize: d.blob.size,
+            mimeType: d.mimeType,
+          })),
+        });
+
+        const committed = await postCommitBundle({
+          slug: pack.slug,
+          draftId: pack.draftId,
+          message: `archive: browser generate ${pack.slug}`,
+          textFiles: pack.files,
+          derivatives: images.derivatives,
+        });
+
+        const files = [
+          ...pack.files.map((f) => ({
+            path: f.path,
+            bytes: new TextEncoder().encode(f.content).byteLength,
+          })),
+          ...images.derivatives.map((d) => ({
+            path: `public/archive/${pack.slug}/${d.filename}`,
+            bytes: d.blob.size,
+          })),
+        ];
+
+        setResult({
+          slug: pack.slug,
+          files,
+          warnings: [
+            ...pack.warnings,
+            `Committed ${committed.commitSha.slice(0, 7)} to GitHub tip. Public View may 404 until redeploy.`,
+          ],
+        });
+        applyDraft(pack.draft);
+        setArchiveStatus(existingEntry?.status ?? "generated");
+        if (deployUsesSync) {
+          setSyncUiState("local_changed");
+        } else if (isExistingArchive) {
+          setSyncUiState("publish_pending");
+        } else {
+          setStatus("generated");
+          setSyncUiState("idle");
+        }
+        setStep("Publish");
+        return;
+      }
+
       const endpointKind = generateEndpointKind(
-        currentDraft,
+        draftForGenerate,
         draftId,
         archiveStatus,
       );
@@ -410,7 +520,7 @@ export function IngestionWizard({
       });
       const nextArchiveStatus: DraftStatus =
         deployUsesSync || isExistingArchive
-          ? (archiveStatus ?? currentDraft?.status ?? "generated")
+          ? (archiveStatus ?? draftForGenerate.status ?? "generated")
           : "generated";
       setArchiveStatus(nextArchiveStatus);
       if (deployUsesSync) {
@@ -652,6 +762,8 @@ export function IngestionWizard({
           <EmbeddedPreparePanel
             draft={currentDraft}
             previewSrc={controller.artwork.imageSrc}
+            sourceFile={sourceFile}
+            durableStorage={durableStorage}
             onPrepared={applyDraft}
             onError={(message) => setError(message || null)}
           />
@@ -704,12 +816,26 @@ export function IngestionWizard({
               : "5–7. Generate archive bundle"}
           </h2>
           <p className="text-[0.85rem] text-[var(--muted)]">
-            {isExistingArchive
-              ? deployUsesSync
-                ? "Updates the local archive bundle from your edits. The deposited original source is preserved. This does not sync to GitHub until you explicitly sync."
-                : "Updates the local archive bundle from your edits. The deposited original source is preserved. Use Publish on the next step to promote lifecycle on GitHub."
-              : "Writes the local archive bundle: metadata, states, notes, perception.html, public derivatives, original source/, and prepared/. Marks the record generated. This is not a GitHub publish; the work can appear on this local site until you commit."}
+            {durableStorage
+              ? isExistingArchive
+                ? "Browser-encodes the five public derivatives and commits metadata to the GitHub archive tip. Does not run server Sharp. Public View may 404 until redeploy."
+                : "Browser-encodes artwork/preview/social/thumb derivatives and commits metadata + draft status to the GitHub archive tip. Public pages stay deploy-bound until the next redeploy."
+              : isExistingArchive
+                ? deployUsesSync
+                  ? "Updates the local archive bundle from your edits. The deposited original source is preserved. This does not sync to GitHub until you explicitly sync."
+                  : "Updates the local archive bundle from your edits. The deposited original source is preserved. Use Publish on the next step to promote lifecycle on GitHub."
+                : "Writes the archive bundle locally: metadata, states, notes, perception.html, public derivatives, original source/, and prepared/. Marks the record generated. This is not a GitHub publish."}
           </p>
+          {durableStorage && (
+            <p className="border border-amber-900/40 bg-amber-950/20 px-3 py-2 text-[0.72rem] text-amber-100/90">
+              Incomplete browser MVP package: writes metadata, states, notes, and five
+              public derivatives to GitHub. Does not write perception.html or
+              manifest.json. Mint-package export is excluded until a full regenerate.
+              Public View may 404 until redeploy. Preview checklist: OAuth login,
+              allowlist deny page, browser generate to GitHub tip, refresh admin,
+              visibility/publish via existing routes.
+            </p>
+          )}
           <button
             type="button"
             disabled={

@@ -1,24 +1,28 @@
-import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import {
-  ADMIN_INGEST_COOKIE,
+  ADMIN_INGEST_COOKIE_LEGACY,
+  ADMIN_OAUTH_STATE_COOKIE,
+  ADMIN_SESSION_COOKIE,
+  ADMIN_SESSION_MAX_AGE_SECONDS,
   adminSessionCookieOptions,
+  canUseSecretFallback,
+  getAdminAuthModes,
   getAdminIngestSecret,
   isAdminIngestEnabled,
-  isPresentedAdminSecretValid,
+  readAdminSession,
+  secretsEqual,
+  signAdminSession,
 } from "@/lib/archive/admin-guard";
+import { getAdminSessionSecret } from "@/lib/archive/admin-session";
+import { githubStorageAvailable } from "@/lib/archive/draft-github-store";
 
 export const runtime = "nodejs";
 
-const SESSION_MAX_AGE = 60 * 60 * 12;
-
-function secretsEqual(provided: string, expected: string): boolean {
-  const a = Buffer.from(provided);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
-}
-
+/**
+ * TEMPORARY emergency/dev secret unlock.
+ * Requires ADMIN_INGEST_ALLOW_SECRET=true. Issues a signed session; never stores
+ * the raw ADMIN_INGEST_SECRET in the cookie.
+ */
 export async function POST(request: Request) {
   if (!isAdminIngestEnabled()) {
     return NextResponse.json(
@@ -26,10 +30,18 @@ export async function POST(request: Request) {
       { status: 403 },
     );
   }
-  const expected = getAdminIngestSecret();
-  if (!expected) {
+
+  if (!canUseSecretFallback()) {
     return NextResponse.json(
-      { error: "Admin ingestion secret not configured" },
+      { error: "Secret unlock is disabled. Sign in with GitHub." },
+      { status: 403 },
+    );
+  }
+
+  const expected = getAdminIngestSecret();
+  if (!expected || !getAdminSessionSecret()) {
+    return NextResponse.json(
+      { error: "Secret unlock is not available" },
       { status: 403 },
     );
   }
@@ -46,12 +58,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid secret" }, { status: 401 });
   }
 
-  const response = NextResponse.json({ ok: true });
+  const sessionToken = signAdminSession({
+    sub: "secret-fallback",
+    login: "secret-fallback",
+    method: "secret",
+  });
+
+  const response = NextResponse.json({
+    ok: true,
+    method: "secret",
+    temporaryFallback: true,
+  });
   response.cookies.set(
-    ADMIN_INGEST_COOKIE,
-    expected,
-    adminSessionCookieOptions(SESSION_MAX_AGE),
+    ADMIN_SESSION_COOKIE,
+    sessionToken,
+    adminSessionCookieOptions(ADMIN_SESSION_MAX_AGE_SECONDS),
   );
+  response.cookies.set(ADMIN_INGEST_COOKIE_LEGACY, "", {
+    ...adminSessionCookieOptions(0),
+    maxAge: 0,
+  });
   return response;
 }
 
@@ -63,10 +89,10 @@ export async function DELETE() {
     );
   }
   const response = NextResponse.json({ ok: true });
-  response.cookies.set(ADMIN_INGEST_COOKIE, "", {
-    ...adminSessionCookieOptions(0),
-    maxAge: 0,
-  });
+  const clear = { ...adminSessionCookieOptions(0), maxAge: 0 };
+  response.cookies.set(ADMIN_SESSION_COOKIE, "", clear);
+  response.cookies.set(ADMIN_INGEST_COOKIE_LEGACY, "", clear);
+  response.cookies.set(ADMIN_OAUTH_STATE_COOKIE, "", clear);
   return response;
 }
 
@@ -77,14 +103,35 @@ export async function GET(request: Request) {
       { status: 403 },
     );
   }
-  if (!getAdminIngestSecret()) {
+
+  const modes = getAdminAuthModes();
+  if (!getAdminSessionSecret() && !modes.oauthConfigured && !modes.secretFallbackAvailable) {
     return NextResponse.json(
-      { error: "Admin ingestion secret not configured" },
+      { error: "Admin authentication is not configured" },
       { status: 403 },
     );
   }
-  if (!isPresentedAdminSecretValid(request)) {
-    return NextResponse.json({ authenticated: false }, { status: 401 });
+
+  const durableStorage = githubStorageAvailable();
+  const session = readAdminSession(request);
+  if (!session) {
+    return NextResponse.json(
+      {
+        authenticated: false,
+        oauthConfigured: modes.oauthConfigured,
+        secretFallbackAvailable: modes.secretFallbackAvailable,
+        durableStorage,
+      },
+      { status: 401 },
+    );
   }
-  return NextResponse.json({ authenticated: true });
+
+  return NextResponse.json({
+    authenticated: true,
+    login: session.login,
+    method: session.method,
+    oauthConfigured: modes.oauthConfigured,
+    secretFallbackAvailable: modes.secretFallbackAvailable,
+    durableStorage,
+  });
 }

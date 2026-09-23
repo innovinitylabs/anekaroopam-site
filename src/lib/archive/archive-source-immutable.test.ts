@@ -5,6 +5,11 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { after, before, describe, it } from "node:test";
 import type { ArchiveImageBuffers } from "./image-pipeline.ts";
+import {
+  ensureTestAdminSessionSecret,
+  mintTestAdminBearer,
+  testAdminAuthHeaders,
+} from "./admin-test-auth.ts";
 import { setArchiveImagePipelineForTests } from "./image-pipeline.ts";
 import { loadArchiveEntry } from "./load-entry.ts";
 import {
@@ -242,6 +247,7 @@ describe("archive source immutability", () => {
   function enableAdmin(): void {
     process.env.ADMIN_INGEST_ENABLED = "true";
     process.env.ADMIN_INGEST_SECRET = "test-secret";
+    ensureTestAdminSessionSecret();
   }
 
   function installPipelineMock(marker = "REGEN"): void {
@@ -270,7 +276,7 @@ describe("archive source immutability", () => {
     return POST(
       new Request(`http://localhost/api/admin/archive/${slug}/source`, {
         method: "POST",
-        headers: { Authorization: "Bearer test-secret" },
+        headers: { Authorization: `Bearer ${mintTestAdminBearer()}` },
         body: form,
       }),
       { params: Promise.resolve({ slug }) },
@@ -539,7 +545,7 @@ describe("archive source immutability", () => {
     const res = await POST(
       new Request(`http://localhost/api/admin/drafts/${draft.draftId}/generate`, {
         method: "POST",
-        headers: { Authorization: "Bearer test-secret" },
+        headers: { Authorization: `Bearer ${mintTestAdminBearer()}` },
       }),
       { params: Promise.resolve({ draftId: draft.draftId }) },
     );
@@ -569,7 +575,7 @@ describe("archive source immutability", () => {
     const res = await POST(
       new Request(`http://localhost/api/admin/drafts/${editDraftId}/generate`, {
         method: "POST",
-        headers: { Authorization: "Bearer test-secret" },
+        headers: { Authorization: `Bearer ${mintTestAdminBearer()}` },
       }),
       { params: Promise.resolve({ draftId: editDraftId }) },
     );
@@ -623,7 +629,7 @@ describe("archive source immutability", () => {
       const res = await POST(
         new Request(`http://localhost/api/admin/drafts/${editDraftId}/generate`, {
           method: "POST",
-          headers: { Authorization: "Bearer test-secret" },
+          headers: { Authorization: `Bearer ${mintTestAdminBearer()}` },
         }),
         { params: Promise.resolve({ draftId: editDraftId }) },
       );
@@ -665,7 +671,7 @@ describe("archive source immutability", () => {
     const res = await POST(
       new Request(`http://localhost/api/admin/drafts/${editDraftId}/generate`, {
         method: "POST",
-        headers: { Authorization: "Bearer test-secret" },
+        headers: { Authorization: `Bearer ${mintTestAdminBearer()}` },
       }),
       { params: Promise.resolve({ draftId: editDraftId }) },
     );

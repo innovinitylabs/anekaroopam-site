@@ -1,3 +1,8 @@
+import {
+  ensureTestAdminSessionSecret,
+  mintTestAdminBearer,
+  testAdminAuthHeaders,
+} from "./admin-test-auth.ts";
 import assert from "node:assert/strict";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -69,6 +74,7 @@ describe("DELETE /api/admin/archive/[slug]/discard auth", () => {
   it("returns 401 when flag is on but no secret or bearer is provided", async () => {
     process.env.ADMIN_INGEST_ENABLED = "true";
     process.env.ADMIN_INGEST_SECRET = "test-secret";
+    ensureTestAdminSessionSecret();
     const DELETE = await loadDelete();
     const res = await DELETE(
       new Request("http://localhost/api/admin/archive/x/discard", {

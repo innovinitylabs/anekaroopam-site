@@ -1,3 +1,8 @@
+import {
+  ensureTestAdminSessionSecret,
+  mintTestAdminBearer,
+  testAdminAuthHeaders,
+} from "./admin-test-auth.ts";
 import assert from "node:assert/strict";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -67,6 +72,7 @@ describe("POST /api/admin/archive/[slug]/sync auth", () => {
   it("returns 401 when flag is on but no secret or bearer is provided", async () => {
     process.env.ADMIN_INGEST_ENABLED = "true";
     process.env.ADMIN_INGEST_SECRET = "test-secret";
+    ensureTestAdminSessionSecret();
     process.env.GITHUB_ARCHIVE_TOKEN = "gh-token";
     process.env.GITHUB_ARCHIVE_OWNER = "owner";
     process.env.GITHUB_ARCHIVE_REPO = "repo";

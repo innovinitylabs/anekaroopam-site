@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireAdminIngest } from "@/lib/archive/admin-ingest-response";
 import {
-  loadAccessionDraft,
-  updateAccessionDraft,
-} from "@/lib/archive/draft-store";
-import { loadArchiveEntry } from "@/lib/archive/load-entry";
+  githubStorageAvailable,
+  loadAccessionDraftDurable,
+  loadArchiveEntryDurable,
+  updateAccessionDraftOnGitHub,
+} from "@/lib/archive/draft-github-store";
+import { updateAccessionDraft } from "@/lib/archive/draft-store";
+import { githubErrorResponse } from "@/lib/archive/github-admin-response";
 import { AccessionDraftUpdateSchema } from "@/lib/archive/schema";
 
 export const runtime = "nodejs";
@@ -16,16 +19,23 @@ export async function GET(request: Request, { params }: Context) {
   if (denied) return denied;
 
   const { draftId } = await params;
-  const draft = await loadAccessionDraft(draftId);
-  if (!draft) {
-    return NextResponse.json({ error: "Draft not found" }, { status: 404 });
-  }
+  try {
+    const draft = await loadAccessionDraftDurable(draftId);
+    if (!draft) {
+      return NextResponse.json({ error: "Draft not found" }, { status: 404 });
+    }
 
-  const archiveEntry = await loadArchiveEntry(draft.slug);
-  return NextResponse.json({
-    draft,
-    archiveStatus: archiveEntry?.status ?? null,
-  });
+    const archiveEntry = await loadArchiveEntryDurable(draft.slug);
+    return NextResponse.json({
+      draft,
+      archiveStatus: archiveEntry?.status ?? null,
+    });
+  } catch (e) {
+    const github = githubErrorResponse(e);
+    if (github) return github;
+    const message = e instanceof Error ? e.message : "Draft load failed";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
 
 export async function PATCH(request: Request, { params }: Context) {
@@ -36,9 +46,13 @@ export async function PATCH(request: Request, { params }: Context) {
     const { draftId } = await params;
     const body = (await request.json()) as unknown;
     const patch = AccessionDraftUpdateSchema.parse(body);
-    const draft = await updateAccessionDraft(draftId, patch);
+    const draft = githubStorageAvailable()
+      ? await updateAccessionDraftOnGitHub(draftId, patch)
+      : await updateAccessionDraft(draftId, patch);
     return NextResponse.json({ draft });
   } catch (e) {
+    const github = githubErrorResponse(e);
+    if (github) return github;
     const message = e instanceof Error ? e.message : "Draft update failed";
     return NextResponse.json({ error: message }, { status: 500 });
   }

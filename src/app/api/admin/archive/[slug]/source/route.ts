@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
 import { requireAdminIngest } from "@/lib/archive/admin-ingest-response";
 import {
+  githubStorageAvailable,
+  storeArchiveSourceOnGitHub,
+} from "@/lib/archive/draft-github-store";
+import {
   ArchiveSourceImmutableError,
   storeArchiveSource,
 } from "@/lib/archive/draft-store";
+import { githubErrorResponse } from "@/lib/archive/github-admin-response";
 
 export const runtime = "nodejs";
 
@@ -29,9 +34,13 @@ export async function POST(request: Request, { params }: Context) {
       return NextResponse.json({ error: "Missing source file" }, { status: 400 });
     }
 
-    const entry = await storeArchiveSource(slug, source);
+    const entry = githubStorageAvailable()
+      ? await storeArchiveSourceOnGitHub(slug, source)
+      : await storeArchiveSource(slug, source);
     return NextResponse.json({ entry });
   } catch (e) {
+    const github = githubErrorResponse(e);
+    if (github) return github;
     const message = e instanceof Error ? e.message : "Source deposit failed";
     return NextResponse.json(
       { error: message },

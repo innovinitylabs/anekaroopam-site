@@ -8,6 +8,11 @@ import {
   buildArchiveVisibilityUpdate,
   saveArchiveEntry,
 } from "./draft-store.ts";
+import {
+  ensureTestAdminSessionSecret,
+  mintTestAdminBearer,
+  testAdminAuthHeaders,
+} from "./admin-test-auth.ts";
 import { getAllArchiveEntries, loadArchiveEntry } from "./load-entry.ts";
 import {
   contentArchiveDir,
@@ -176,6 +181,7 @@ describe("visibility GitHub synchronization", () => {
   function enableAdminAndGitHub(): void {
     process.env.ADMIN_INGEST_ENABLED = "true";
     process.env.ADMIN_INGEST_SECRET = "test-secret";
+    ensureTestAdminSessionSecret();
     process.env.GITHUB_ARCHIVE_TOKEN = "gh-token";
     process.env.GITHUB_ARCHIVE_OWNER = "owner";
     process.env.GITHUB_ARCHIVE_REPO = "repo";
@@ -198,7 +204,7 @@ describe("visibility GitHub synchronization", () => {
       new Request(`http://localhost/api/admin/archive/${slug}/visibility`, {
         method: "PATCH",
         headers: {
-          Authorization: "Bearer test-secret",
+          Authorization: `Bearer ${mintTestAdminBearer()}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ status }),
@@ -409,6 +415,7 @@ describe("visibility GitHub synchronization", () => {
     delete process.env.GITHUB_ARCHIVE_REPO;
     process.env.ADMIN_INGEST_ENABLED = "true";
     process.env.ADMIN_INGEST_SECRET = "test-secret";
+    ensureTestAdminSessionSecret();
 
     const slug = "2026-01-01-vis-local-only";
     await seedEntry(slug);

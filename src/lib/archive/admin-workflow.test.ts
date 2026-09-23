@@ -16,6 +16,11 @@ import {
   canonicalPublicDerivativeFilenames,
 } from "./public-derivative-export.ts";
 import {
+  ensureTestAdminSessionSecret,
+  mintTestAdminBearer,
+  testAdminAuthHeaders,
+} from "./admin-test-auth.ts";
+import {
   contentArchiveSourceDir,
   publicArchiveDir,
 } from "./paths.ts";
@@ -220,6 +225,7 @@ describe("GET /api/admin/drafts/[draftId] archiveStatus enrichment", () => {
     process.chdir(tmpRoot);
     process.env.ADMIN_INGEST_ENABLED = "true";
     process.env.ADMIN_INGEST_SECRET = "test-secret";
+    ensureTestAdminSessionSecret();
   });
 
   after(async () => {
@@ -272,7 +278,7 @@ describe("GET /api/admin/drafts/[draftId] archiveStatus enrichment", () => {
     const GET = await loadDraftGet();
     const res = await GET(
       new Request(`http://localhost/api/admin/drafts/${draft.draftId}`, {
-        headers: { Authorization: "Bearer test-secret" },
+        headers: { Authorization: `Bearer ${mintTestAdminBearer()}` },
       }),
       { params: Promise.resolve({ draftId: draft.draftId }) },
     );
@@ -294,7 +300,7 @@ describe("GET /api/admin/drafts/[draftId] archiveStatus enrichment", () => {
     const GET = await loadDraftGet();
     const res = await GET(
       new Request("http://localhost/api/admin/drafts/draft-2026-0099", {
-        headers: { Authorization: "Bearer test-secret" },
+        headers: { Authorization: `Bearer ${mintTestAdminBearer()}` },
       }),
       { params: Promise.resolve({ draftId: "draft-2026-0099" }) },
     );
@@ -387,6 +393,7 @@ describe("POST /api/admin/archive/publish for generated list action contract", (
   it("promotes generated archive to published on success", async () => {
     process.env.ADMIN_INGEST_ENABLED = "true";
     process.env.ADMIN_INGEST_SECRET = "test-secret";
+    ensureTestAdminSessionSecret();
     process.env.GITHUB_ARCHIVE_TOKEN = "gh-token";
     process.env.GITHUB_ARCHIVE_OWNER = "owner";
     process.env.GITHUB_ARCHIVE_REPO = "repo";
@@ -405,7 +412,7 @@ describe("POST /api/admin/archive/publish for generated list action contract", (
       new Request("http://localhost/api/admin/archive/publish", {
         method: "POST",
         headers: {
-          Authorization: "Bearer test-secret",
+          Authorization: `Bearer ${mintTestAdminBearer()}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ slug }),
@@ -421,6 +428,7 @@ describe("POST /api/admin/archive/publish for generated list action contract", (
   it("returns error for hidden archive without promoting lifecycle", async () => {
     process.env.ADMIN_INGEST_ENABLED = "true";
     process.env.ADMIN_INGEST_SECRET = "test-secret";
+    ensureTestAdminSessionSecret();
     process.env.GITHUB_ARCHIVE_TOKEN = "gh-token";
     process.env.GITHUB_ARCHIVE_OWNER = "owner";
     process.env.GITHUB_ARCHIVE_REPO = "repo";
@@ -446,7 +454,7 @@ describe("POST /api/admin/archive/publish for generated list action contract", (
       new Request("http://localhost/api/admin/archive/publish", {
         method: "POST",
         headers: {
-          Authorization: "Bearer test-secret",
+          Authorization: `Bearer ${mintTestAdminBearer()}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ slug }),

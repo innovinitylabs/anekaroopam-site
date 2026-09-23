@@ -1,5 +1,32 @@
 import { timingSafeEqual } from "node:crypto";
+import {
+  ADMIN_SESSION_COOKIE,
+  ADMIN_SESSION_MAX_AGE_SECONDS,
+  canUseSecretFallback,
+  getAdminSessionSecret,
+  getGitHubOAuthConfig,
+  verifyAdminSessionToken,
+  type AdminSessionPayload,
+} from "./admin-session";
 
+export {
+  ADMIN_SESSION_COOKIE,
+  ADMIN_INGEST_COOKIE_LEGACY,
+  ADMIN_OAUTH_STATE_COOKIE,
+  ADMIN_SESSION_MAX_AGE_SECONDS,
+  adminSessionCookieOptions,
+  canUseSecretFallback,
+  getAdminSessionSecret,
+  getGitHubOAuthConfig,
+  isAdminSecretFallbackAllowed,
+  isGitHubUserAllowlisted,
+  parseAdminAllowlist,
+  signAdminSession,
+  verifyAdminSessionToken,
+  createOAuthState,
+} from "./admin-session";
+
+/** @deprecated Legacy cookie name — cleared on logout only. */
 export const ADMIN_INGEST_COOKIE = "anek_admin_ingest";
 
 export type AdminAuthFailure = {
@@ -16,7 +43,7 @@ export function getAdminIngestSecret(): string | null {
   return secret ? secret : null;
 }
 
-function secretsEqual(provided: string, expected: string): boolean {
+export function secretsEqual(provided: string, expected: string): boolean {
   const a = Buffer.from(provided);
   const b = Buffer.from(expected);
   if (a.length !== b.length) return false;
@@ -30,50 +57,58 @@ function bearerToken(request: Request): string | null {
   return match?.[1]?.trim() || null;
 }
 
-function cookieToken(request: Request): string | null {
+function readCookie(request: Request, name: string): string | null {
   const raw = request.headers.get("cookie");
   if (!raw) return null;
   for (const part of raw.split(";")) {
-    const [name, ...rest] = part.trim().split("=");
-    if (name === ADMIN_INGEST_COOKIE) {
+    const [cookieName, ...rest] = part.trim().split("=");
+    if (cookieName === name) {
       return decodeURIComponent(rest.join("="));
     }
   }
   return null;
 }
 
-export function readPresentedAdminSecret(request: Request): string | null {
-  return bearerToken(request) ?? cookieToken(request);
+export function readAdminSessionToken(request: Request): string | null {
+  return bearerToken(request) ?? readCookie(request, ADMIN_SESSION_COOKIE);
 }
 
-export function isPresentedAdminSecretValid(request: Request): boolean {
-  const expected = getAdminIngestSecret();
-  if (!expected) return false;
-  const presented = readPresentedAdminSecret(request);
-  if (!presented) return false;
-  return secretsEqual(presented, expected);
+export function readAdminSession(
+  request: Request,
+): AdminSessionPayload | null {
+  const token = readAdminSessionToken(request);
+  if (!token) return null;
+  return verifyAdminSessionToken(token);
 }
 
-/** Pure auth check without Next.js imports (fail-closed). */
+/**
+ * Fail-closed admin auth.
+ * Requires ADMIN_INGEST_ENABLED and a valid signed session (OAuth or secret fallback).
+ * ADMIN_SESSION_SECRET must be configured to verify sessions.
+ */
 export function checkAdminIngest(request: Request): AdminAuthFailure | null {
   if (!isAdminIngestEnabled()) {
     return { status: 403, error: "Admin ingestion disabled" };
   }
-  if (!getAdminIngestSecret()) {
-    return { status: 403, error: "Admin ingestion secret not configured" };
+  if (!getAdminSessionSecret()) {
+    return { status: 403, error: "Admin session secret not configured" };
   }
-  if (!isPresentedAdminSecretValid(request)) {
+  const session = readAdminSession(request);
+  if (!session) {
     return { status: 401, error: "Admin authentication required" };
   }
   return null;
 }
 
-export function adminSessionCookieOptions(maxAgeSeconds: number) {
+/** Auth mode available to the unlock UI (no secrets leaked). */
+export function getAdminAuthModes(): {
+  oauthConfigured: boolean;
+  secretFallbackAvailable: boolean;
+} {
   return {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax" as const,
-    path: "/",
-    maxAge: maxAgeSeconds,
+    oauthConfigured: Boolean(getGitHubOAuthConfig()),
+    secretFallbackAvailable: canUseSecretFallback(),
   };
 }
+
+export { ADMIN_SESSION_MAX_AGE_SECONDS as SESSION_MAX_AGE };

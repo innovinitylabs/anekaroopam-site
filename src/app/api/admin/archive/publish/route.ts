@@ -1,17 +1,35 @@
 import { NextResponse } from "next/server";
 import { requireAdminIngest } from "@/lib/archive/admin-ingest-response";
-import { loadArchiveEntry } from "@/lib/archive/load-entry";
-import { markArchiveRecordPublished, updateDraftStatus } from "@/lib/archive/draft-store";
+import {
+  loadArchiveEntryDurable,
+  markArchiveRecordPublishedOnGitHub,
+  updateDraftStatusOnGitHub,
+} from "@/lib/archive/draft-github-store";
+import {
+  markArchiveRecordPublished,
+  updateDraftStatus,
+} from "@/lib/archive/draft-store";
+import { githubErrorResponse } from "@/lib/archive/github-admin-response";
 import { assertArchivePublishable } from "@/lib/archive/visibility";
 import {
   ArchiveSyncIncompleteError,
   ArchiveSyncNotFoundError,
   publishArchiveEntryToGitHub,
   validateArchiveBundleForSync,
+  validateArchiveBundleOnGitHub,
 } from "@/lib/github/publish-entry";
 import { getGitHubArchiveConfig } from "@/lib/github/types";
 
 export const runtime = "nodejs";
+
+async function githubBundleReady(slug: string): Promise<boolean> {
+  try {
+    await validateArchiveBundleOnGitHub(slug);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export async function POST(request: Request) {
   const denied = requireAdminIngest(request);
@@ -34,21 +52,50 @@ export async function POST(request: Request) {
     }
 
     const slug = body.slug.trim();
-    const entry = await loadArchiveEntry(slug);
+    const entry = await loadArchiveEntryDurable(slug);
     if (!entry) {
       return NextResponse.json({ error: "Archive entry not found" }, { status: 404 });
     }
 
     assertArchivePublishable(entry);
-    await validateArchiveBundleForSync(entry.slug);
 
-    const result = await publishArchiveEntryToGitHub(entry.slug);
-    await markArchiveRecordPublished(entry.slug);
-    if (body.draftId) {
-      await updateDraftStatus(body.draftId, "published");
+    let commitSha: string | undefined;
+    let paths: string[] = [];
+
+    if (await githubBundleReady(entry.slug)) {
+      const published = await markArchiveRecordPublishedOnGitHub(entry.slug);
+      commitSha = published.commitSha || undefined;
+      paths = [`content/archive/${published.entry.slug}/metadata.json`];
+      try {
+        await markArchiveRecordPublished(entry.slug);
+      } catch {
+        /* local mirror optional once GitHub is authoritative */
+      }
+    } else {
+      await validateArchiveBundleForSync(entry.slug);
+      const result = await publishArchiveEntryToGitHub(entry.slug);
+      commitSha = result.commitSha;
+      paths = result.paths;
+      await markArchiveRecordPublished(entry.slug);
+      try {
+        await markArchiveRecordPublishedOnGitHub(entry.slug);
+      } catch {
+        /* metadata tip update best-effort after bundle push */
+      }
     }
-    return NextResponse.json(result);
+
+    if (body.draftId) {
+      try {
+        await updateDraftStatusOnGitHub(body.draftId, "published");
+      } catch {
+        await updateDraftStatus(body.draftId, "published");
+      }
+    }
+
+    return NextResponse.json({ commitSha, paths });
   } catch (e) {
+    const github = githubErrorResponse(e);
+    if (github) return github;
     if (e instanceof ArchiveSyncNotFoundError) {
       return NextResponse.json({ error: e.message }, { status: 404 });
     }

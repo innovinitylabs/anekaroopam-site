@@ -5,6 +5,11 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { after, afterEach, before, describe, it } from "node:test";
 import type { ArchiveImageBuffers } from "./image-pipeline.ts";
+import {
+  ensureTestAdminSessionSecret,
+  mintTestAdminBearer,
+  testAdminAuthHeaders,
+} from "./admin-test-auth.ts";
 import { setArchiveImagePipelineForTests } from "./image-pipeline.ts";
 import { loadArchiveEntry } from "./load-entry.ts";
 import {
@@ -406,6 +411,7 @@ describe("POST /api/admin/archive/[slug]/sync route", () => {
   it("returns 503 when GitHub is not configured", async () => {
     process.env.ADMIN_INGEST_ENABLED = "true";
     process.env.ADMIN_INGEST_SECRET = "test-secret";
+    ensureTestAdminSessionSecret();
     delete process.env.GITHUB_ARCHIVE_TOKEN;
     delete process.env.GITHUB_ARCHIVE_OWNER;
     delete process.env.GITHUB_ARCHIVE_REPO;
@@ -414,7 +420,7 @@ describe("POST /api/admin/archive/[slug]/sync route", () => {
     const res = await POST(
       new Request("http://localhost/api/admin/archive/x/sync", {
         method: "POST",
-        headers: { Authorization: "Bearer test-secret" },
+        headers: { Authorization: `Bearer ${mintTestAdminBearer()}` },
       }),
       { params: Promise.resolve({ slug: "some-slug" }) },
     );
@@ -424,6 +430,7 @@ describe("POST /api/admin/archive/[slug]/sync route", () => {
   it("returns 404 for missing archive via route", async () => {
     process.env.ADMIN_INGEST_ENABLED = "true";
     process.env.ADMIN_INGEST_SECRET = "test-secret";
+    ensureTestAdminSessionSecret();
     process.env.GITHUB_ARCHIVE_TOKEN = "gh-token";
     process.env.GITHUB_ARCHIVE_OWNER = "owner";
     process.env.GITHUB_ARCHIVE_REPO = "repo";
@@ -432,7 +439,7 @@ describe("POST /api/admin/archive/[slug]/sync route", () => {
     const res = await POST(
       new Request("http://localhost/api/admin/archive/x/sync", {
         method: "POST",
-        headers: { Authorization: "Bearer test-secret" },
+        headers: { Authorization: `Bearer ${mintTestAdminBearer()}` },
       }),
       { params: Promise.resolve({ slug: "2026-01-01-route-missing" }) },
     );
@@ -442,6 +449,7 @@ describe("POST /api/admin/archive/[slug]/sync route", () => {
   it("returns 400 for reserved slug via route", async () => {
     process.env.ADMIN_INGEST_ENABLED = "true";
     process.env.ADMIN_INGEST_SECRET = "test-secret";
+    ensureTestAdminSessionSecret();
     process.env.GITHUB_ARCHIVE_TOKEN = "gh-token";
     process.env.GITHUB_ARCHIVE_OWNER = "owner";
     process.env.GITHUB_ARCHIVE_REPO = "repo";
@@ -450,7 +458,7 @@ describe("POST /api/admin/archive/[slug]/sync route", () => {
     const res = await POST(
       new Request("http://localhost/api/admin/archive/admin/sync", {
         method: "POST",
-        headers: { Authorization: "Bearer test-secret" },
+        headers: { Authorization: `Bearer ${mintTestAdminBearer()}` },
       }),
       { params: Promise.resolve({ slug: "admin" }) },
     );

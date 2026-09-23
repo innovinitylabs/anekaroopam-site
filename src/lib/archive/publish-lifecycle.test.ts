@@ -5,6 +5,11 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { after, afterEach, before, describe, it } from "node:test";
 import type { ArchiveImageBuffers } from "./image-pipeline.ts";
+import {
+  ensureTestAdminSessionSecret,
+  mintTestAdminBearer,
+  testAdminAuthHeaders,
+} from "./admin-test-auth.ts";
 import { loadArchiveEntry } from "./load-entry.ts";
 import {
   contentArchiveDir,
@@ -184,6 +189,7 @@ describe("POST /api/admin/archive/publish lifecycle", () => {
   function enableAdminAndGitHub(): void {
     process.env.ADMIN_INGEST_ENABLED = "true";
     process.env.ADMIN_INGEST_SECRET = "test-secret";
+    ensureTestAdminSessionSecret();
     process.env.GITHUB_ARCHIVE_TOKEN = "gh-token";
     process.env.GITHUB_ARCHIVE_OWNER = "owner";
     process.env.GITHUB_ARCHIVE_REPO = "repo";
@@ -215,7 +221,7 @@ describe("POST /api/admin/archive/publish lifecycle", () => {
       new Request("http://localhost/api/admin/archive/publish", {
         method: "POST",
         headers: {
-          Authorization: "Bearer test-secret",
+          Authorization: `Bearer ${mintTestAdminBearer()}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ slug, draftId }),

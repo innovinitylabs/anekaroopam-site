@@ -1,7 +1,21 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import path from "path";
 
+const repoRootStore = new AsyncLocalStorage<string>();
+
+export function getRepoRoot(): string {
+  return repoRootStore.getStore() ?? process.cwd();
+}
+
+export function runWithRepoRoot<T>(
+  root: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return repoRootStore.run(root, fn);
+}
+
 function repoRoot(): string {
-  return process.cwd();
+  return getRepoRoot();
 }
 
 export function contentArchiveDir(slug: string): string {

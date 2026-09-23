@@ -4,11 +4,11 @@ import {
   ArchiveEntrySchema,
   type ArchiveEntry,
 } from "./schema";
-import { contentArchiveDir } from "./paths";
+import { contentArchiveDir, getRepoRoot } from "./paths";
 import { isPublicArchiveEntry } from "./visibility";
 
 function archiveRoot(): string {
-  return path.join(process.cwd(), "content", "archive");
+  return path.join(getRepoRoot(), "content", "archive");
 }
 
 export async function listArchiveSlugs(): Promise<string[]> {

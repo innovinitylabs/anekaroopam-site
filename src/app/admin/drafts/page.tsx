@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { ArchiveEntryActions } from "@/components/admin/ArchiveEntryActions";
 import { DraftDeleteButton } from "@/components/admin/DraftDeleteButton";
+import { draftSourcePublicLabel } from "@/lib/archive/draft-store";
 import {
-  draftSourcePublicLabel,
-  listAccessionDrafts,
-} from "@/lib/archive/draft-store";
+  listAccessionDraftsDurable,
+  listArchiveEntriesFromGitHub,
+  githubStorageAvailable,
+} from "@/lib/archive/draft-github-store";
 import { getAllArchiveEntries } from "@/lib/archive/load-entry";
 import type { ArchiveEntry, ProvenanceRecord } from "@/lib/archive/schema";
 
@@ -20,8 +22,17 @@ function hasOriginalSource(entry: ArchiveEntry): boolean {
 }
 
 export default async function AdminDraftsPage() {
-  const drafts = await listAccessionDrafts();
-  const entries = await getAllArchiveEntries({ includeHidden: true });
+  const drafts = await listAccessionDraftsDurable();
+  let entries: ArchiveEntry[];
+  if (githubStorageAvailable()) {
+    try {
+      entries = await listArchiveEntriesFromGitHub();
+    } catch {
+      entries = await getAllArchiveEntries({ includeHidden: true });
+    }
+  } else {
+    entries = await getAllArchiveEntries({ includeHidden: true });
+  }
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-12">

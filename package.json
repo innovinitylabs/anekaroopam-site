@@ -7,7 +7,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test src/lib/archive/*.test.ts"
+    "test": "tsx --test src/lib/archive/*.test.ts src/lib/github/*.test.ts"
   },
   "dependencies": {
     "@jsquash/avif": "^2.1.1",
