@@ -8,6 +8,7 @@ import {
   getGitHubOAuthConfig,
   isAdminIngestEnabled,
   isGitHubUserAllowlisted,
+  parseAdminAllowlist,
   signAdminSession,
 } from "@/lib/archive/admin-guard";
 import { getAdminSessionSecret } from "@/lib/archive/admin-session";
@@ -32,6 +33,20 @@ function resolveCallbackUrl(request: Request, configured: string | null): string
   return `${url.origin}/api/admin/auth/callback`;
 }
 
+/** TEMPORARY diagnostics — remove after Preview OAuth allowlist investigation. */
+function logOAuthDiag(
+  reason: string,
+  details: Record<string, string | number | boolean | string[] | null | undefined> = {},
+): void {
+  console.info("[admin-oauth-diag]", {
+    reason,
+    hasOauthConfig: Boolean(getGitHubOAuthConfig()),
+    hasSessionSecret: Boolean(getAdminSessionSecret()),
+    allowlistConfigured: Boolean(process.env.GITHUB_ADMIN_ALLOWLIST?.trim()),
+    ...details,
+  });
+}
+
 function clearOAuthState(response: NextResponse): void {
   response.cookies.set(ADMIN_OAUTH_STATE_COOKIE, "", {
     ...adminSessionCookieOptions(0),
@@ -50,11 +65,16 @@ export async function GET(request: Request) {
   const origin = url.origin;
 
   if (!isAdminIngestEnabled()) {
+    logOAuthDiag("admin_ingest_disabled");
     return NextResponse.redirect(`${origin}/admin/unauthorized`, 302);
   }
 
   const oauth = getGitHubOAuthConfig();
   if (!oauth || !getAdminSessionSecret()) {
+    logOAuthDiag("missing_oauth_or_session_secret", {
+      hasOauthConfig: Boolean(oauth),
+      hasSessionSecret: Boolean(getAdminSessionSecret()),
+    });
     return NextResponse.redirect(`${origin}/admin/unauthorized`, 302);
   }
 
@@ -63,6 +83,12 @@ export async function GET(request: Request) {
   const expectedState = readCookie(request, ADMIN_OAUTH_STATE_COOKIE);
 
   if (!code || !state || !expectedState || state !== expectedState) {
+    logOAuthDiag("invalid_oauth_state_or_code", {
+      hasCode: Boolean(code),
+      hasState: Boolean(state),
+      hasExpectedStateCookie: Boolean(expectedState),
+      stateMatches: Boolean(state && expectedState && state === expectedState),
+    });
     return unauthorizedRedirect(origin);
   }
 
@@ -88,10 +114,15 @@ export async function GET(request: Request) {
       error?: string;
     };
     if (!tokenRes.ok || !tokenData.access_token) {
+      logOAuthDiag("token_exchange_failed", {
+        httpOk: tokenRes.ok,
+        githubError: tokenData.error ?? null,
+      });
       return unauthorizedRedirect(origin);
     }
     accessToken = tokenData.access_token;
   } catch {
+    logOAuthDiag("token_exchange_exception");
     return unauthorizedRedirect(origin);
   }
 
@@ -105,18 +136,33 @@ export async function GET(request: Request) {
       },
     });
     if (!userRes.ok) {
+      logOAuthDiag("github_user_fetch_failed", { status: userRes.status });
       return unauthorizedRedirect(origin);
     }
     const userData = (await userRes.json()) as { id?: number; login?: string };
     if (typeof userData.id !== "number" || typeof userData.login !== "string") {
+      logOAuthDiag("github_user_payload_invalid");
       return unauthorizedRedirect(origin);
     }
     user = { id: userData.id, login: userData.login };
   } catch {
+    logOAuthDiag("github_user_fetch_exception");
     return unauthorizedRedirect(origin);
   }
 
-  if (!isGitHubUserAllowlisted(user)) {
+  const { logins, ids } = parseAdminAllowlist();
+  const loginNormalized = user.login.toLowerCase();
+  const allowlisted = isGitHubUserAllowlisted(user);
+  logOAuthDiag(allowlisted ? "allowlist_accepted" : "allowlist_rejected", {
+    githubLogin: user.login,
+    githubLoginNormalized: loginNormalized,
+    githubId: user.id,
+    allowlistLogins: [...logins],
+    allowlistIds: [...ids],
+    allowlisted,
+  });
+
+  if (!allowlisted) {
     return unauthorizedRedirect(origin);
   }
 

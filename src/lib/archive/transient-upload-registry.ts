@@ -47,6 +47,33 @@ export function registerTransientUpload(
   return entry;
 }
 
+/**
+ * Move a browser File from one registry key to another without recreating
+ * the object URL (preserves preview). Removes the stale key.
+ */
+export function remapTransientUpload(
+  fromDraftId: string,
+  toDraftId: string,
+): TransientUploadEntry | null {
+  if (fromDraftId === toDraftId) {
+    return getTransientUpload(toDraftId);
+  }
+  const existing = registry.get(fromDraftId);
+  if (!existing) return getTransientUpload(toDraftId);
+
+  registry.delete(fromDraftId);
+  const previous = registry.get(toDraftId);
+  if (previous && previous.objectUrl !== existing.objectUrl) {
+    URL.revokeObjectURL(previous.objectUrl);
+  }
+  const remapped: TransientUploadEntry = {
+    ...existing,
+    draftId: toDraftId,
+  };
+  registry.set(toDraftId, remapped);
+  return remapped;
+}
+
 export function replaceTransientUpload(
   draftId: string,
   file: File,

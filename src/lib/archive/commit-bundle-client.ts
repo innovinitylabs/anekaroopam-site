@@ -4,12 +4,19 @@ import { adminFetch } from "@/components/admin/admin-fetch";
 import type { BrowserDerivativeBlob } from "@/lib/archive/browser-image-pipeline";
 import type { MetadataPackageFile } from "@/lib/archive/browser-metadata-package";
 
+export interface CommitBundleBinaryFile {
+  path: string;
+  blob: Blob;
+  mimeType?: string;
+}
+
 export async function postCommitBundle(input: {
   slug: string;
   draftId?: string;
   message?: string;
   textFiles: MetadataPackageFile[];
   derivatives: BrowserDerivativeBlob[];
+  binaryFiles?: CommitBundleBinaryFile[];
 }): Promise<{ commitSha: string; paths: string[] }> {
   const form = new FormData();
   form.set("slug", input.slug);
@@ -26,6 +33,15 @@ export async function postCommitBundle(input: {
       "file",
       new File([derivative.blob], repoPath, {
         type: derivative.mimeType || derivative.blob.type || "application/octet-stream",
+      }),
+    );
+  }
+
+  for (const binary of input.binaryFiles ?? []) {
+    form.append(
+      "file",
+      new File([binary.blob], binary.path, {
+        type: binary.mimeType || binary.blob.type || "application/octet-stream",
       }),
     );
   }

@@ -25,22 +25,23 @@ import {
 import { saveIngestDraftSession } from "@/lib/export-engine/session";
 import { hydrateArtworkPreview } from "@/lib/export-engine/session-artwork";
 import {
+  commitBrowserDurableBundle,
+  revokePreparedPreview,
+  type LocalPreparedMaster,
+} from "@/lib/archive/browser-durable-commit";
+import {
   buildArchiveSlug,
   emptyProvenance,
   normalizeArchiveSlug,
   type AccessionDraft,
-  type ArchiveEntry,
   type DraftStatus,
   type ProvenanceRecord,
 } from "@/lib/archive/schema";
 import {
-  runBrowserArchiveImagePipeline,
-} from "@/lib/archive/browser-image-pipeline";
-import { buildBrowserMetadataPackage } from "@/lib/archive/browser-metadata-package";
-import { postCommitBundle } from "@/lib/archive/commit-bundle-client";
-import {
   installUploadRegistryBridge,
   registerTransientUpload,
+  remapTransientUpload,
+  resolveFileFromAnyTab,
   resolveObjectUrlFromAnyTab,
   revokeTransientUpload,
 } from "@/lib/archive/transient-upload-registry";
@@ -66,15 +67,15 @@ type DraftResponse = {
 
 const STEP_TOOLTIPS: Record<StepId, string> = {
   Upload:
-    "Deposit the original master image into this draft's preserved source folder.",
+    "Select the original master. It stays in this browser tab until Commit; only a metadata draft is created.",
   Prepare:
-    "Normalize rotation and write an orientation-safe prepared master into working/.",
+    "Encode an orientation-safe prepared master locally in the browser. Commit only when you choose.",
   Orientation:
     "Define perceptual states, snap behavior, and the viewing background for export.",
   Metadata:
     "Edit accession title, date, process, and other archival metadata fields.",
   Generate:
-    "Build metadata, states, and public derivatives, then commit them to the archive source of truth.",
+    "Optional re-run of the browser Commit bundle, or local server generate when durable mode is off.",
   Publish:
     "Promote or sync the generated archive on GitHub when repository credentials are set.",
   Provenance:
@@ -150,6 +151,10 @@ export function IngestionWizard({
   const [syncUiState, setSyncUiState] = useState<SyncUiState>("idle");
   const [lastSyncCommitSha, setLastSyncCommitSha] = useState<string | null>(null);
   const [durableStorage, setDurableStorage] = useState(false);
+  const [preparedLocal, setPreparedLocal] = useState<LocalPreparedMaster | null>(
+    null,
+  );
+  const [committing, setCommitting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -187,7 +192,17 @@ export function IngestionWizard({
     uploadDraftId: draftId || "pending-draft",
   });
 
-  const applyDraft = useCallback((draft: AccessionDraft) => {
+  const applyDraft = useCallback((draft: AccessionDraft, file?: File | null) => {
+    const mappedFile =
+      file ??
+      resolveFileFromAnyTab(draft.draftId) ??
+      resolveFileFromAnyTab("pending-draft");
+    if (mappedFile) {
+      remapTransientUpload("pending-draft", draft.draftId);
+      if (!resolveFileFromAnyTab(draft.draftId)) {
+        registerTransientUpload(draft.draftId, mappedFile);
+      }
+    }
     const objectUrl = resolveObjectUrlFromAnyTab(draft.draftId);
     setDraftId(draft.draftId);
     setAccessionId(draft.accessionId);
@@ -196,6 +211,7 @@ export function IngestionWizard({
     setSlug(draft.slug);
     setSlugLocked(draft.slugLocked);
     setProvenance(draft.provenance);
+    if (mappedFile) setSourceFile(mappedFile);
     const draftArtwork = {
       ...draft.artwork,
       metadata: {
@@ -350,61 +366,147 @@ export function IngestionWizard({
 
   const handleSourceFile = useCallback(
     async (file: File) => {
-      const uploadKey = draftId || "pending-draft";
-      const entry = registerTransientUpload(uploadKey, file);
+      setError(null);
+      registerTransientUpload(draftId || "pending-draft", file);
       setSourceFile(file);
-      setArtwork((prev) =>
-        hydrateArtworkPreview(
+      revokePreparedPreview(preparedLocal);
+      setPreparedLocal(null);
+
+      const titleFromFile = file.name.replace(/\.[^.]+$/, "");
+      setArtwork((prev) => {
+        const entry = resolveObjectUrlFromAnyTab(draftId || "pending-draft");
+        return hydrateArtworkPreview(
           {
             ...prev,
             metadata: {
               ...prev.metadata,
               accessionId,
-              title:
-                prev.metadata.title ||
-                file.name.replace(/\.[^.]+$/, ""),
+              title: prev.metadata.title || titleFromFile,
             },
           },
-          entry.objectUrl,
-        ),
-      );
+          entry ?? URL.createObjectURL(file),
+        );
+      });
       setUploadInputKey((k) => k + 1);
-      const form = new FormData();
-      form.append("source", file);
 
-      const res = draftId
-        ? await adminFetch(
-            `/api/admin/drafts/${encodeURIComponent(draftId)}/source`,
-            { method: "POST", body: form },
-          )
-        : await adminFetch("/api/admin/drafts/from-source", {
+      try {
+        let nextDraft = currentDraft;
+        if (!draftId) {
+          const res = await adminFetch("/api/admin/drafts", {
             method: "POST",
-            body: form,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: titleFromFile }),
           });
+          const data = (await res.json()) as DraftResponse;
+          if (!res.ok || !data.draft) {
+            throw new Error(data.error ?? "Could not create metadata draft");
+          }
+          nextDraft = data.draft;
+        }
 
-      const data = (await res.json()) as DraftResponse;
-      if (!res.ok || !data.draft) {
-        setError(data.error ?? "Source could not be preserved");
-        return;
+        if (!nextDraft) {
+          throw new Error("Draft is not available");
+        }
+
+        remapTransientUpload("pending-draft", nextDraft.draftId);
+        registerTransientUpload(nextDraft.draftId, file);
+        applyDraft(nextDraft, file);
+        setStep("Prepare");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not start draft");
       }
-      applyDraft(data.draft);
-      setStep("Prepare");
     },
-    [accessionId, applyDraft, draftId],
+    [
+      accessionId,
+      applyDraft,
+      currentDraft,
+      draftId,
+      preparedLocal,
+    ],
   );
 
-  const resolveSourceBlob = useCallback(async (): Promise<Blob> => {
+  const resolveSourceBlob = useCallback(async (): Promise<File> => {
     if (sourceFile) return sourceFile;
+    const fromRegistry =
+      (draftId ? resolveFileFromAnyTab(draftId) : null) ??
+      resolveFileFromAnyTab("pending-draft");
+    if (fromRegistry) return fromRegistry;
     const objectUrl = draftId ? resolveObjectUrlFromAnyTab(draftId) : null;
     if (objectUrl) {
       const res = await fetch(objectUrl);
       if (!res.ok) throw new Error("Could not read browser source preview");
-      return res.blob();
+      const blob = await res.blob();
+      return new File([blob], "source.bin", {
+        type: blob.type || "application/octet-stream",
+      });
     }
     throw new Error(
-      "Source image is not available in this browser tab. Re-upload the master, then prepare/generate again.",
+      "Source image is not available in this browser tab. Re-select the master on Upload, then prepare/commit again.",
     );
   }, [draftId, sourceFile]);
+
+  const handlePreparedLocal = useCallback((next: LocalPreparedMaster) => {
+    setPreparedLocal((prev) => {
+      revokePreparedPreview(prev);
+      return next;
+    });
+    setError(null);
+  }, []);
+
+  const handleCommitPrepared = useCallback(async () => {
+    if (!draftId || !currentDraft) return;
+    setCommitting(true);
+    setError(null);
+    setResult(null);
+    try {
+      const saved = await saveDraft();
+      const draftForCommit = saved ?? currentDraft;
+      const file = await resolveSourceBlob();
+      if (!durableStorage) {
+        throw new Error(
+          "Durable GitHub storage is required for browser Commit. Use local Generate on non-durable environments.",
+        );
+      }
+      const committed = await commitBrowserDurableBundle({
+        draft: draftForCommit,
+        sourceFile: file,
+        prepared: preparedLocal,
+        isExistingArchive,
+        message: `archive: browser commit ${draftForCommit.slug}`,
+      });
+      setResult({
+        slug: committed.slug,
+        files: committed.files,
+        warnings: committed.warnings,
+      });
+      applyDraft(committed.draft, file);
+      setArchiveStatus(committed.archiveStatus);
+      setStatus("generated");
+      setLastSyncCommitSha(committed.commitSha);
+      if (deployUsesSync) {
+        setSyncUiState("local_changed");
+      } else if (isExistingArchive) {
+        setSyncUiState("publish_pending");
+      } else {
+        setSyncUiState("idle");
+      }
+      setStep("Publish");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Commit failed");
+    } finally {
+      setCommitting(false);
+    }
+  }, [
+    applyDraft,
+    currentDraft,
+    deployUsesSync,
+    draftId,
+    durableStorage,
+    isExistingArchive,
+    preparedLocal,
+    resolveSourceBlob,
+    saveDraft,
+  ]);
 
   const handleGenerate = async () => {
     if (!draftId) return;
@@ -422,61 +524,22 @@ export function IngestionWizard({
       }
 
       if (durableStorage) {
-        const sourceBlob = await resolveSourceBlob();
-        const images = await runBrowserArchiveImagePipeline(sourceBlob);
-
-        let existingEntry: ArchiveEntry | null = null;
-        if (isExistingArchive) {
-          const metaRes = await adminFetch(
-            `/api/admin/archive/${encodeURIComponent(draftForGenerate.slug)}/metadata`,
-          );
-          if (metaRes.ok) {
-            const metaData = (await metaRes.json()) as { entry?: ArchiveEntry };
-            existingEntry = metaData.entry ?? null;
-          }
-        }
-
-        const pack = buildBrowserMetadataPackage({
+        const file = await resolveSourceBlob();
+        const committed = await commitBrowserDurableBundle({
           draft: draftForGenerate,
-          existingEntry,
-          derivativeMetas: images.derivatives.map((d) => ({
-            filename: d.filename,
-            width: d.width,
-            height: d.height,
-            byteSize: d.blob.size,
-            mimeType: d.mimeType,
-          })),
+          sourceFile: file,
+          prepared: preparedLocal,
+          isExistingArchive,
+          message: `archive: browser generate ${draftForGenerate.slug}`,
         });
-
-        const committed = await postCommitBundle({
-          slug: pack.slug,
-          draftId: pack.draftId,
-          message: `archive: browser generate ${pack.slug}`,
-          textFiles: pack.files,
-          derivatives: images.derivatives,
-        });
-
-        const files = [
-          ...pack.files.map((f) => ({
-            path: f.path,
-            bytes: new TextEncoder().encode(f.content).byteLength,
-          })),
-          ...images.derivatives.map((d) => ({
-            path: `public/archive/${pack.slug}/${d.filename}`,
-            bytes: d.blob.size,
-          })),
-        ];
-
         setResult({
-          slug: pack.slug,
-          files,
-          warnings: [
-            ...pack.warnings,
-            `Committed ${committed.commitSha.slice(0, 7)} to GitHub tip. Public View may 404 until redeploy.`,
-          ],
+          slug: committed.slug,
+          files: committed.files,
+          warnings: committed.warnings,
         });
-        applyDraft(pack.draft);
-        setArchiveStatus(existingEntry?.status ?? "generated");
+        applyDraft(committed.draft, file);
+        setArchiveStatus(committed.archiveStatus);
+        setLastSyncCommitSha(committed.commitSha);
         if (deployUsesSync) {
           setSyncUiState("local_changed");
         } else if (isExistingArchive) {
@@ -489,8 +552,22 @@ export function IngestionWizard({
         return;
       }
 
+      // Local non-durable fallback: deposit source then server generate.
+      const file = await resolveSourceBlob();
+      const form = new FormData();
+      form.append("source", file);
+      const uploadRes = await adminFetch(
+        `/api/admin/drafts/${encodeURIComponent(draftId)}/source`,
+        { method: "POST", body: form },
+      );
+      const uploadData = (await uploadRes.json()) as DraftResponse;
+      if (!uploadRes.ok || !uploadData.draft) {
+        throw new Error(uploadData.error ?? "Source deposit failed");
+      }
+      applyDraft(uploadData.draft, file);
+
       const endpointKind = generateEndpointKind(
-        draftForGenerate,
+        uploadData.draft,
         draftId,
         archiveStatus,
       );
@@ -520,7 +597,7 @@ export function IngestionWizard({
       });
       const nextArchiveStatus: DraftStatus =
         deployUsesSync || isExistingArchive
-          ? (archiveStatus ?? draftForGenerate.status ?? "generated")
+          ? (archiveStatus ?? uploadData.draft.status ?? "generated")
           : "generated";
       setArchiveStatus(nextArchiveStatus);
       if (deployUsesSync) {
@@ -739,8 +816,9 @@ export function IngestionWizard({
             onImport={handleSourceFile}
           />
           <p className="text-[0.75rem] text-[var(--muted)]">
-            Deposit a high-resolution master for archival encoding. Source file is
-            preserved under the draft and mirrored in memory for browser preview.
+            Select a high-resolution master. The original stays in this browser tab
+            until you Commit after Prepare. A metadata-only draft is created so
+            edits can autosave — the image bytes are not uploaded on Select.
           </p>
           {sourceFile && (
             <p className="text-[0.75rem] text-[var(--muted)]">
@@ -756,15 +834,22 @@ export function IngestionWizard({
             2. Archival preparation
           </h2>
           <p className="text-[0.85rem] leading-relaxed text-[var(--muted)]">
-            Prepare runs inside this draft and writes canonical working files under
-            <code className="ml-1 text-[0.8rem]">content/drafts/{draftId}/working/</code>.
+            Prepare encodes an orientation-safe master locally in the browser.
+            {durableStorage
+              ? " Nothing is written to GitHub until you click Commit."
+              : " Local/dev fallback may deposit to disk only when you continue past Prepare."}
           </p>
           <EmbeddedPreparePanel
             draft={currentDraft}
             previewSrc={controller.artwork.imageSrc}
             sourceFile={sourceFile}
             durableStorage={durableStorage}
-            onPrepared={applyDraft}
+            prepared={preparedLocal}
+            onPreparedLocal={handlePreparedLocal}
+            onCommit={() => {
+              void handleCommitPrepared();
+            }}
+            committing={committing}
             onError={(message) => setError(message || null)}
           />
         </section>
@@ -818,22 +903,20 @@ export function IngestionWizard({
           <p className="text-[0.85rem] text-[var(--muted)]">
             {durableStorage
               ? isExistingArchive
-                ? "Browser-encodes the five public derivatives and commits metadata to the GitHub archive tip. Does not run server Sharp. Public View may 404 until redeploy."
-                : "Browser-encodes artwork/preview/social/thumb derivatives and commits metadata + draft status to the GitHub archive tip. Public pages stay deploy-bound until the next redeploy."
+                ? "Regenerate writing uses the same browser Commit path (five derivatives + metadata). Prefer Commit on Prepare for first-time deposits."
+                : "If you already Committed on Prepare, Publish is next. Generate here re-runs the browser Commit bundle from the in-tab source."
               : isExistingArchive
                 ? deployUsesSync
                   ? "Updates the local archive bundle from your edits. The deposited original source is preserved. This does not sync to GitHub until you explicitly sync."
                   : "Updates the local archive bundle from your edits. The deposited original source is preserved. Use Publish on the next step to promote lifecycle on GitHub."
-                : "Writes the archive bundle locally: metadata, states, notes, perception.html, public derivatives, original source/, and prepared/. Marks the record generated. This is not a GitHub publish."}
+                : "Local fallback deposits the browser source then runs server generate. Durable Preview should Commit from Prepare instead."}
           </p>
           {durableStorage && (
             <p className="border border-amber-900/40 bg-amber-950/20 px-3 py-2 text-[0.72rem] text-amber-100/90">
-              Incomplete browser MVP package: writes metadata, states, notes, and five
-              public derivatives to GitHub. Does not write perception.html or
-              manifest.json. Mint-package export is excluded until a full regenerate.
-              Public View may 404 until redeploy. Preview checklist: OAuth login,
-              allowlist deny page, browser generate to GitHub tip, refresh admin,
-              visibility/publish via existing routes.
+              Browser MVP: Commit writes metadata, states, notes, five public
+              derivatives, draft source, and prepared master. Omits perception.html
+              and manifest.json (mint-package excluded until full regenerate). Public
+              View may 404 until redeploy.
             </p>
           )}
           <button
