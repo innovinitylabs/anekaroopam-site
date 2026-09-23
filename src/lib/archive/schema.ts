@@ -162,6 +162,27 @@ export const ArchiveExportSettingsSchema = z.object({
   preset: z.enum(["archival", "mint-optimized", "collector-lightweight"]).default("archival"),
 });
 
+export const ArchiveMediaObjectSchema = z.object({
+  key: z.string().min(1),
+  mimeType: z.string().min(1),
+  byteSize: z.number().nonnegative(),
+  width: z.number().positive().optional(),
+  height: z.number().positive().optional(),
+  sha256: z.string().optional(),
+  role: z.string().optional(),
+});
+
+/** Additive R2 media block. Existing FS entries omit this field. */
+export const ArchiveMediaSchema = z.object({
+  schemaVersion: z.literal(1),
+  storage: z.literal("r2"),
+  accessionId: z.string().min(1),
+  revision: z.number().int().positive(),
+  original: ArchiveMediaObjectSchema,
+  prepared: ArchiveMediaObjectSchema.optional(),
+  derivatives: z.array(ArchiveMediaObjectSchema).default([]),
+});
+
 export const ArchiveEntrySchema = z.object({
   version: z.literal(ARCHIVE_VERSION),
   accessionId: z.string().optional(),
@@ -169,6 +190,7 @@ export const ArchiveEntrySchema = z.object({
   status: DraftStatusSchema.default("published"),
   metadata: ArchiveMetadataFieldsSchema,
   assets: ArchiveAssetsSchema,
+  media: ArchiveMediaSchema.optional(),
   derivatives: z.array(DerivativeAssetSchema).default([]),
   exports: z.array(ExportInventoryItemSchema).default([]),
   source: z.lazy(() => DraftSourceSchema).optional(),
@@ -315,6 +337,8 @@ export type DraftProcessing = z.infer<typeof DraftProcessingSchema>;
 export type ArchiveHash = z.infer<typeof ArchiveHashSchema>;
 export type ExportInventoryItem = z.infer<typeof ExportInventoryItemSchema>;
 export type ArchiveAssets = z.infer<typeof ArchiveAssetsSchema>;
+export type ArchiveMediaObject = z.infer<typeof ArchiveMediaObjectSchema>;
+export type ArchiveMedia = z.infer<typeof ArchiveMediaSchema>;
 export type ArchivePerception = z.infer<typeof ArchivePerceptionSchema>;
 export type ArchiveEntry = z.infer<typeof ArchiveEntrySchema>;
 export type ArchiveStatesFile = z.infer<typeof ArchiveStatesFileSchema>;
@@ -341,6 +365,29 @@ export function defaultArchiveAssets(slug: string): ArchiveAssets {
     social: `${base}/social.jpg`,
     socialJpg: `${base}/social.jpg`,
     thumb: `${base}/thumb.jpg`,
+  };
+}
+
+/** Absolute public CDN URLs for an R2 revision (no trailing slash on base). */
+export function r2ArchiveAssets(
+  publicBaseUrl: string,
+  keys: {
+    artwork: string;
+    preview: string;
+    previewWebp: string;
+    social: string;
+    thumb: string;
+  },
+): ArchiveAssets {
+  const base = publicBaseUrl.replace(/\/$/, "");
+  const url = (key: string) => `${base}/${key.replace(/^\//, "")}`;
+  return {
+    artwork: url(keys.artwork),
+    preview: url(keys.preview),
+    previewWebp: url(keys.previewWebp),
+    social: url(keys.social),
+    socialJpg: url(keys.social),
+    thumb: url(keys.thumb),
   };
 }
 

@@ -29,6 +29,11 @@ import {
   revokePreparedPreview,
   type LocalPreparedMaster,
 } from "@/lib/archive/browser-durable-commit";
+import { commitBrowserR2Bundle } from "@/lib/archive/browser-r2-commit";
+import {
+  commitPhaseLabel,
+  type ArchiveCommitPhase,
+} from "@/lib/archive/commit-state";
 import {
   formatByteSize,
   MAX_BUNDLE_BINARY_BYTES,
@@ -36,10 +41,13 @@ import {
 } from "@/lib/archive/commit-bundle-limits";
 import {
   createBrowserLocalDraft,
+  deleteLocalDraft,
+  loadLocalDraft,
   newLocalDraftId,
   saveLocalDraft,
 } from "@/lib/archive/local-draft-store";
 import {
+  AccessionDraftSchema,
   ARCHIVE_VERSION,
   buildArchiveSlug,
   emptyProvenance,
@@ -136,8 +144,10 @@ function isExistingArchiveDraft(
 
 export function IngestionWizard({
   initialDraftId,
+  initialEditSlug,
 }: {
   initialDraftId?: string;
+  initialEditSlug?: string;
 }) {
   const [step, setStep] = useState<StepId>("Upload");
   const [sourceFile, setSourceFile] = useState<File | null>(null);
@@ -162,6 +172,7 @@ export function IngestionWizard({
   const [syncUiState, setSyncUiState] = useState<SyncUiState>("idle");
   const [lastSyncCommitSha, setLastSyncCommitSha] = useState<string | null>(null);
   const [durableStorage, setDurableStorage] = useState(false);
+  const [r2Archive, setR2Archive] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
   const [preparedLocal, setPreparedLocal] = useState<LocalPreparedMaster | null>(
     null,
@@ -174,6 +185,7 @@ export function IngestionWizard({
   const [commitCompleted, setCommitCompleted] = useState(false);
   const [commitInFlight, setCommitInFlight] = useState(false);
   const [lastCommittedSha, setLastCommittedSha] = useState<string | null>(null);
+  const [commitPhase, setCommitPhase] = useState<ArchiveCommitPhase>("idle");
 
   useEffect(() => {
     let cancelled = false;
@@ -181,15 +193,18 @@ export function IngestionWizard({
       .then(async (res) => {
         const data = (await res.json().catch(() => ({}))) as {
           durableStorage?: boolean;
+          r2Archive?: boolean;
         };
         if (!cancelled) {
           setDurableStorage(Boolean(data.durableStorage));
+          setR2Archive(Boolean(data.r2Archive));
           setSessionReady(true);
         }
       })
       .catch(() => {
         if (!cancelled) {
           setDurableStorage(false);
+          setR2Archive(false);
           setSessionReady(true);
         }
       });
@@ -269,7 +284,138 @@ export function IngestionWizard({
 
     async function loadOrCreateDraft() {
       setError(null);
+      if (initialEditSlug) {
+        setDraftLoaded(false);
+        try {
+          const res = await adminFetch(
+            `/api/admin/archive/${encodeURIComponent(initialEditSlug)}/hydrate-draft`,
+            { method: "POST" },
+          );
+          const data = (await res.json()) as DraftResponse;
+          if (!res.ok || !data.draft) {
+            throw new Error(data.error ?? "Could not hydrate archive for edit");
+          }
+          if (!cancelled) {
+            const key = newLocalDraftId();
+            setLocalDraftKey(key);
+            applyDraft(data.draft);
+            setArchiveStatus(data.draft.status ?? null);
+            await saveLocalDraft({
+              schemaVersion: 1,
+              localId: key,
+              draftId: data.draft.draftId,
+              accessionId: data.draft.accessionId,
+              slug: data.draft.slug,
+              step: "Upload",
+              artworkJson: JSON.stringify(data.draft.artwork),
+              provenanceJson: JSON.stringify(data.draft.provenance),
+              intendedStatus: "published",
+              isRevision: true,
+              existingSlug: data.draft.slug,
+              sourceFileName: null,
+              sourceMimeType: null,
+              sourceByteSize: null,
+              updatedAt: new Date().toISOString(),
+            });
+          }
+        } catch (e) {
+          if (!cancelled) {
+            setError(e instanceof Error ? e.message : "Edit hydrate failed");
+          }
+        }
+        return;
+      }
+
       if (!initialDraftId) {
+        // Resume newest local draft if present via ?local= is handled below
+        const localParam =
+          typeof window !== "undefined"
+            ? new URLSearchParams(window.location.search).get("local")
+            : null;
+        if (localParam) {
+          setDraftLoaded(false);
+          try {
+            const record = await loadLocalDraft(localParam);
+            if (!record) {
+              throw new Error("Local draft not found in IndexedDB");
+            }
+            const artwork = JSON.parse(record.artworkJson);
+            const draft = AccessionDraftSchema.parse({
+              version: ARCHIVE_VERSION,
+              draftId: record.draftId,
+              accessionId: record.accessionId,
+              status: "draft",
+              slug: record.slug,
+              slugLocked: record.isRevision,
+              slugHistory: [],
+              source: record.sourceFileName
+                ? {
+                    kind: "original",
+                    originalFilename: record.sourceFileName,
+                    mimeType: record.sourceMimeType ?? undefined,
+                    byteSize: record.sourceByteSize ?? undefined,
+                  }
+                : { kind: "migration-required" },
+              processing: {},
+              artwork,
+              provenance: JSON.parse(record.provenanceJson),
+              export: {
+                standaloneHtml: "perception.html",
+                includeWebpFallback: true,
+                preset: "archival",
+              },
+              createdAt: record.updatedAt,
+              updatedAt: record.updatedAt,
+            });
+            if (!cancelled) {
+              setLocalDraftKey(record.localId);
+              setIntendedStatus(record.intendedStatus);
+              let file: File | null = null;
+              if (record.sourceBlob) {
+                file = new File(
+                  [record.sourceBlob],
+                  record.sourceFileName ?? "original.bin",
+                  {
+                    type:
+                      record.sourceMimeType ??
+                      record.sourceBlob.type ??
+                      "application/octet-stream",
+                  },
+                );
+                registerTransientUpload(draft.draftId, file);
+              }
+              applyDraft(draft, file);
+              if (record.preparedBlob) {
+                setPreparedLocal({
+                  blob: record.preparedBlob,
+                  width: record.preparedWidth ?? 1,
+                  height: record.preparedHeight ?? 1,
+                  objectUrl: URL.createObjectURL(record.preparedBlob),
+                  preparedAt: record.preparedAt ?? record.updatedAt,
+                });
+              }
+              if (
+                record.step === "Prepare" ||
+                record.step === "Orientation" ||
+                record.step === "Metadata" ||
+                record.step === "Provenance" ||
+                record.step === "Visibility" ||
+                record.step === "Review"
+              ) {
+                setStep(record.step);
+              }
+            }
+          } catch (e) {
+            if (!cancelled) {
+              setError(
+                e instanceof Error ? e.message : "Local draft resume failed",
+              );
+              setDraftLoaded(true);
+            }
+          }
+          return;
+        }
+
         if (!cancelled) setDraftLoaded(true);
         return;
       }
@@ -298,7 +444,7 @@ export function IngestionWizard({
     return () => {
       cancelled = true;
     };
-  }, [applyDraft, initialDraftId]);
+  }, [applyDraft, initialDraftId, initialEditSlug]);
 
   useEffect(() => {
     if (!draftLoaded || slugLocked) return;
@@ -423,6 +569,10 @@ export function IngestionWizard({
           sourceByteSize: sourceFile?.size ?? null,
           updatedAt: snapshot.updatedAt,
           sourceBlob: sourceFile ?? undefined,
+          preparedBlob: preparedLocal?.blob,
+          preparedWidth: preparedLocal?.width,
+          preparedHeight: preparedLocal?.height,
+          preparedAt: preparedLocal?.preparedAt,
         });
       } catch (e) {
         // IndexedDB failure should not block editing; keep SPA state.
@@ -460,6 +610,7 @@ export function IngestionWizard({
     intendedStatus,
     isExistingArchive,
     localDraftKey,
+    preparedLocal,
     provenance,
     slug,
     slugLocked,
@@ -602,6 +753,7 @@ export function IngestionWizard({
     setCommitting(true);
     setError(null);
     setResult(null);
+    setCommitPhase("preparing");
     try {
       if (!durableStorage) {
         throw new Error(
@@ -611,38 +763,79 @@ export function IngestionWizard({
       const saved = await saveDraft();
       const draftForCommit = saved ?? currentDraft;
       const file = await resolveSourceBlob();
-      if (file.size > MAX_SOURCE_BYTES) {
+      if (!r2Archive && file.size > MAX_SOURCE_BYTES) {
         throw new Error(
-          `Source file is ${formatByteSize(file.size)} (limit ${formatByteSize(MAX_SOURCE_BYTES)}).`,
+          `Source file is ${formatByteSize(file.size)} (limit ${formatByteSize(MAX_SOURCE_BYTES)}). Enable R2 for larger masters.`,
         );
       }
       if (!preparedLocal) {
         throw new Error("Prepare a working master before Commit.");
       }
-      const committed = await commitBrowserDurableBundle({
-        draft: draftForCommit,
-        sourceFile: file,
-        prepared: preparedLocal,
-        isExistingArchive,
-        intendedStatus,
-        message: isExistingArchive
-          ? `archive: revision ${draftForCommit.slug}`
-          : `archive: accession ${draftForCommit.slug}`,
-      });
-      setResult({
-        slug: committed.slug,
-        files: committed.files,
-        warnings: committed.warnings,
-      });
-      applyDraft(committed.draft, file);
-      setArchiveStatus(committed.archiveStatus);
-      setStatus(committed.archiveStatus);
-      setLastSyncCommitSha(committed.commitSha);
-      setLastCommittedSha(committed.commitSha);
-      setCommitCompleted(true);
-      setSyncUiState("synced");
+
+      if (r2Archive) {
+        const committed = await commitBrowserR2Bundle({
+          draft: draftForCommit,
+          sourceFile: file,
+          prepared: preparedLocal,
+          isExistingArchive,
+          intendedStatus,
+          message: isExistingArchive
+            ? `archive: revision ${draftForCommit.slug}`
+            : `archive: accession ${draftForCommit.slug}`,
+          onPhase: (phase) => setCommitPhase(phase),
+        });
+        setResult({
+          slug: committed.slug,
+          files: committed.files,
+          warnings: committed.warnings,
+        });
+        applyDraft(committed.draft, file);
+        setArchiveStatus(committed.archiveStatus);
+        setStatus(committed.archiveStatus);
+        setLastSyncCommitSha(committed.commitSha);
+        setLastCommittedSha(committed.commitSha);
+        setCommitCompleted(true);
+        setSyncUiState("synced");
+        setCommitPhase("committed");
+        if (localDraftKey) {
+          await deleteLocalDraft(localDraftKey);
+          setLocalDraftKey(null);
+        }
+      } else {
+        const committed = await commitBrowserDurableBundle({
+          draft: draftForCommit,
+          sourceFile: file,
+          prepared: preparedLocal,
+          isExistingArchive,
+          intendedStatus,
+          message: isExistingArchive
+            ? `archive: revision ${draftForCommit.slug}`
+            : `archive: accession ${draftForCommit.slug}`,
+        });
+        setResult({
+          slug: committed.slug,
+          files: committed.files,
+          warnings: committed.warnings,
+        });
+        applyDraft(committed.draft, file);
+        setArchiveStatus(committed.archiveStatus);
+        setStatus(committed.archiveStatus);
+        setLastSyncCommitSha(committed.commitSha);
+        setLastCommittedSha(committed.commitSha);
+        setCommitCompleted(true);
+        setSyncUiState("synced");
+        setCommitPhase("committed");
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Commit failed");
+      const message = e instanceof Error ? e.message : "Commit failed";
+      setError(message);
+      if (message.includes("metadata commit failed")) {
+        setCommitPhase("failed_metadata");
+      } else if (commitPhase === "uploading" || commitPhase === "authorizing") {
+        setCommitPhase("failed_upload");
+      } else if (commitPhase === "verifying") {
+        setCommitPhase("failed_verify");
+      }
     } finally {
       setCommitting(false);
       setCommitInFlight(false);
@@ -651,6 +844,7 @@ export function IngestionWizard({
     applyDraft,
     commitCompleted,
     commitInFlight,
+    commitPhase,
     committing,
     currentDraft,
     draftId,
@@ -658,7 +852,9 @@ export function IngestionWizard({
     intendedStatus,
     isExistingArchive,
     lastCommittedSha,
+    localDraftKey,
     preparedLocal,
+    r2Archive,
     resolveSourceBlob,
     saveDraft,
   ]);
@@ -973,7 +1169,9 @@ export function IngestionWizard({
           <p className="text-[0.85rem] leading-relaxed text-[var(--muted)]">
             Prepare encodes an orientation-safe master locally in the browser.
             {durableStorage
-              ? " Nothing is written to GitHub until Review → Commit Accession."
+              ? r2Archive
+                ? " Binaries upload to R2 only on Review → Commit; GitHub receives metadata."
+                : " Nothing is written to GitHub until Review → Commit Accession."
               : " Local/dev fallback may deposit to disk only when you continue past Prepare."}
           </p>
           <EmbeddedPreparePanel
@@ -1286,6 +1484,12 @@ export function IngestionWizard({
           <h2 className="text-[0.62rem] tracking-[0.18em] uppercase text-[var(--muted)]">
             Review and commit
           </h2>
+          {(committing || commitPhase !== "idle") && !commitCompleted && (
+            <p className="text-[0.72rem] tracking-[0.12em] uppercase text-[var(--muted)]">
+              {commitPhaseLabel(commitPhase)}
+              {r2Archive ? " (R2 + GitHub metadata)" : " (GitHub bundle)"}
+            </p>
+          )}
           {commitCompleted && lastCommittedSha ? (
             <div className="space-y-3 border border-[var(--border)] p-4">
               <p className="text-[0.78rem] tracking-[0.14em] uppercase">

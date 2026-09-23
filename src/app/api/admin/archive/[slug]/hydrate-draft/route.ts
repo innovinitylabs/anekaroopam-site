@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminIngest } from "@/lib/archive/admin-ingest-response";
-import { hydrateDraftFromArchiveSlug } from "@/lib/archive/draft-store";
+import { hydrateDraftFromArchiveSlugDurable } from "@/lib/archive/hydrate-draft-durable";
 
 export const runtime = "nodejs";
 
@@ -12,7 +12,7 @@ export async function POST(request: Request, { params }: Context) {
 
   try {
     const { slug } = await params;
-    const draft = await hydrateDraftFromArchiveSlug(slug);
+    const draft = await hydrateDraftFromArchiveSlugDurable(slug);
     return NextResponse.json({ draft });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Draft hydration failed";

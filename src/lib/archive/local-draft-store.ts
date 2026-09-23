@@ -35,6 +35,11 @@ export interface LocalDraftRecord {
   updatedAt: string;
   /** Original source bytes when present */
   sourceBlob?: Blob;
+  /** Prepared master bytes when present (optional resume) */
+  preparedBlob?: Blob;
+  preparedWidth?: number;
+  preparedHeight?: number;
+  preparedAt?: string;
 }
 
 function openDb(): Promise<IDBDatabase> {

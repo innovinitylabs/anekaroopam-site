@@ -111,6 +111,7 @@ export function ArchiveGrid({
                     fill
                     sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
                     priority={i === 0}
+                    unoptimized={/^https?:\/\//i.test(artwork.imageSrc)}
                     className="relative z-[1] object-contain p-5 sm:p-6"
                   />
                 </div>

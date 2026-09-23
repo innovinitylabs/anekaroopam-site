@@ -3,8 +3,10 @@ import { IngestionWizard } from "@/components/admin/IngestionWizard";
 export default async function AdminNewAccessionPage({
   searchParams,
 }: {
-  searchParams: Promise<{ draft?: string }>;
+  searchParams: Promise<{ draft?: string; edit?: string; local?: string }>;
 }) {
-  const { draft } = await searchParams;
-  return <IngestionWizard initialDraftId={draft} />;
+  const { draft, edit } = await searchParams;
+  return (
+    <IngestionWizard initialDraftId={draft} initialEditSlug={edit} />
+  );
 }
