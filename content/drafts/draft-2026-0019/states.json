@@ -9,6 +9,12 @@
         "name": "",
         "angle": 0,
         "caption": ""
+      },
+      {
+        "id": "ps_osg7n4fe",
+        "name": "",
+        "angle": 45,
+        "caption": ""
       }
     ],
     "background": "paper",
@@ -16,5 +22,5 @@
     "snapToState": true,
     "showMetadataOverlay": true
   },
-  "updatedAt": "2026-09-23T10:42:15.566Z"
+  "updatedAt": "2026-09-23T10:43:56.162Z"
 }
