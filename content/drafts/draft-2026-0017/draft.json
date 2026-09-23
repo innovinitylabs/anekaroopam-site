@@ -12,7 +12,7 @@
     "storedFilename": "original.png",
     "mimeType": "image/png",
     "byteSize": 3274585,
-    "importedAt": "2026-09-23T09:19:23.100Z"
+    "importedAt": "2026-09-23T09:19:30.023Z"
   },
   "processing": {},
   "artwork": {
@@ -47,6 +47,6 @@
     "includeWebpFallback": true,
     "preset": "archival"
   },
-  "createdAt": "2026-09-23T09:19:23.100Z",
-  "updatedAt": "2026-09-23T09:19:23.100Z"
+  "createdAt": "2026-09-23T09:19:30.023Z",
+  "updatedAt": "2026-09-23T09:19:30.023Z"
 }
