@@ -104,18 +104,29 @@ export function buildBrowserMetadataPackage(input: {
     generatedAt,
   );
 
+  const resolvedStatus: DraftStatus =
+    nextStatus === "draft" || nextStatus === "prepared"
+      ? "generated"
+      : nextStatus;
+
   const entry: ArchiveEntry = ArchiveEntrySchema.parse({
     ...generatedEntry,
     createdAt: existing?.createdAt ?? generatedEntry.createdAt,
-    status: existing?.status ?? "generated",
-    publishedAt: existing?.publishedAt ?? generatedEntry.publishedAt,
+    status: resolvedStatus,
+    publishedAt:
+      resolvedStatus === "published"
+        ? existing?.publishedAt ?? generatedAt
+        : existing?.publishedAt,
     mintedAt: existing?.mintedAt ?? generatedEntry.mintedAt,
-    hiddenAt: existing?.hiddenAt ?? generatedEntry.hiddenAt,
+    hiddenAt:
+      resolvedStatus === "hidden"
+        ? existing?.hiddenAt ?? generatedAt
+        : existing?.hiddenAt,
     withdrawnAt: existing?.withdrawnAt ?? generatedEntry.withdrawnAt,
-    provenance: existing?.provenance ?? generatedEntry.provenance,
+    provenance: parsedDraft.provenance ?? existing?.provenance ?? generatedEntry.provenance,
     exports: existing?.exports ?? generatedEntry.exports,
     accessionId: existing?.accessionId ?? generatedEntry.accessionId,
-    source: existing?.source ?? parsedDraft.source ?? generatedEntry.source,
+    source: parsedDraft.source ?? existing?.source ?? generatedEntry.source,
     processing: parsedDraft.processing?.preparedSource
       ? {
           ...parsedDraft.processing,
@@ -134,10 +145,11 @@ export function buildBrowserMetadataPackage(input: {
     updatedAt: generatedAt,
   });
 
-  // First-time generate should leave status as generated on the archive entry.
-  if (!existing) {
-    entry.status = "generated";
+  if (resolvedStatus !== "published") {
     delete entry.publishedAt;
+  }
+  if (resolvedStatus !== "hidden") {
+    delete entry.hiddenAt;
   }
 
   const incompleteNote = [
@@ -187,10 +199,17 @@ export function buildBrowserMetadataPackage(input: {
 
   const updatedDraft = AccessionDraftSchema.parse({
     ...parsedDraft,
-    status: nextStatus,
-    generatedAt: nextStatus === "generated" ? generatedAt : parsedDraft.generatedAt,
-    preparedAt:
-      nextStatus === "prepared" ? generatedAt : parsedDraft.preparedAt,
+    status: resolvedStatus,
+    generatedAt: generatedAt,
+    preparedAt: parsedDraft.preparedAt ?? generatedAt,
+    publishedAt:
+      resolvedStatus === "published"
+        ? parsedDraft.publishedAt ?? generatedAt
+        : undefined,
+    hiddenAt:
+      resolvedStatus === "hidden"
+        ? parsedDraft.hiddenAt ?? generatedAt
+        : undefined,
     updatedAt: generatedAt,
     processing: {
       ...parsedDraft.processing,

@@ -2,8 +2,12 @@
  * Path allowlisting for POST /api/admin/archive/commit-bundle.
  */
 
-const MAX_COMMIT_BUNDLE_BYTES = 80 * 1024 * 1024;
-const MAX_FILES = 64;
+import {
+  MAX_COMMIT_BUNDLE_BYTES,
+  MAX_COMMIT_FILES,
+} from "./commit-bundle-limits";
+
+const MAX_FILES = MAX_COMMIT_FILES;
 
 export { MAX_COMMIT_BUNDLE_BYTES, MAX_FILES };
 

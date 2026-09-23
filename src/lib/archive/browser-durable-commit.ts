@@ -3,6 +3,7 @@
 /**
  * Durable browser-first commit: build derivatives + metadata locally, then
  * POST commit-bundle. Does not call server Sharp.
+ * Binaries are written once under content/archive (no draft duplicates).
  */
 
 import {
@@ -16,6 +17,7 @@ import {
   sourceFilenameForUpload,
   type AccessionDraft,
   type ArchiveEntry,
+  type DraftStatus,
 } from "@/lib/archive/schema";
 import { adminFetch } from "@/components/admin/admin-fetch";
 
@@ -34,6 +36,8 @@ export interface BrowserDurableCommitResult {
   files: { path: string; bytes: number }[];
   warnings: string[];
   archiveStatus: AccessionDraft["status"];
+  binaryBytes: number;
+  sourceBytes: number;
 }
 
 export async function prepareMasterLocally(
@@ -71,6 +75,8 @@ export async function commitBrowserDurableBundle(input: {
   sourceFile: File;
   prepared?: LocalPreparedMaster | null;
   isExistingArchive: boolean;
+  /** Visibility written into metadata on this intentional commit. */
+  intendedStatus?: Extract<DraftStatus, "generated" | "published" | "hidden">;
   message?: string;
 }): Promise<BrowserDurableCommitResult> {
   const sourceBlob = input.sourceFile;
@@ -95,17 +101,18 @@ export async function commitBrowserDurableBundle(input: {
       importedAt: new Date().toISOString(),
     },
     processing: {
-      preparedSource: "working/master-prepared.avif",
+      preparedSource: "prepared/master-prepared.avif",
       preparedAt: prepared.preparedAt,
       prepareVersion: "browser-avif-v1",
     },
-    status: "generated",
+    status: input.intendedStatus ?? "generated",
     preparedAt: prepared.preparedAt,
   };
 
   const pack = buildBrowserMetadataPackage({
     draft: draftWithSource,
     existingEntry,
+    status: input.intendedStatus ?? "generated",
     derivativeMetas: images.derivatives.map((d: BrowserDerivativeBlob) => ({
       filename: d.filename,
       width: d.width,
@@ -115,35 +122,38 @@ export async function commitBrowserDurableBundle(input: {
     })),
   });
 
+  // Single copies only — duplicates previously caused 413s on Vercel (~4.5MB).
+  const binaryFiles = [
+    {
+      path: `content/archive/${pack.slug}/source/${storedFilename}`,
+      blob: sourceBlob,
+      mimeType: input.sourceFile.type || "application/octet-stream",
+    },
+    {
+      path: `content/archive/${pack.slug}/prepared/master-prepared.avif`,
+      blob: prepared.blob,
+      mimeType: "image/avif",
+    },
+  ];
+
   const committed = await postCommitBundle({
     slug: pack.slug,
     draftId: pack.draftId,
-    message: input.message ?? `archive: browser commit ${pack.slug}`,
+    message:
+      input.message ??
+      (input.isExistingArchive
+        ? `archive: revision ${pack.slug}`
+        : `archive: accession ${pack.slug}`),
     textFiles: pack.files,
     derivatives: images.derivatives,
-    binaryFiles: [
-      {
-        path: `content/drafts/${pack.draftId}/source/${storedFilename}`,
-        blob: sourceBlob,
-        mimeType: input.sourceFile.type || "application/octet-stream",
-      },
-      {
-        path: `content/drafts/${pack.draftId}/working/master-prepared.avif`,
-        blob: prepared.blob,
-        mimeType: "image/avif",
-      },
-      {
-        path: `content/archive/${pack.slug}/source/${storedFilename}`,
-        blob: sourceBlob,
-        mimeType: input.sourceFile.type || "application/octet-stream",
-      },
-      {
-        path: `content/archive/${pack.slug}/prepared/master-prepared.avif`,
-        blob: prepared.blob,
-        mimeType: "image/avif",
-      },
-    ],
+    binaryFiles,
+    sourceBytes: sourceBlob.size,
   });
+
+  const binaryBytes =
+    sourceBlob.size +
+    prepared.blob.size +
+    images.derivatives.reduce((n, d) => n + d.blob.size, 0);
 
   const files = [
     ...pack.files.map((f) => ({
@@ -155,11 +165,11 @@ export async function commitBrowserDurableBundle(input: {
       bytes: d.blob.size,
     })),
     {
-      path: `content/drafts/${pack.draftId}/source/${storedFilename}`,
+      path: `content/archive/${pack.slug}/source/${storedFilename}`,
       bytes: sourceBlob.size,
     },
     {
-      path: `content/drafts/${pack.draftId}/working/master-prepared.avif`,
+      path: `content/archive/${pack.slug}/prepared/master-prepared.avif`,
       bytes: prepared.blob.size,
     },
   ];
@@ -173,6 +183,8 @@ export async function commitBrowserDurableBundle(input: {
       ...pack.warnings,
       `Committed ${committed.commitSha.slice(0, 7)} to GitHub tip. Public View may 404 until redeploy.`,
     ],
-    archiveStatus: existingEntry?.status ?? "generated",
+    archiveStatus: pack.draft.status,
+    binaryBytes,
+    sourceBytes: sourceBlob.size,
   };
 }

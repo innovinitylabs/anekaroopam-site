@@ -5,6 +5,7 @@ import {
   MAX_COMMIT_BUNDLE_BYTES,
   normalizeCommitBundlePath,
 } from "@/lib/archive/commit-bundle-paths";
+import { formatByteSize } from "@/lib/archive/commit-bundle-limits";
 import { githubStorageAvailable } from "@/lib/archive/draft-github-store";
 import { githubErrorResponse } from "@/lib/archive/github-admin-response";
 import { commitFiles } from "@/lib/github/git-commit";
@@ -14,6 +15,7 @@ export const runtime = "nodejs";
 /**
  * Browser-first archive commit: accepts pre-built files (no Sharp).
  * Durable GitHub storage required on Vercel/Preview.
+ * Body must fit under Vercel ~4.5MB; MAX_COMMIT_BUNDLE_BYTES is the app limit.
  */
 export async function POST(request: Request) {
   const denied = requireAdminIngest(request);
@@ -30,6 +32,19 @@ export async function POST(request: Request) {
   }
 
   try {
+    const contentLength = request.headers.get("content-length");
+    if (contentLength) {
+      const declared = Number(contentLength);
+      if (Number.isFinite(declared) && declared > MAX_COMMIT_BUNDLE_BYTES) {
+        return NextResponse.json(
+          {
+            error: `commit-bundle payload too large (${formatByteSize(declared)}; limit ${formatByteSize(MAX_COMMIT_BUNDLE_BYTES)}). Reduce source size before Commit.`,
+          },
+          { status: 413 },
+        );
+      }
+    }
+
     const contentType = request.headers.get("content-type") ?? "";
     if (!contentType.includes("multipart/form-data")) {
       return NextResponse.json(
@@ -92,7 +107,9 @@ export async function POST(request: Request) {
       totalBytes += bytes.byteLength;
       if (totalBytes > MAX_COMMIT_BUNDLE_BYTES) {
         return NextResponse.json(
-          { error: "commit-bundle payload too large" },
+          {
+            error: `commit-bundle payload too large (${formatByteSize(totalBytes)}; limit ${formatByteSize(MAX_COMMIT_BUNDLE_BYTES)}). Reduce source size before Commit.`,
+          },
           { status: 413 },
         );
       }

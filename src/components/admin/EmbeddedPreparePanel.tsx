@@ -19,7 +19,7 @@ export function EmbeddedPreparePanel({
   durableStorage = false,
   prepared,
   onPreparedLocal,
-  onCommit,
+  onCommit: _onCommit,
   committing = false,
   onError,
 }: {
@@ -33,6 +33,7 @@ export function EmbeddedPreparePanel({
   committing?: boolean;
   onError: (message: string) => void;
 }) {
+  void _onCommit;
   const [preparing, setPreparing] = useState(false);
   const browserSource =
     sourceFile ??
@@ -80,13 +81,6 @@ export function EmbeddedPreparePanel({
   const displaySrc = prepared?.objectUrl || previewSrc;
   const canPrepare =
     Boolean(draft) && hasBrowserSource && !preparing && !committing;
-  const canCommit =
-    durableStorage &&
-    Boolean(draft) &&
-    Boolean(prepared) &&
-    hasBrowserSource &&
-    !preparing &&
-    !committing;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
@@ -148,21 +142,13 @@ export function EmbeddedPreparePanel({
         {durableStorage && (
           <div className="space-y-2 border border-[var(--border)] p-4">
             <p className="text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]">
-              Commit to GitHub
+              Commit
             </p>
             <p className="leading-relaxed text-[var(--muted)]">
-              Builds the five public derivatives and metadata in the browser, then
-              sends the prepared bundle to the server commit endpoint. The original
-              is included only in this Commit step.
+              Preparation stays local. Advance to Review, then use Commit
+              Accession (or Commit Revision) for the single intentional GitHub
+              write.
             </p>
-            <button
-              type="button"
-              onClick={onCommit}
-              disabled={!canCommit}
-              className="mt-2 border border-[var(--ink)] px-4 py-2 text-[0.62rem] tracking-[0.14em] uppercase disabled:opacity-30"
-            >
-              {committing ? "Committing..." : "Commit prepared bundle"}
-            </button>
           </div>
         )}
 

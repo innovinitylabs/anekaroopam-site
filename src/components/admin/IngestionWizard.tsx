@@ -30,6 +30,17 @@ import {
   type LocalPreparedMaster,
 } from "@/lib/archive/browser-durable-commit";
 import {
+  formatByteSize,
+  MAX_BUNDLE_BINARY_BYTES,
+  MAX_SOURCE_BYTES,
+} from "@/lib/archive/commit-bundle-limits";
+import {
+  createBrowserLocalDraft,
+  newLocalDraftId,
+  saveLocalDraft,
+} from "@/lib/archive/local-draft-store";
+import {
+  ARCHIVE_VERSION,
   buildArchiveSlug,
   emptyProvenance,
   normalizeArchiveSlug,
@@ -45,19 +56,15 @@ import {
   resolveObjectUrlFromAnyTab,
   revokeTransientUpload,
 } from "@/lib/archive/transient-upload-registry";
+import {
+  footerPrimaryLabel,
+  isFinalVisibleStep,
+  wizardStepsForMode,
+  type WizardStep,
+} from "@/lib/archive/wizard-steps";
 import type { PerceptionArtwork } from "@/lib/perception/types";
 
-const STEPS = [
-  "Upload",
-  "Prepare",
-  "Orientation",
-  "Metadata",
-  "Generate",
-  "Publish",
-  "Provenance",
-] as const;
-
-type StepId = (typeof STEPS)[number];
+type StepId = WizardStep;
 
 type DraftResponse = {
   draft?: AccessionDraft;
@@ -65,21 +72,25 @@ type DraftResponse = {
   error?: string;
 };
 
-const STEP_TOOLTIPS: Record<StepId, string> = {
+const STEP_TOOLTIPS: Record<string, string> = {
   Upload:
-    "Select the original master. It stays in this browser tab until Commit; only a metadata draft is created.",
+    "Select the original master. It stays in this browser until Commit Accession; nothing is uploaded yet.",
   Prepare:
-    "Encode an orientation-safe prepared master locally in the browser. Commit only when you choose.",
+    "Encode an orientation-safe prepared master locally in the browser. No GitHub write.",
   Orientation:
     "Define perceptual states, snap behavior, and the viewing background for export.",
   Metadata:
     "Edit accession title, date, process, and other archival metadata fields.",
   Generate:
-    "Optional re-run of the browser Commit bundle, or local server generate when durable mode is off.",
+    "Local non-durable: deposit source and run server generate. Hidden in durable mode.",
   Publish:
-    "Promote or sync the generated archive on GitHub when repository credentials are set.",
+    "Local non-durable: promote or sync on GitHub. Hidden in durable mode.",
   Provenance:
-    "Record mint, auction, and marketplace links after the work is published or minted.",
+    "Record mint, auction, and marketplace links. Stays local until Commit.",
+  Visibility:
+    "Choose whether this accession is public, admin-only (generated), or hidden after Commit.",
+  Review:
+    "Validate the local draft, then Commit Accession or Commit Revision once.",
 };
 
 function artworkForStorage(
@@ -151,10 +162,18 @@ export function IngestionWizard({
   const [syncUiState, setSyncUiState] = useState<SyncUiState>("idle");
   const [lastSyncCommitSha, setLastSyncCommitSha] = useState<string | null>(null);
   const [durableStorage, setDurableStorage] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
   const [preparedLocal, setPreparedLocal] = useState<LocalPreparedMaster | null>(
     null,
   );
   const [committing, setCommitting] = useState(false);
+  const [localDraftKey, setLocalDraftKey] = useState<string | null>(null);
+  const [intendedStatus, setIntendedStatus] = useState<
+    "generated" | "published" | "hidden"
+  >("published");
+  const [commitCompleted, setCommitCompleted] = useState(false);
+  const [commitInFlight, setCommitInFlight] = useState(false);
+  const [lastCommittedSha, setLastCommittedSha] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -163,15 +182,26 @@ export function IngestionWizard({
         const data = (await res.json().catch(() => ({}))) as {
           durableStorage?: boolean;
         };
-        if (!cancelled) setDurableStorage(Boolean(data.durableStorage));
+        if (!cancelled) {
+          setDurableStorage(Boolean(data.durableStorage));
+          setSessionReady(true);
+        }
       })
       .catch(() => {
-        if (!cancelled) setDurableStorage(false);
+        if (!cancelled) {
+          setDurableStorage(false);
+          setSessionReady(true);
+        }
       });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  const STEPS = useMemo(
+    () => wizardStepsForMode(durableStorage),
+    [durableStorage],
+  );
 
   const isExistingArchive = useMemo(
     () => isExistingArchiveDraft(currentDraft, draftId, archiveStatus),
@@ -302,6 +332,10 @@ export function IngestionWizard({
     let cancelled = false;
 
     async function refreshArchiveStatus() {
+      if (durableStorage && draftId.startsWith("draft-") && localDraftKey) {
+        // Local-only provisional drafts are not on the server yet.
+        return;
+      }
       try {
         const res = await adminFetch(
           `/api/admin/drafts/${encodeURIComponent(draftId)}`,
@@ -319,10 +353,86 @@ export function IngestionWizard({
     return () => {
       cancelled = true;
     };
-  }, [draftId, draftLoaded, slug]);
+  }, [draftId, draftLoaded, durableStorage, localDraftKey, slug]);
+
+  const buildDraftSnapshot = useCallback((): AccessionDraft | null => {
+    if (!draftId || !accessionId || !slug) return null;
+    const base = currentDraft;
+    const now = new Date().toISOString();
+    return {
+      version: ARCHIVE_VERSION,
+      draftId,
+      accessionId,
+      status: (base?.status ?? "draft") as DraftStatus,
+      slug,
+      slugLocked,
+      slugHistory: base?.slugHistory ?? [],
+      source: base?.source ?? { kind: "migration-required" },
+      processing: base?.processing ?? {},
+      artwork: artworkForStorage(controller.artwork, accessionId),
+      provenance,
+      export: base?.export ?? {
+        standaloneHtml: "perception.html",
+        includeWebpFallback: true,
+        preset: "archival",
+      },
+      createdAt: base?.createdAt ?? now,
+      updatedAt: now,
+      preparedAt: preparedLocal?.preparedAt ?? base?.preparedAt,
+      generatedAt: base?.generatedAt,
+      publishedAt: base?.publishedAt,
+      mintedAt: base?.mintedAt,
+      hiddenAt: base?.hiddenAt,
+      withdrawnAt: base?.withdrawnAt,
+      deletedAt: base?.deletedAt,
+    };
+  }, [
+    accessionId,
+    controller.artwork,
+    currentDraft,
+    draftId,
+    preparedLocal?.preparedAt,
+    provenance,
+    slug,
+    slugLocked,
+  ]);
 
   const saveDraft = useCallback(async () => {
     if (!draftLoaded || !draftId) return null;
+
+    if (durableStorage) {
+      const snapshot = buildDraftSnapshot();
+      if (!snapshot) return null;
+      const key = localDraftKey ?? newLocalDraftId();
+      if (!localDraftKey) setLocalDraftKey(key);
+      try {
+        await saveLocalDraft({
+          schemaVersion: 1,
+          localId: key,
+          draftId: snapshot.draftId,
+          accessionId: snapshot.accessionId,
+          slug: snapshot.slug,
+          step,
+          artworkJson: JSON.stringify(snapshot.artwork),
+          provenanceJson: JSON.stringify(snapshot.provenance),
+          intendedStatus,
+          isRevision: isExistingArchive,
+          existingSlug: isExistingArchive ? snapshot.slug : null,
+          sourceFileName: sourceFile?.name ?? null,
+          sourceMimeType: sourceFile?.type ?? null,
+          sourceByteSize: sourceFile?.size ?? null,
+          updatedAt: snapshot.updatedAt,
+          sourceBlob: sourceFile ?? undefined,
+        });
+      } catch (e) {
+        // IndexedDB failure should not block editing; keep SPA state.
+        console.warn("local draft save failed", e);
+      }
+      setStatus(snapshot.status);
+      setCurrentDraft(snapshot);
+      return snapshot;
+    }
+
     const res = await adminFetch(`/api/admin/drafts/${encodeURIComponent(draftId)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -340,33 +450,52 @@ export function IngestionWizard({
     setStatus(data.draft.status);
     setCurrentDraft(data.draft);
     return data.draft;
-  }, [accessionId, controller.artwork, draftId, draftLoaded, provenance, slug, slugLocked]);
+  }, [
+    accessionId,
+    buildDraftSnapshot,
+    controller.artwork,
+    draftId,
+    draftLoaded,
+    durableStorage,
+    intendedStatus,
+    isExistingArchive,
+    localDraftKey,
+    provenance,
+    slug,
+    slugLocked,
+    sourceFile,
+    step,
+  ]);
 
   useEffect(() => {
     if (!draftLoaded || !draftId) return;
     const timeout = window.setTimeout(() => {
       saveDraft().catch((e) => {
-        setError(e instanceof Error ? e.message : "Draft autosave failed");
+        if (!durableStorage) {
+          setError(e instanceof Error ? e.message : "Draft autosave failed");
+        }
       });
     }, 700);
     return () => window.clearTimeout(timeout);
-  }, [draftId, draftLoaded, saveDraft]);
+  }, [draftId, draftLoaded, durableStorage, saveDraft]);
 
-  const stepIndex = STEPS.indexOf(step);
+  const stepIndex = STEPS.indexOf(step as (typeof STEPS)[number]);
 
   const goNext = () => {
     const next = STEPS[stepIndex + 1];
-    if (next) setStep(next);
+    if (next) setStep(next as StepId);
   };
 
   const goBack = () => {
     const prev = STEPS[stepIndex - 1];
-    if (prev) setStep(prev);
+    if (prev) setStep(prev as StepId);
   };
 
   const handleSourceFile = useCallback(
     async (file: File) => {
       setError(null);
+      setCommitCompleted(false);
+      setLastCommittedSha(null);
       registerTransientUpload(draftId || "pending-draft", file);
       setSourceFile(file);
       revokePreparedPreview(preparedLocal);
@@ -392,16 +521,25 @@ export function IngestionWizard({
       try {
         let nextDraft = currentDraft;
         if (!draftId) {
-          const res = await adminFetch("/api/admin/drafts", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title: titleFromFile }),
-          });
-          const data = (await res.json()) as DraftResponse;
-          if (!res.ok || !data.draft) {
-            throw new Error(data.error ?? "Could not create metadata draft");
+          // Prefer browser-local drafts unless session confirms non-durable local mode.
+          // Avoids accidental GitHub draft commits while session is still loading.
+          const useLocalDraft = !sessionReady || durableStorage;
+          if (useLocalDraft) {
+            nextDraft = createBrowserLocalDraft(titleFromFile);
+            const key = newLocalDraftId();
+            setLocalDraftKey(key);
+          } else {
+            const res = await adminFetch("/api/admin/drafts", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ title: titleFromFile }),
+            });
+            const data = (await res.json()) as DraftResponse;
+            if (!res.ok || !data.draft) {
+              throw new Error(data.error ?? "Could not create metadata draft");
+            }
+            nextDraft = data.draft;
           }
-          nextDraft = data.draft;
         }
 
         if (!nextDraft) {
@@ -421,7 +559,9 @@ export function IngestionWizard({
       applyDraft,
       currentDraft,
       draftId,
+      durableStorage,
       preparedLocal,
+      sessionReady,
     ],
   );
 
@@ -453,26 +593,41 @@ export function IngestionWizard({
     setError(null);
   }, []);
 
-  const handleCommitPrepared = useCallback(async () => {
+  const handleCommitAccession = useCallback(async () => {
     if (!draftId || !currentDraft) return;
+    if (commitCompleted || lastCommittedSha || commitInFlight || committing) {
+      return;
+    }
+    setCommitInFlight(true);
     setCommitting(true);
     setError(null);
     setResult(null);
     try {
+      if (!durableStorage) {
+        throw new Error(
+          "Durable GitHub storage is required for Commit Accession.",
+        );
+      }
       const saved = await saveDraft();
       const draftForCommit = saved ?? currentDraft;
       const file = await resolveSourceBlob();
-      if (!durableStorage) {
+      if (file.size > MAX_SOURCE_BYTES) {
         throw new Error(
-          "Durable GitHub storage is required for browser Commit. Use local Generate on non-durable environments.",
+          `Source file is ${formatByteSize(file.size)} (limit ${formatByteSize(MAX_SOURCE_BYTES)}).`,
         );
+      }
+      if (!preparedLocal) {
+        throw new Error("Prepare a working master before Commit.");
       }
       const committed = await commitBrowserDurableBundle({
         draft: draftForCommit,
         sourceFile: file,
         prepared: preparedLocal,
         isExistingArchive,
-        message: `archive: browser commit ${draftForCommit.slug}`,
+        intendedStatus,
+        message: isExistingArchive
+          ? `archive: revision ${draftForCommit.slug}`
+          : `archive: accession ${draftForCommit.slug}`,
       });
       setResult({
         slug: committed.slug,
@@ -481,28 +636,28 @@ export function IngestionWizard({
       });
       applyDraft(committed.draft, file);
       setArchiveStatus(committed.archiveStatus);
-      setStatus("generated");
+      setStatus(committed.archiveStatus);
       setLastSyncCommitSha(committed.commitSha);
-      if (deployUsesSync) {
-        setSyncUiState("local_changed");
-      } else if (isExistingArchive) {
-        setSyncUiState("publish_pending");
-      } else {
-        setSyncUiState("idle");
-      }
-      setStep("Publish");
+      setLastCommittedSha(committed.commitSha);
+      setCommitCompleted(true);
+      setSyncUiState("synced");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Commit failed");
     } finally {
       setCommitting(false);
+      setCommitInFlight(false);
     }
   }, [
     applyDraft,
+    commitCompleted,
+    commitInFlight,
+    committing,
     currentDraft,
-    deployUsesSync,
     draftId,
     durableStorage,
+    intendedStatus,
     isExistingArchive,
+    lastCommittedSha,
     preparedLocal,
     resolveSourceBlob,
     saveDraft,
@@ -524,32 +679,9 @@ export function IngestionWizard({
       }
 
       if (durableStorage) {
-        const file = await resolveSourceBlob();
-        const committed = await commitBrowserDurableBundle({
-          draft: draftForGenerate,
-          sourceFile: file,
-          prepared: preparedLocal,
-          isExistingArchive,
-          message: `archive: browser generate ${draftForGenerate.slug}`,
-        });
-        setResult({
-          slug: committed.slug,
-          files: committed.files,
-          warnings: committed.warnings,
-        });
-        applyDraft(committed.draft, file);
-        setArchiveStatus(committed.archiveStatus);
-        setLastSyncCommitSha(committed.commitSha);
-        if (deployUsesSync) {
-          setSyncUiState("local_changed");
-        } else if (isExistingArchive) {
-          setSyncUiState("publish_pending");
-        } else {
-          setStatus("generated");
-          setSyncUiState("idle");
-        }
-        setStep("Publish");
-        return;
+        throw new Error(
+          "Durable mode does not Generate mid-wizard. Use Review → Commit Accession for the single GitHub write.",
+        );
       }
 
       // Local non-durable fallback: deposit source then server generate.
@@ -669,6 +801,11 @@ export function IngestionWizard({
   const handleSlugSave = async () => {
     if (!draftId) return;
     setError(null);
+    if (durableStorage) {
+      setSlugLocked(true);
+      await saveDraft();
+      return;
+    }
     try {
       const res = await adminFetch(
         `/api/admin/drafts/${encodeURIComponent(draftId)}/slug`,
@@ -816,9 +953,9 @@ export function IngestionWizard({
             onImport={handleSourceFile}
           />
           <p className="text-[0.75rem] text-[var(--muted)]">
-            Select a high-resolution master. The original stays in this browser tab
-            until you Commit after Prepare. A metadata-only draft is created so
-            edits can autosave — the image bytes are not uploaded on Select.
+            Select a high-resolution master. In durable mode the original stays
+            in this browser (IndexedDB + tab memory) until you Commit Accession
+            on Review. No GitHub commit or upload happens on Select.
           </p>
           {sourceFile && (
             <p className="text-[0.75rem] text-[var(--muted)]">
@@ -836,7 +973,7 @@ export function IngestionWizard({
           <p className="text-[0.85rem] leading-relaxed text-[var(--muted)]">
             Prepare encodes an orientation-safe master locally in the browser.
             {durableStorage
-              ? " Nothing is written to GitHub until you click Commit."
+              ? " Nothing is written to GitHub until Review → Commit Accession."
               : " Local/dev fallback may deposit to disk only when you continue past Prepare."}
           </p>
           <EmbeddedPreparePanel
@@ -847,7 +984,7 @@ export function IngestionWizard({
             prepared={preparedLocal}
             onPreparedLocal={handlePreparedLocal}
             onCommit={() => {
-              void handleCommitPrepared();
+              /* Commit moved to Review in durable mode */
             }}
             committing={committing}
             onError={(message) => setError(message || null)}
@@ -1058,7 +1195,7 @@ export function IngestionWizard({
               placeholder="Ethereum"
             />
           </label>
-          {provenanceSlug && mint.url.trim() && (
+          {provenanceSlug && mint.url.trim() && !durableStorage && (
             <button
               type="button"
               disabled={publishing}
@@ -1085,6 +1222,196 @@ export function IngestionWizard({
               Save provenance to record
             </button>
           )}
+          {durableStorage && (
+            <p className="text-[0.75rem] text-[var(--muted)]">
+              Provenance stays local until Commit Accession on Review.
+            </p>
+          )}
+        </section>
+      )}
+
+      {step === "Visibility" && (
+        <section className="max-w-lg space-y-6">
+          <h2 className="text-[0.62rem] tracking-[0.18em] uppercase text-[var(--muted)]">
+            Publication visibility
+          </h2>
+          <p className="text-[0.82rem] text-[var(--muted)]">
+            Stored in metadata on the intentional Commit. Opening or editing
+            locally does not change public visibility.
+          </p>
+          {(
+            [
+              {
+                value: "published" as const,
+                label: "Published",
+                help: "Listed on the public archive after the next deploy.",
+              },
+              {
+                value: "generated" as const,
+                label: "Generated (admin only)",
+                help: "Files exist in GitHub; public site filters it out until published.",
+              },
+              {
+                value: "hidden" as const,
+                label: "Hidden",
+                help: "Retained in the archive tree but not shown publicly.",
+              },
+            ] as const
+          ).map((option) => (
+            <label
+              key={option.value}
+              className="flex cursor-pointer gap-3 border border-[var(--border)] p-3"
+            >
+              <input
+                type="radio"
+                name="intended-visibility"
+                checked={intendedStatus === option.value}
+                onChange={() => setIntendedStatus(option.value)}
+              />
+              <span>
+                <span className="block text-[0.78rem] tracking-wide uppercase">
+                  {option.label}
+                </span>
+                <span className="mt-1 block text-[0.72rem] text-[var(--muted)]">
+                  {option.help}
+                </span>
+              </span>
+            </label>
+          ))}
+        </section>
+      )}
+
+      {step === "Review" && (
+        <section className="space-y-6">
+          <h2 className="text-[0.62rem] tracking-[0.18em] uppercase text-[var(--muted)]">
+            Review and commit
+          </h2>
+          {commitCompleted && lastCommittedSha ? (
+            <div className="space-y-3 border border-[var(--border)] p-4">
+              <p className="text-[0.78rem] tracking-[0.14em] uppercase">
+                Completed
+              </p>
+              <p className="text-[0.85rem] text-[var(--muted)]">
+                Intentional GitHub commit{" "}
+                <code className="text-[0.8rem]">{lastCommittedSha.slice(0, 7)}</code>
+                {result?.slug ? ` for ${result.slug}` : ""}. Public pages update
+                after Vercel redeploy.
+              </p>
+              {result && (
+                <ul className="max-h-40 overflow-y-auto font-mono text-[0.7rem] opacity-80">
+                  {result.files.map((f) => (
+                    <li key={f.path}>
+                      {f.path} ({f.bytes} B)
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-4 border border-[var(--border)] p-4 text-[0.78rem] sm:grid-cols-2">
+                <div>
+                  <p className="text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]">
+                    Artwork
+                  </p>
+                  <p>{controller.artwork.metadata.title || "(untitled)"}</p>
+                  <p className="text-[var(--muted)]">{accessionId}</p>
+                  <p className="text-[var(--muted)]">slug: {slug}</p>
+                </div>
+                <div>
+                  <p className="text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]">
+                    Visibility
+                  </p>
+                  <p>{intendedStatus}</p>
+                  <p className="mt-2 text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]">
+                    Mode
+                  </p>
+                  <p>
+                    {isExistingArchive ? "Revision" : "New accession"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]">
+                    Provenance
+                  </p>
+                  <p>
+                    mint: {mint.platform || "(none)"}
+                    {mint.url ? ` — ${mint.url}` : ""}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]">
+                    Sizes
+                  </p>
+                  <p>
+                    Source:{" "}
+                    {sourceFile
+                      ? formatByteSize(sourceFile.size)
+                      : "missing"}
+                    {sourceFile && sourceFile.size > MAX_SOURCE_BYTES
+                      ? " (over limit)"
+                      : ""}
+                  </p>
+                  <p>
+                    Prepared:{" "}
+                    {preparedLocal
+                      ? formatByteSize(preparedLocal.blob.size)
+                      : "not prepared"}
+                  </p>
+                  <p className="text-[var(--muted)]">
+                    Binary budget: {formatByteSize(MAX_BUNDLE_BINARY_BYTES)}{" "}
+                    (platform ~4.5 MB)
+                  </p>
+                </div>
+              </div>
+              <p className="text-[0.75rem] text-[var(--muted)]">
+                Required after Commit: metadata.json, states.json, notes.md, five
+                public derivatives, archive source + prepared master. MVP omits
+                perception.html and manifest.json.
+              </p>
+              {(preparedLocal?.objectUrl || controller.artwork.imageSrc) && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={
+                    preparedLocal?.objectUrl || controller.artwork.imageSrc
+                  }
+                  alt=""
+                  className="max-h-64 w-auto border border-[var(--border)] object-contain"
+                />
+              )}
+              <button
+                type="button"
+                disabled={
+                  committing ||
+                  commitInFlight ||
+                  commitCompleted ||
+                  !draftId ||
+                  !preparedLocal ||
+                  !sourceFile
+                }
+                title={
+                  isExistingArchive
+                    ? "Validate and write one revision commit to GitHub."
+                    : "Validate and write one accession commit to GitHub."
+                }
+                onClick={() => {
+                  void handleCommitAccession();
+                }}
+                className="border border-[var(--ink)] px-5 py-3 text-[0.68rem] tracking-[0.16em] uppercase disabled:opacity-40"
+              >
+                {committing
+                  ? "Committing..."
+                  : isExistingArchive
+                    ? "Commit Revision"
+                    : "Commit Accession"}
+              </button>
+            </>
+          )}
+          {result?.warnings?.map((w) => (
+            <p key={w} className="text-[0.72rem] text-amber-200/80">
+              {w}
+            </p>
+          ))}
         </section>
       )}
 
@@ -1092,7 +1419,7 @@ export function IngestionWizard({
         <button
           type="button"
           onClick={goBack}
-          disabled={stepIndex === 0}
+          disabled={stepIndex <= 0 || commitCompleted}
           title="Return to the previous accession step without discarding draft changes."
           className="text-[0.68rem] tracking-[0.14em] uppercase opacity-50 disabled:opacity-20"
         >
@@ -1100,12 +1427,40 @@ export function IngestionWizard({
         </button>
         <button
           type="button"
-          onClick={goNext}
-          disabled={stepIndex >= STEPS.length - 1}
-          title="Advance to the next accession step. Draft changes autosave in the background."
+          onClick={() => {
+            if (
+              durableStorage &&
+              step === "Review" &&
+              !commitCompleted
+            ) {
+              void handleCommitAccession();
+              return;
+            }
+            if (!isFinalVisibleStep(STEPS, step)) goNext();
+          }}
+          disabled={
+            commitCompleted
+              ? true
+              : durableStorage && step === "Review"
+                ? committing ||
+                  commitInFlight ||
+                  !preparedLocal ||
+                  !sourceFile
+                : stepIndex >= STEPS.length - 1
+          }
+          title={
+            durableStorage && step === "Review"
+              ? "Validate and perform the single intentional GitHub commit."
+              : "Advance to the next accession step. Local draft autosaves in the browser."
+          }
           className="text-[0.68rem] tracking-[0.14em] uppercase"
         >
-          Next
+          {footerPrimaryLabel({
+            steps: STEPS,
+            step,
+            isRevision: isExistingArchive,
+            completed: commitCompleted,
+          })}
         </button>
       </footer>
     </div>
