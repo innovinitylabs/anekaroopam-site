@@ -11,6 +11,7 @@
   "source": {
     "kind": "migration-required"
   },
+  "processing": {},
   "artwork": {
     "id": "draft-2026-0004",
     "metadata": {
@@ -45,5 +46,6 @@
   },
   "createdAt": "2026-05-21T09:07:39.362Z",
   "updatedAt": "2026-05-21T09:08:05.776Z",
-  "preparedAt": "2026-05-21T09:08:05.575Z"
+  "preparedAt": "2026-05-21T09:08:05.575Z",
+  "deletedAt": "2026-09-23T09:31:11.132Z"
 }
