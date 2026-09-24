@@ -5,7 +5,7 @@
 
 import { ARCHIVE_IMAGE_OUTPUTS } from "@/lib/archive/image-specs";
 
-const ACCESSION_ID_RE = /^AR-\d{4}-\d{4}$/;
+const ACCESSION_ID_RE = /^AR-\d{4}-\d{4,}$/;
 const STORED_ORIGINAL_RE = /^original\.[a-z0-9]+$/;
 
 export const R2_PREPARED_FILENAME = "master-prepared.avif";

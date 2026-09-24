@@ -3,6 +3,7 @@
 import { adminFetch } from "@/components/admin/admin-fetch";
 import { readAdminJson } from "@/lib/archive/admin-response";
 import type { MetadataPackageFile } from "@/lib/archive/browser-metadata-package";
+import type { AccessionDraft } from "@/lib/archive/schema";
 import { browserPresignedPutHeaders } from "@/lib/r2/presign-headers";
 
 export interface PresignedPutClient {
@@ -28,6 +29,7 @@ export interface UploadAuthResponse {
   accessionId: string;
   draftId: string;
   revision: number;
+  artworkId?: string | null;
   publicBaseUrl: string;
   uploads: PresignedPutClient[];
   existingEntry: unknown | null;
@@ -48,6 +50,7 @@ export function browserPutHeaders(contentType: string): {
 
 export async function requestUploadAuth(input: {
   slug: string;
+  draftId?: string;
   isExistingArchive: boolean;
   storedFilename: string;
   objects: UploadAuthObjectSpec[];
@@ -89,10 +92,13 @@ export async function putToPresignedUrl(
 export async function verifyUploads(input: {
   accessionId: string;
   revision: number;
+  artworkId?: string | null;
+  draftId?: string;
   objects: Array<{
     key: string;
     contentType: string;
     contentLength: number;
+    role?: string;
   }>;
 }): Promise<void> {
   const res = await adminFetch("/api/admin/archive/upload-verify", {
@@ -118,11 +124,16 @@ export async function verifyUploads(input: {
 export async function postMetadataCommit(input: {
   slug: string;
   draftId?: string;
+  artworkId?: string | null;
   message?: string;
   textFiles: MetadataPackageFile[];
   accessionId: string;
   revision: number;
   mediaObjects: MetadataCommitMediaObject[];
+  artwork?: AccessionDraft["artwork"];
+  provenance?: AccessionDraft["provenance"];
+  export?: AccessionDraft["export"];
+  publish?: boolean;
 }): Promise<{ commitSha: string; paths: string[] }> {
   const res = await adminFetch("/api/admin/archive/metadata-commit", {
     method: "POST",
@@ -130,8 +141,13 @@ export async function postMetadataCommit(input: {
     body: JSON.stringify({
       slug: input.slug,
       draftId: input.draftId,
+      artworkId: input.artworkId,
       message: input.message,
       textFiles: input.textFiles,
+      artwork: input.artwork,
+      provenance: input.provenance,
+      export: input.export,
+      publish: input.publish,
       media: {
         accessionId: input.accessionId,
         revision: input.revision,

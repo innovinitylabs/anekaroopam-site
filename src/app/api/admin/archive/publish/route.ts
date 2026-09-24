@@ -11,6 +11,12 @@ import {
 } from "@/lib/archive/draft-store";
 import { githubErrorResponse } from "@/lib/archive/github-admin-response";
 import { assertArchivePublishable } from "@/lib/archive/visibility";
+import { preferArchiveWorker } from "@/lib/archive/worker-config";
+import {
+  ArchiveWorkerError,
+  workerPublish,
+} from "@/lib/archive/worker-client";
+import { findWorkerArtworkByDraftOrSlug } from "@/lib/archive/worker-drafts";
 import {
   ArchiveSyncIncompleteError,
   ArchiveSyncNotFoundError,
@@ -34,6 +40,48 @@ async function githubBundleReady(slug: string): Promise<boolean> {
 export async function POST(request: Request) {
   const denied = requireAdminIngest(request);
   if (denied) return denied;
+
+  if (preferArchiveWorker()) {
+    try {
+      const body = (await request.json()) as {
+        slug?: string;
+        draftId?: string;
+        artworkId?: string;
+        revision?: number;
+      };
+      const slug = body.slug?.trim();
+      if (!slug && !body.draftId && !body.artworkId) {
+        return NextResponse.json(
+          { error: "slug, draftId, or artworkId required" },
+          { status: 400 },
+        );
+      }
+      const row = body.artworkId
+        ? { id: body.artworkId }
+        : await findWorkerArtworkByDraftOrSlug({
+            draftId: body.draftId?.trim(),
+            slug,
+          });
+      if (!row) {
+        return NextResponse.json(
+          { error: "Artwork not found in Worker" },
+          { status: 404 },
+        );
+      }
+      const result = await workerPublish(row.id, body.revision);
+      return NextResponse.json({
+        ok: true,
+        source: "worker",
+        artwork: result.artwork,
+      });
+    } catch (e) {
+      if (e instanceof ArchiveWorkerError) {
+        return NextResponse.json({ error: e.message }, { status: e.status });
+      }
+      const message = e instanceof Error ? e.message : "publish failed";
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
+  }
 
   if (!getGitHubArchiveConfig()) {
     return NextResponse.json(
@@ -80,7 +128,7 @@ export async function POST(request: Request) {
       try {
         await markArchiveRecordPublishedOnGitHub(entry.slug);
       } catch {
-        /* metadata tip update best-effort after bundle push */
+        /* optional */
       }
     }
 
@@ -88,27 +136,30 @@ export async function POST(request: Request) {
       try {
         await updateDraftStatusOnGitHub(body.draftId, "published");
       } catch {
-        await updateDraftStatus(body.draftId, "published");
+        try {
+          await updateDraftStatus(body.draftId, "published");
+        } catch {
+          /* draft status best-effort */
+        }
       }
     }
 
-    return NextResponse.json({ commitSha, paths });
+    return NextResponse.json({
+      ok: true,
+      commitSha,
+      paths,
+      slug,
+    });
   } catch (e) {
-    const github = githubErrorResponse(e);
-    if (github) return github;
-    if (e instanceof ArchiveSyncNotFoundError) {
-      return NextResponse.json({ error: e.message }, { status: 404 });
-    }
-    if (e instanceof ArchiveSyncIncompleteError) {
+    if (
+      e instanceof ArchiveSyncIncompleteError ||
+      e instanceof ArchiveSyncNotFoundError
+    ) {
       return NextResponse.json({ error: e.message }, { status: 409 });
     }
-    const message = e instanceof Error ? e.message : "Publish failed";
-    if (
-      message.includes("hidden and cannot be published") ||
-      message.includes("withdrawn and cannot be published")
-    ) {
-      return NextResponse.json({ error: message }, { status: 409 });
-    }
+    const github = githubErrorResponse(e);
+    if (github) return github;
+    const message = e instanceof Error ? e.message : "publish failed";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

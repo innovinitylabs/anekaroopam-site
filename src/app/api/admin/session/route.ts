@@ -16,6 +16,7 @@ import {
 import { getAdminSessionSecret } from "@/lib/archive/admin-session";
 import { githubStorageAvailable } from "@/lib/archive/draft-github-store";
 import { r2ArchiveReady } from "@/lib/r2/config";
+import { preferArchiveWorker } from "@/lib/archive/worker-config";
 
 export const runtime = "nodejs";
 
@@ -113,8 +114,10 @@ export async function GET(request: Request) {
     );
   }
 
-  const durableStorage = githubStorageAvailable();
+  const durableStorage =
+    preferArchiveWorker() || githubStorageAvailable();
   const r2Archive = r2ArchiveReady();
+  const d1Archive = preferArchiveWorker();
   const session = readAdminSession(request);
   if (!session) {
     return NextResponse.json(
@@ -124,6 +127,7 @@ export async function GET(request: Request) {
         secretFallbackAvailable: modes.secretFallbackAvailable,
         durableStorage,
         r2Archive,
+        d1Archive,
       },
       { status: 401 },
     );
@@ -137,5 +141,6 @@ export async function GET(request: Request) {
     secretFallbackAvailable: modes.secretFallbackAvailable,
     durableStorage,
     r2Archive,
+    d1Archive,
   });
 }

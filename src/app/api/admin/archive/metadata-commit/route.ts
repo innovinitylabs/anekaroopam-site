@@ -7,16 +7,35 @@ import {
   assertAllowedMetadataCommitPaths,
   normalizeMetadataCommitPath,
 } from "@/lib/archive/metadata-commit-paths";
+import { preferArchiveWorker } from "@/lib/archive/worker-config";
+import {
+  ArchiveWorkerError,
+  workerMarkReady,
+  workerPatchArtwork,
+  workerPublish,
+} from "@/lib/archive/worker-client";
+import {
+  findWorkerArtworkByDraftOrSlug,
+  updateDraftViaWorker,
+} from "@/lib/archive/worker-drafts";
 import { commitFiles } from "@/lib/github/git-commit";
 import { r2ArchiveReady } from "@/lib/r2/config";
 import { verifyR2Objects } from "@/lib/r2/verify";
+import type { AccessionDraft } from "@/lib/archive/schema";
 
 export const runtime = "nodejs";
 
 interface MetadataCommitBody {
   slug?: string;
   draftId?: string;
+  artworkId?: string;
   message?: string;
+  publish?: boolean;
+  metadata?: unknown;
+  perception?: unknown;
+  export?: unknown;
+  provenance?: unknown;
+  artwork?: AccessionDraft["artwork"];
   textFiles?: Array<{ path: string; content: string }>;
   media?: {
     accessionId?: string;
@@ -33,9 +52,13 @@ export async function POST(request: Request) {
   const denied = requireAdminIngest(request);
   if (denied) return denied;
 
-  if (!githubStorageAvailable()) {
+  const useWorker = preferArchiveWorker();
+  if (!useWorker && !githubStorageAvailable()) {
     return NextResponse.json(
-      { error: "Durable GitHub storage is required for metadata-commit." },
+      {
+        error:
+          "Durable storage required for metadata-commit (ARCHIVE_WORKER_* or GitHub).",
+      },
       { status: 503 },
     );
   }
@@ -91,6 +114,79 @@ export async function POST(request: Request) {
       );
     }
 
+    if (useWorker) {
+      const row =
+        (body.artworkId
+          ? await findWorkerArtworkByDraftOrSlug({
+              accessionId,
+              draftId,
+              slug,
+            })
+          : await findWorkerArtworkByDraftOrSlug({
+              draftId,
+              slug,
+              accessionId,
+            })) ??
+        (await findWorkerArtworkByDraftOrSlug({
+          draftId,
+          slug,
+          accessionId,
+        }));
+
+      if (!row) {
+        return NextResponse.json(
+          { error: "Worker artwork not found for metadata commit" },
+          { status: 404 },
+        );
+      }
+
+      if (body.artwork || body.provenance || body.export) {
+        await updateDraftViaWorker(row.draftId, {
+          slug,
+          artwork: body.artwork,
+          provenance: body.provenance as AccessionDraft["provenance"],
+          export: body.export as AccessionDraft["export"],
+        });
+      } else if (body.metadata || body.perception || body.provenance) {
+        await workerPatchArtwork(row.id, {
+          metadata: body.metadata,
+          perception: body.perception,
+          export: body.export,
+          provenance: body.provenance,
+          slug,
+        });
+      } else {
+        await workerPatchArtwork(row.id, { slug });
+      }
+
+      try {
+        await workerMarkReady(row.id);
+      } catch (e) {
+        if (!(e instanceof ArchiveWorkerError && e.status === 409)) {
+          throw e;
+        }
+      }
+
+      let published = false;
+      if (body.publish !== false) {
+        const result = await workerPublish(row.id);
+        published = result.artwork.status === "published";
+      }
+
+      return NextResponse.json({
+        commitSha: `d1:${row.id}:${revision}`,
+        paths: [`worker:artworks/${row.id}`],
+        slug,
+        draftId: row.draftId,
+        accessionId,
+        revision,
+        verifiedObjects: mediaObjects.length,
+        published,
+        source: "worker",
+        message,
+      });
+    }
+
     const upserts = textFiles.map((file) => ({
       path: normalizeMetadataCommitPath(file.path),
       content: Buffer.from(file.content, "utf8"),
@@ -118,6 +214,9 @@ export async function POST(request: Request) {
       verifiedObjects: mediaObjects.length,
     });
   } catch (e) {
+    if (e instanceof ArchiveWorkerError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
     const github = githubErrorResponse(e);
     if (github) return github;
     const message = e instanceof Error ? e.message : "metadata-commit failed";

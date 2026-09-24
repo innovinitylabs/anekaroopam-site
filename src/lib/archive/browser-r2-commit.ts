@@ -101,6 +101,7 @@ export async function commitBrowserR2Bundle(input: {
   report("authorizing");
   const auth = await requestUploadAuth({
     slug: input.draft.slug,
+    draftId: input.draft.draftId,
     isExistingArchive: input.isExistingArchive,
     storedFilename,
     objects: objectSpecs,
@@ -135,10 +136,13 @@ export async function commitBrowserR2Bundle(input: {
     await verifyUploads({
       accessionId: auth.accessionId,
       revision: auth.revision,
-      objects: auth.uploads.map((u) => ({
+      artworkId: auth.artworkId,
+      draftId: auth.draftId,
+      objects: auth.uploads.map((u, i) => ({
         key: u.key,
         contentType: u.contentType,
         contentLength: u.contentLength,
+        role: objectSpecs[i]?.role,
       })),
     });
   } catch (error) {
@@ -231,6 +235,7 @@ export async function commitBrowserR2Bundle(input: {
     committed = await postMetadataCommit({
       slug: pack.slug,
       draftId: pack.draftId,
+      artworkId: auth.artworkId,
       message:
         input.message ??
         (input.isExistingArchive
@@ -244,6 +249,10 @@ export async function commitBrowserR2Bundle(input: {
         contentType: u.contentType,
         contentLength: u.contentLength,
       })),
+      artwork: draftWithIds.artwork,
+      provenance: draftWithIds.provenance,
+      export: draftWithIds.export,
+      publish: (input.intendedStatus ?? "generated") === "published",
     });
   } catch (error) {
     report(
@@ -280,7 +289,7 @@ export async function commitBrowserR2Bundle(input: {
     })),
     warnings: [
       ...pack.warnings,
-      `R2 revision r${auth.revision} for ${auth.accessionId}. Committed ${committed.commitSha.slice(0, 7)} (metadata only). Public View may 404 until redeploy.`,
+      `R2 revision r${auth.revision} for ${auth.accessionId}. Committed ${committed.commitSha.slice(0, 7)}.`,
     ],
     archiveStatus: pack.draft.status,
     binaryBytes,

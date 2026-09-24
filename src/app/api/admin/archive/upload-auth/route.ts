@@ -4,6 +4,12 @@ import { resolveCommitIdentity } from "@/lib/archive/accession-mint";
 import { githubStorageAvailable } from "@/lib/archive/draft-github-store";
 import { githubErrorResponse } from "@/lib/archive/github-admin-response";
 import { sourceFilenameForUpload } from "@/lib/archive/schema";
+import { preferArchiveWorker } from "@/lib/archive/worker-config";
+import {
+  ensureWorkerArtworkForDraft,
+  findWorkerArtworkByDraftOrSlug,
+} from "@/lib/archive/worker-drafts";
+import { ArchiveWorkerError } from "@/lib/archive/worker-client";
 import { r2ArchiveReady, requireR2Config } from "@/lib/r2/config";
 import {
   buildAllRevisionKeys,
@@ -16,6 +22,7 @@ export const runtime = "nodejs";
 
 interface UploadAuthBody {
   slug?: string;
+  draftId?: string;
   isExistingArchive?: boolean;
   storedFilename?: string;
   objects?: Array<{
@@ -31,9 +38,13 @@ export async function POST(request: Request) {
   const denied = requireAdminIngest(request);
   if (denied) return denied;
 
-  if (!githubStorageAvailable()) {
+  const useWorker = preferArchiveWorker();
+  if (!useWorker && !githubStorageAvailable()) {
     return NextResponse.json(
-      { error: "Durable GitHub storage is required for R2 upload-auth." },
+      {
+        error:
+          "Durable storage required for R2 upload-auth (configure ARCHIVE_WORKER_* or GitHub archive).",
+      },
       { status: 503 },
     );
   }
@@ -65,14 +76,45 @@ export async function POST(request: Request) {
       );
     }
 
-    const identity = await resolveCommitIdentity({
-      isExistingArchive: Boolean(body.isExistingArchive),
-      slug,
-    });
+    let accessionId: string;
+    let draftId: string;
+    let revision: number;
+    let artworkId: string | null = null;
+    let existingEntry: unknown = null;
+
+    if (useWorker) {
+      const draftIdInput = body.draftId?.trim() || `draft-for-${slug}`;
+      let artwork = await findWorkerArtworkByDraftOrSlug({
+        draftId: body.draftId?.trim(),
+        slug,
+      });
+      if (!artwork) {
+        artwork = await ensureWorkerArtworkForDraft({
+          draftId: draftIdInput,
+          slug,
+          title: slug,
+          idempotencyKey: `upload-auth:${draftIdInput}`,
+        });
+      }
+      accessionId = artwork.accessionId;
+      draftId = artwork.draftId;
+      revision = artwork.workingRevision;
+      artworkId = artwork.id;
+      existingEntry = null;
+    } else {
+      const identity = await resolveCommitIdentity({
+        isExistingArchive: Boolean(body.isExistingArchive),
+        slug,
+      });
+      accessionId = identity.accessionId;
+      draftId = identity.draftId;
+      revision = identity.revision;
+      existingEntry = identity.existingEntry;
+    }
 
     const keys = buildAllRevisionKeys({
-      accessionId: identity.accessionId,
-      revision: identity.revision,
+      accessionId,
+      revision,
       storedFilename,
     });
 
@@ -97,13 +139,7 @@ export async function POST(request: Request) {
           { status: 400 },
         );
       }
-      if (
-        !isAllowedArchiveObjectKey(
-          key,
-          identity.accessionId,
-          identity.revision,
-        )
-      ) {
+      if (!isAllowedArchiveObjectKey(key, accessionId, revision)) {
         return NextResponse.json(
           { error: `Refusing unauthorized object key for role ${obj.role}` },
           { status: 400 },
@@ -133,9 +169,6 @@ export async function POST(request: Request) {
             { status: 409 },
           );
         }
-        if (sameSize) {
-          // Resume: still issue a fresh PUT URL so the client can skip or re-PUT.
-        }
       }
 
       const put = await createPresignedPut({
@@ -147,14 +180,19 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({
-      accessionId: identity.accessionId,
-      draftId: identity.draftId,
-      revision: identity.revision,
+      accessionId,
+      draftId,
+      revision,
+      artworkId,
       publicBaseUrl: config.publicBaseUrl,
       uploads,
-      existingEntry: identity.existingEntry,
+      existingEntry,
+      source: useWorker ? "worker" : "github",
     });
   } catch (e) {
+    if (e instanceof ArchiveWorkerError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
     const github = githubErrorResponse(e);
     if (github) return github;
     const message = e instanceof Error ? e.message : "upload-auth failed";

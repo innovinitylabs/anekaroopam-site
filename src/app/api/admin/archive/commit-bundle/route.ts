@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminIngest } from "@/lib/archive/admin-ingest-response";
+import { preferArchiveWorker } from "@/lib/archive/worker-config";
 import {
   assertAllowedCommitBundlePaths,
   MAX_COMMIT_BUNDLE_BYTES,
@@ -20,6 +21,17 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   const denied = requireAdminIngest(request);
   if (denied) return denied;
+
+  if (preferArchiveWorker()) {
+    return NextResponse.json(
+      {
+        error:
+          "GitHub commit-bundle is retired for this environment. Use R2 upload + D1 metadata-commit.",
+        code: "github_content_store_retired",
+      },
+      { status: 410 },
+    );
+  }
 
   if (!githubStorageAvailable()) {
     return NextResponse.json(
