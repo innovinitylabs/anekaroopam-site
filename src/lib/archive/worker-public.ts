@@ -5,6 +5,7 @@
 import type { PerceptionArtwork } from "@/lib/perception/types";
 import type { ArchiveEntry } from "./schema";
 import { ARCHIVE_VERSION, emptyProvenance } from "./schema";
+import type { ArchiveSearchParams } from "./archive-search";
 import {
   workerGetPublicArtwork,
   workerListPublicArtworks,
@@ -61,25 +62,28 @@ function detailToEntry(detail: WorkerPublicDetail["artwork"]): ArchiveEntry {
   };
 }
 
-export async function listPublicArtworksFromWorker(): Promise<
-  PerceptionArtwork[]
-> {
-  const { artworks } = await workerListPublicArtworks();
-  return artworks.map((a) => ({
-    id: a.slug,
-    metadata: {
-      title: a.title,
-      year: a.year ?? undefined,
-      process: a.process ?? undefined,
-      accessionId: a.accessionId,
-    },
-    imageSrc: a.thumbUrl ?? "",
-    states: [],
-    background: "paper",
-    initialAngle: 0,
-    snapToState: true,
-    showMetadataOverlay: true,
-  }));
+export async function listPublicArtworksFromWorker(
+  filters: ArchiveSearchParams = {},
+): Promise<{ artworks: PerceptionArtwork[]; total: number }> {
+  const { artworks, total } = await workerListPublicArtworks(filters);
+  return {
+    total,
+    artworks: artworks.map((a) => ({
+      id: a.slug,
+      metadata: {
+        title: a.title,
+        year: a.year ?? undefined,
+        process: a.process ?? undefined,
+        accessionId: a.accessionId,
+      },
+      imageSrc: a.thumbUrl ?? "",
+      states: [],
+      background: "paper",
+      initialAngle: 0,
+      snapToState: true,
+      showMetadataOverlay: true,
+    })),
+  };
 }
 
 export async function getPublicEntryFromWorker(

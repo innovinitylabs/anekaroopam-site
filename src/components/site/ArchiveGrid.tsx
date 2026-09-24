@@ -1,57 +1,110 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { ArchiveGalleryThumb } from "@/components/site/ArchiveGalleryThumb";
 import { DisplayTitle } from "@/components/site/DisplayTitle";
 import { FadeIn } from "@/components/site/FadeIn";
 import { hasTamilScript } from "@/lib/typography/tamil";
 import type { PerceptionArtwork } from "@/lib/perception/types";
 import {
-  filterArtworks,
-} from "@/lib/content/artworks";
+  archiveSearchToQueryString,
+  type ArchiveSearchParams,
+} from "@/lib/archive/archive-search";
+import { filterArtworks } from "@/lib/content/artworks";
 
 export function ArchiveGrid({
   artworks,
+  facets,
+  initialFilters,
+  serverFiltered,
+  total,
 }: {
   artworks: PerceptionArtwork[];
+  facets: { years: number[]; processes: string[] };
+  initialFilters: ArchiveSearchParams;
+  serverFiltered: boolean;
+  total: number;
 }) {
-  const [year, setYear] = useState<number | "">("");
-  const [process, setProcess] = useState("");
-  const [query, setQuery] = useState("");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [isPending, startTransition] = useTransition();
 
-  const years = Array.from(
-    new Set(
-      artworks
-        .map((artwork) => artwork.metadata.year)
-        .filter((value): value is number => typeof value === "number"),
-    ),
-  ).sort((a, b) => Number(b) - Number(a));
-  const processes = Array.from(
-    new Set(
-      artworks
-        .map((artwork) => artwork.metadata.process)
-        .filter((value): value is string => Boolean(value)),
-    ),
-  ).sort();
-
-  const base = filterArtworks(
-    {
-      year: year === "" ? undefined : year,
-      process: process || undefined,
-      state: query || undefined,
-    },
-    artworks,
+  const [year, setYear] = useState<number | "">(
+    initialFilters.year ?? "",
   );
-  const filtered = !query
-    ? base
-    : base.filter(
-        (a) =>
-          a.metadata.title.toLowerCase().includes(query.toLowerCase()) ||
-          a.states.some((s) =>
-            s.name.toLowerCase().includes(query.toLowerCase()),
-          ),
+  const [process, setProcess] = useState(initialFilters.process ?? "");
+  const [query, setQuery] = useState(initialFilters.q ?? "");
+
+  useEffect(() => {
+    setYear(initialFilters.year ?? "");
+    setProcess(initialFilters.process ?? "");
+    setQuery(initialFilters.q ?? "");
+  }, [initialFilters.year, initialFilters.process, initialFilters.q]);
+
+  const pushFilters = useCallback(
+    (next: { year: number | ""; process: string; query: string }) => {
+      const params: ArchiveSearchParams = {
+        q: next.query.trim() || undefined,
+        year: next.year === "" ? undefined : next.year,
+        process: next.process || undefined,
+        sort: initialFilters.sort,
+      };
+      const qs = archiveSearchToQueryString(params);
+      startTransition(() => {
+        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+      });
+    },
+    [initialFilters.sort, pathname, router],
+  );
+
+  // Keep local state in sync when the user types; debounce URL updates for q.
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      const currentQ = searchParams.get("q") ?? "";
+      const currentYear = searchParams.get("year") ?? "";
+      const currentProcess = searchParams.get("process") ?? "";
+      const nextYear = year === "" ? "" : String(year);
+      if (
+        currentQ === (query.trim() || "") &&
+        currentYear === nextYear &&
+        currentProcess === process
+      ) {
+        return;
+      }
+      pushFilters({ year, process, query });
+    }, 250);
+    return () => window.clearTimeout(handle);
+  }, [year, process, query, pushFilters, searchParams]);
+
+  const years = facets.years;
+  const processes = facets.processes;
+
+  const filtered = serverFiltered
+    ? artworks
+    : filterArtworks(
+        {
+          year: year === "" ? undefined : year,
+          process: process || undefined,
+          q: query.trim() || undefined,
+        },
+        artworks,
       );
+
+  const clearFilters = () => {
+    setYear("");
+    setProcess("");
+    setQuery("");
+    startTransition(() => {
+      router.replace(pathname, { scroll: false });
+    });
+  };
+
+  const hasActiveFilters = Boolean(
+    query.trim() || year !== "" || process,
+  );
 
   return (
     <>
@@ -92,12 +145,31 @@ export function ArchiveGrid({
           Search
           <input
             className="mt-1 min-h-10 w-full border-b border-[var(--border)] bg-transparent py-1 text-sm normal-case tracking-normal outline-none"
-            placeholder="Title or perceptual state"
+            placeholder="Title, accession, or slug"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
         </label>
+        {hasActiveFilters && (
+          <button
+            type="button"
+            className="self-end text-[0.62rem] tracking-[0.16em] uppercase text-[var(--muted)] underline-offset-4 hover:underline"
+            onClick={clearFilters}
+          >
+            Clear
+          </button>
+        )}
       </FadeIn>
+
+      <p
+        className={`mt-4 text-[0.68rem] tracking-[0.12em] uppercase text-[var(--muted)] ${
+          isPending ? "opacity-60" : ""
+        }`}
+      >
+        {filtered.length === 0
+          ? "No matching records"
+          : `${filtered.length}${serverFiltered && total > filtered.length ? ` of ${total}` : ""} record${filtered.length === 1 ? "" : "s"}`}
+      </p>
 
       <ul className="mt-12 grid gap-14 sm:grid-cols-2 md:mt-16 md:gap-12 lg:grid-cols-3">
         {filtered.map((artwork, i) => (

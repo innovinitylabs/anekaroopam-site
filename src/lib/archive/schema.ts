@@ -154,6 +154,23 @@ export const ArchiveMetadataFieldsSchema = z.object({
   rotationalObservations: z.string().optional(),
   description: z.string().optional(),
   tags: z.array(z.string()).optional(),
+  /** Optional SEO / AI-oriented copy nested under metadata (revision SoT). */
+  seo: z
+    .object({
+      pageTitle: z.string(),
+      description: z.string(),
+      ogTitle: z.string(),
+      ogDescription: z.string(),
+      twitterCard: z.enum(["summary", "summary_large_image"]).optional(),
+      canonicalPath: z.string(),
+      schemaOrg: z.record(z.string(), z.unknown()).optional(),
+      archiveMarkdown: z.string().optional(),
+      accessibleDescription: z.string().optional(),
+      reviewed: z.boolean().optional(),
+      generatedAt: z.string().optional(),
+      generatedFrom: z.array(z.string()).optional(),
+    })
+    .optional(),
 });
 
 export const ArchiveExportSettingsSchema = z.object({

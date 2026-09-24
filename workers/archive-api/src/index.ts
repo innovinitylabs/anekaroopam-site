@@ -1,6 +1,7 @@
 import {
   appendEvent,
   createDraft,
+  deleteArtwork,
   freezeWorkingRevision,
   getArtwork,
   getArtworkByAccessionId,
@@ -19,6 +20,9 @@ import {
   revisionHasRequiredAssets,
   setVisibility,
   unpublishArtwork,
+  validateIdentity,
+  type ListArtworksOpts,
+  type ListArtworksSort,
 } from "./db";
 import { errorJson, json, readJson, requireAdmin } from "./http";
 import type { SqlExecutor } from "./db";
@@ -38,7 +42,96 @@ function corsHeaders(request: Request): HeadersInit {
     "access-control-allow-origin": origin,
     "access-control-allow-headers":
       "authorization, content-type, idempotency-key",
-    "access-control-allow-methods": "GET, POST, PATCH, OPTIONS",
+    "access-control-allow-methods": "GET, POST, PATCH, DELETE, OPTIONS",
+  };
+}
+
+const SORT_VALUES = new Set<ListArtworksSort>([
+  "updated_desc",
+  "year_desc",
+  "title_asc",
+]);
+
+function parseListQuery(
+  url: URL,
+  defaults: { status?: string; limit?: number } = {},
+): { opts: ListArtworksOpts; error?: string } {
+  const q = url.searchParams.get("q")?.trim() || undefined;
+  const yearRaw = url.searchParams.get("year");
+  const process = url.searchParams.get("process")?.trim() || undefined;
+  const sortRaw = url.searchParams.get("sort") || "updated_desc";
+  const limitRaw = url.searchParams.get("limit");
+  const offsetRaw = url.searchParams.get("offset");
+  const statusParam = url.searchParams.get("status");
+
+  if (yearRaw != null && yearRaw !== "") {
+    const year = Number(yearRaw);
+    if (!Number.isInteger(year)) {
+      return { opts: {}, error: "year must be an integer" };
+    }
+  }
+
+  if (!SORT_VALUES.has(sortRaw as ListArtworksSort)) {
+    return {
+      opts: {},
+      error: "sort must be updated_desc, year_desc, or title_asc",
+    };
+  }
+
+  const limit = limitRaw != null ? Number(limitRaw) : (defaults.limit ?? 48);
+  if (!Number.isFinite(limit) || limit < 1) {
+    return { opts: {}, error: "limit must be a positive number" };
+  }
+
+  const offset = offsetRaw != null ? Number(offsetRaw) : 0;
+  if (!Number.isFinite(offset) || offset < 0) {
+    return { opts: {}, error: "offset must be a non-negative number" };
+  }
+
+  let status: string | string[] | undefined = defaults.status;
+  if (statusParam) {
+    status = statusParam.includes(",")
+      ? statusParam.split(",").map((s) => s.trim()).filter(Boolean)
+      : statusParam;
+  }
+
+  const year =
+    yearRaw != null && yearRaw !== "" ? Number(yearRaw) : undefined;
+
+  return {
+    opts: {
+      status,
+      q,
+      year,
+      process,
+      sort: sortRaw as ListArtworksSort,
+      limit: Math.min(Math.floor(limit), 200),
+      offset: Math.floor(offset),
+    },
+  };
+}
+
+function publicListDto(
+  rows: Awaited<ReturnType<typeof listArtworks>>["artworks"],
+  total: number,
+  base: string,
+) {
+  return {
+    artworks: rows.map((r) => ({
+      id: r.id,
+      accessionId: r.accession_id,
+      slug: r.slug,
+      title: r.title,
+      year: r.year,
+      process: r.process,
+      publishedRevision: r.published_revision,
+      thumbUrl:
+        r.thumb_object_key && base
+          ? publicUrlForKey(r.thumb_object_key, base)
+          : null,
+      publishedAt: r.published_at,
+    })),
+    total,
   };
 }
 
@@ -112,7 +205,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
 
   // Public published listing / detail (no admin token)
   if (path === "/public/artworks" && request.method === "GET") {
-    return listPublic(env);
+    return listPublic(env, url);
   }
   const publicMatch = /^\/public\/artworks\/([^/]+)$/.exec(path);
   if (publicMatch && request.method === "GET") {
@@ -123,10 +216,10 @@ async function handle(request: Request, env: Env): Promise<Response> {
   if (authError) return authError;
 
   if (path === "/admin/artworks" && request.method === "GET") {
-    const status = url.searchParams.get("status") || undefined;
-    const limit = Number(url.searchParams.get("limit") || "50");
-    const rows = await listArtworks(db(env), { status, limit });
-    return json({ artworks: rows.map((r) => artworkDto(r)) });
+    const parsed = parseListQuery(url, { limit: 50 });
+    if (parsed.error) return errorJson(400, parsed.error);
+    const { artworks, total } = await listArtworks(db(env), parsed.opts);
+    return json({ artworks: artworks.map((r) => artworkDto(r)), total });
   }
 
   if (path === "/admin/artworks" && request.method === "POST") {
@@ -141,11 +234,32 @@ async function handle(request: Request, env: Env): Promise<Response> {
     return getArtworkDetail(env, row.id);
   }
 
+  const validateMatch =
+    /^\/admin\/artworks\/([^/]+)\/validate-identity$/.exec(path);
+  if (validateMatch && request.method === "POST") {
+    const id = decodeURIComponent(validateMatch[1]);
+    const body = await readJson<{ slug?: string }>(request).catch(
+      () => ({} as { slug?: string }),
+    );
+    const artwork = await resolveArtworkId(db(env), id);
+    if (!artwork) return errorJson(404, "Artwork not found");
+    const result = await validateIdentity(db(env), artwork.id, {
+      slug: body.slug,
+    });
+    return json(result, result.ok ? 200 : 409);
+  }
+
   const artworkMatch = /^\/admin\/artworks\/([^/]+)$/.exec(path);
   if (artworkMatch) {
     const id = decodeURIComponent(artworkMatch[1]);
     if (request.method === "GET") return getArtworkDetail(env, id);
     if (request.method === "PATCH") return patchArtwork(request, env, id);
+    if (request.method === "DELETE") {
+      const artwork = await resolveArtworkId(db(env), id);
+      if (!artwork) return errorJson(404, "Artwork not found");
+      const result = await deleteArtwork(db(env), artwork.id);
+      return json(result);
+    }
   }
 
   const assetsMatch = /^\/admin\/artworks\/([^/]+)\/assets$/.exec(path);
@@ -420,6 +534,14 @@ async function createRevision(
   });
 }
 
+async function resolveArtworkId(database: SqlExecutor, idOrKey: string) {
+  let artwork = await getArtwork(database, idOrKey);
+  if (!artwork) artwork = await getArtworkByDraftId(database, idOrKey);
+  if (!artwork) artwork = await getArtworkByAccessionId(database, idOrKey);
+  if (!artwork) artwork = await getArtworkBySlug(database, idOrKey);
+  return artwork;
+}
+
 async function publish(
   request: Request,
   env: Env,
@@ -430,6 +552,11 @@ async function publish(
   );
   const artwork = await getArtwork(db(env), artworkId);
   if (!artwork) return errorJson(404, "Artwork not found");
+
+  const identity = await validateIdentity(db(env), artworkId);
+  if (!identity.ok) {
+    return errorJson(409, identity.errors.join("; "), { identity });
+  }
 
   let revision = body.revision;
   if (revision == null) {
@@ -456,25 +583,16 @@ async function visibility(
   return json({ artwork: artworkDto(artwork) });
 }
 
-async function listPublic(env: Env): Promise<Response> {
-  const rows = await listArtworks(db(env), { status: "published", limit: 200 });
-  const base = env.R2_PUBLIC_BASE_URL || "";
-  return json({
-    artworks: rows.map((r) => ({
-      id: r.id,
-      accessionId: r.accession_id,
-      slug: r.slug,
-      title: r.title,
-      year: r.year,
-      process: r.process,
-      publishedRevision: r.published_revision,
-      thumbUrl:
-        r.thumb_object_key && base
-          ? publicUrlForKey(r.thumb_object_key, base)
-          : null,
-      publishedAt: r.published_at,
-    })),
+async function listPublic(env: Env, url: URL): Promise<Response> {
+  const parsed = parseListQuery(url, { status: "published", limit: 48 });
+  if (parsed.error) return errorJson(400, parsed.error);
+  // Public listing always forces published regardless of client status.
+  const { artworks, total } = await listArtworks(db(env), {
+    ...parsed.opts,
+    status: "published",
   });
+  const base = env.R2_PUBLIC_BASE_URL || "";
+  return json(publicListDto(artworks, total, base));
 }
 
 async function getPublic(env: Env, slugOrId: string): Promise<Response> {

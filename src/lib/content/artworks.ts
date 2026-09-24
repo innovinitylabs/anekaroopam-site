@@ -4,6 +4,8 @@ export type ArchiveFilter = {
   year?: number;
   process?: string;
   state?: string;
+  /** Case-insensitive partial match on title, accession, or slug (id). */
+  q?: string;
 };
 
 function artworkSrc(filename: string): string {
@@ -74,6 +76,23 @@ export function filterArtworks(
       )
     ) {
       return false;
+    }
+    const q = filters.q?.trim().toLowerCase();
+    if (q) {
+      const title = artwork.metadata.title.toLowerCase();
+      const accession = (artwork.metadata.accessionId || "").toLowerCase();
+      const slug = artwork.id.toLowerCase();
+      const stateHit = artwork.states.some((s) =>
+        s.name.toLowerCase().includes(q),
+      );
+      if (
+        !title.includes(q) &&
+        !accession.includes(q) &&
+        !slug.includes(q) &&
+        !stateHit
+      ) {
+        return false;
+      }
     }
     return true;
   });

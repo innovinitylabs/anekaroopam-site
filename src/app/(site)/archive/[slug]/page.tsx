@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { PerceptionCanvas } from "@/components/perception/PerceptionCanvas";
 import { ArchiveProvenance } from "@/components/site/ArchiveProvenance";
@@ -9,8 +10,11 @@ import {
   listAllArchiveSlugs,
 } from "@/lib/content/resolve-artwork";
 import { resolveArchiveRedirect } from "@/lib/archive/redirects";
+import { readSeoFromMetadata } from "@/lib/archive/archive-seo";
 
 export const dynamic = "force-dynamic";
+
+const SITE = "https://anekaroopam.art";
 
 export async function generateStaticParams() {
   const slugs = await listAllArchiveSlugs();
@@ -21,11 +25,46 @@ export async function generateMetadata({
   params,
 }: {
   params: Promise<{ slug: string }>;
-}) {
+}): Promise<Metadata> {
   const { slug } = await params;
   const artwork = await getArtworkBySlug(slug);
   if (!artwork) return { title: "Not found" };
-  return { title: artwork.metadata.title };
+
+  const entry = await getArchiveEntryBySlug(slug);
+  const seo = readSeoFromMetadata(
+    (entry?.metadata ?? artwork.metadata) as unknown as Record<string, unknown>,
+  );
+  const title = seo?.pageTitle || artwork.metadata.title;
+  const description =
+    seo?.description ||
+    [artwork.metadata.title, artwork.metadata.year, artwork.metadata.process]
+      .filter(Boolean)
+      .join(" · ");
+  const ogImage =
+    entry?.assets.social ||
+    entry?.assets.thumb ||
+    artwork.imageSrc ||
+    undefined;
+  const canonical = seo?.canonicalPath || `/archive/${slug}`;
+
+  return {
+    title,
+    description,
+    alternates: { canonical },
+    openGraph: {
+      title: seo?.ogTitle || title,
+      description: seo?.ogDescription || description,
+      url: `${SITE}${canonical}`,
+      type: "article",
+      images: ogImage ? [{ url: ogImage }] : undefined,
+    },
+    twitter: {
+      card: seo?.twitterCard || "summary_large_image",
+      title: seo?.ogTitle || title,
+      description: seo?.ogDescription || description,
+      images: ogImage ? [ogImage] : undefined,
+    },
+  };
 }
 
 export default async function ArchiveArtworkPage({
@@ -45,9 +84,28 @@ export default async function ArchiveArtworkPage({
   const runtime = await getAccessionRuntimeBySlug(slug);
   const visibilityNotice =
     runtime?.visibility.public === false ? runtime.visibility.notice : null;
+  const seo = readSeoFromMetadata(
+    (entry?.metadata ?? artwork.metadata) as unknown as Record<string, unknown>,
+  );
+  const jsonLd = seo?.schemaOrg ?? {
+    "@context": "https://schema.org",
+    "@type": "VisualArtwork",
+    name: artwork.metadata.title,
+    ...(artwork.metadata.year
+      ? { dateCreated: String(artwork.metadata.year) }
+      : {}),
+    ...(artwork.metadata.process
+      ? { artMedium: artwork.metadata.process }
+      : {}),
+    url: `${SITE}/archive/${slug}`,
+  };
 
   return (
     <div className="fixed inset-0 z-50 bg-[var(--paper)]">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <PerceptionCanvas artwork={artwork} mode="runtime" />
       {entry?.provenance && <ArchiveProvenance provenance={entry.provenance} />}
       <Link

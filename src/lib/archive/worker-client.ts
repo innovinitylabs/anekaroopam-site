@@ -170,12 +170,27 @@ export async function workerCreateArtwork(input: {
 }
 
 export async function workerListArtworks(opts?: {
-  status?: string;
+  status?: string | string[];
+  q?: string;
+  year?: number;
+  process?: string;
+  sort?: string;
   limit?: number;
-}): Promise<{ artworks: WorkerArtwork[] }> {
+  offset?: number;
+}): Promise<{ artworks: WorkerArtwork[]; total?: number }> {
   const params = new URLSearchParams();
-  if (opts?.status) params.set("status", opts.status);
+  if (opts?.status) {
+    params.set(
+      "status",
+      Array.isArray(opts.status) ? opts.status.join(",") : opts.status,
+    );
+  }
+  if (opts?.q?.trim()) params.set("q", opts.q.trim());
+  if (opts?.year != null) params.set("year", String(opts.year));
+  if (opts?.process?.trim()) params.set("process", opts.process.trim());
+  if (opts?.sort) params.set("sort", opts.sort);
   if (opts?.limit) params.set("limit", String(opts.limit));
+  if (opts?.offset) params.set("offset", String(opts.offset));
   const q = params.toString();
   return archiveWorkerFetch(`/admin/artworks${q ? `?${q}` : ""}`);
 }
@@ -298,10 +313,59 @@ export async function workerAppendEvent(
   );
 }
 
-export async function workerListPublicArtworks(): Promise<{
+export async function workerListPublicArtworks(opts?: {
+  q?: string;
+  year?: number;
+  process?: string;
+  sort?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{
   artworks: WorkerPublicArtwork[];
+  total: number;
 }> {
-  return archiveWorkerFetch("/public/artworks", { admin: false });
+  const params = new URLSearchParams();
+  if (opts?.q?.trim()) params.set("q", opts.q.trim());
+  if (opts?.year != null) params.set("year", String(opts.year));
+  if (opts?.process?.trim()) params.set("process", opts.process.trim());
+  if (opts?.sort) params.set("sort", opts.sort);
+  if (opts?.limit) params.set("limit", String(opts.limit));
+  if (opts?.offset) params.set("offset", String(opts.offset));
+  const q = params.toString();
+  const result = await archiveWorkerFetch<{
+    artworks: WorkerPublicArtwork[];
+    total?: number;
+  }>(`/public/artworks${q ? `?${q}` : ""}`, { admin: false });
+  return {
+    artworks: result.artworks,
+    total: result.total ?? result.artworks.length,
+  };
+}
+
+export async function workerValidateIdentity(
+  artworkId: string,
+  input?: { slug?: string },
+): Promise<{
+  ok: boolean;
+  accessionId: string;
+  accessionValid: boolean;
+  slug: string;
+  slugAvailable: boolean;
+  errors: string[];
+}> {
+  return archiveWorkerFetch(
+    `/admin/artworks/${encodeURIComponent(artworkId)}/validate-identity`,
+    { method: "POST", body: input ?? {} },
+  );
+}
+
+export async function workerDeleteArtwork(
+  artworkId: string,
+): Promise<{ deleted: true; id: string }> {
+  return archiveWorkerFetch(
+    `/admin/artworks/${encodeURIComponent(artworkId)}`,
+    { method: "DELETE" },
+  );
 }
 
 export async function workerGetPublicArtwork(

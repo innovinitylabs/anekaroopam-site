@@ -236,25 +236,101 @@ export async function createDraft(
   return { artwork, revision, created: true };
 }
 
+export type ListArtworksSort =
+  | "updated_desc"
+  | "year_desc"
+  | "title_asc";
+
+export type ListArtworksOpts = {
+  /** Single status or list; omit for all statuses (admin). */
+  status?: string | string[];
+  q?: string;
+  year?: number;
+  process?: string;
+  sort?: ListArtworksSort;
+  limit?: number;
+  offset?: number;
+};
+
+export type ListArtworksResult = {
+  artworks: ArtworkRow[];
+  total: number;
+};
+
+function orderByClause(sort: ListArtworksSort | undefined): string {
+  switch (sort) {
+    case "year_desc":
+      return "ORDER BY (year IS NULL), year DESC, updated_at DESC";
+    case "title_asc":
+      return "ORDER BY title COLLATE NOCASE ASC, updated_at DESC";
+    case "updated_desc":
+    default:
+      return "ORDER BY updated_at DESC";
+  }
+}
+
+/**
+ * List artworks with optional search/filters. Filters combine with AND.
+ * `q` is case-insensitive partial match on title, accession_id, and slug.
+ */
 export async function listArtworks(
   db: SqlExecutor,
-  opts: { status?: string; limit?: number } = {},
-): Promise<ArtworkRow[]> {
+  opts: ListArtworksOpts = {},
+): Promise<ListArtworksResult> {
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
-  if (opts.status) {
-    const res = await db
-      .prepare(
-        `SELECT * FROM artworks WHERE status = ? ORDER BY updated_at DESC LIMIT ?`,
-      )
-      .bind(opts.status, limit)
-      .all<ArtworkRow>();
-    return res.results;
+  const offset = Math.max(opts.offset ?? 0, 0);
+  const where: string[] = [];
+  const binds: unknown[] = [];
+
+  if (opts.status !== undefined) {
+    const statuses = Array.isArray(opts.status)
+      ? opts.status.filter(Boolean)
+      : [opts.status];
+    if (statuses.length === 1) {
+      where.push("status = ?");
+      binds.push(statuses[0]);
+    } else if (statuses.length > 1) {
+      where.push(`status IN (${statuses.map(() => "?").join(", ")})`);
+      binds.push(...statuses);
+    }
   }
+
+  const q = opts.q?.trim();
+  if (q) {
+    const like = `%${q.toLowerCase()}%`;
+    where.push(
+      `(LOWER(title) LIKE ? OR LOWER(accession_id) LIKE ? OR LOWER(slug) LIKE ?)`,
+    );
+    binds.push(like, like, like);
+  }
+
+  if (opts.year !== undefined && Number.isFinite(opts.year)) {
+    where.push("year = ?");
+    binds.push(opts.year);
+  }
+
+  if (opts.process?.trim()) {
+    where.push("LOWER(process) = LOWER(?)");
+    binds.push(opts.process.trim());
+  }
+
+  const whereSql = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
+  const orderSql = orderByClause(opts.sort);
+
+  const countRow = await db
+    .prepare(`SELECT COUNT(*) AS total FROM artworks ${whereSql}`)
+    .bind(...binds)
+    .first<{ total: number }>();
+  const total = Number(countRow?.total ?? 0);
+
   const res = await db
-    .prepare(`SELECT * FROM artworks ORDER BY updated_at DESC LIMIT ?`)
-    .bind(limit)
+    .prepare(
+      `SELECT * FROM artworks ${whereSql} ${orderSql} LIMIT ? OFFSET ?`,
+    )
+    .bind(...binds, limit, offset)
     .all<ArtworkRow>();
-  return res.results;
+
+  return { artworks: res.results, total };
 }
 
 export async function patchWorkingRevision(
@@ -282,7 +358,15 @@ export async function patchWorkingRevision(
   const provenanceJson = patch.provenance_json ?? revision.provenance_json;
   const projections = projectionsFromMetadata(metadataJson);
   const now = nowIso();
-  const slug = patch.slug ? normalizeSlug(patch.slug) : artwork.slug;
+  let slug = artwork.slug;
+  if (patch.slug) {
+    const nextSlug = assertSlugFormat(patch.slug);
+    const conflict = await getArtworkBySlug(db, nextSlug);
+    if (conflict && conflict.id !== artworkId) {
+      throw new HttpError(409, `Slug "${nextSlug}" is already in use`);
+    }
+    slug = nextSlug;
+  }
 
   await db
     .prepare(
@@ -575,7 +659,7 @@ export async function setVisibility(
       )
       .bind(now, now, artworkId)
       .run();
-    await appendEvent(db, artworkId, "error", { kind: "withdrawn" });
+    await appendEvent(db, artworkId, "withdrawn", {});
   } else if (status === "published") {
     if (artwork.published_revision == null) {
       throw new HttpError(409, "No published_revision to restore");
@@ -797,6 +881,124 @@ export async function listEvents(
       created_at: string;
     }>();
   return res.results;
+}
+
+const ACCESSION_ID_RE = /^AR-\d{4}-\d{4,}$/;
+
+export function isValidAccessionId(accessionId: string): boolean {
+  return ACCESSION_ID_RE.test(accessionId.trim());
+}
+
+const RESERVED_SLUGS = new Set([
+  "admin",
+  "api",
+  "archive",
+  "about",
+  "writings",
+  "new",
+  "edit",
+  "drafts",
+  "unauthorized",
+]);
+
+export function assertSlugFormat(slug: string): string {
+  const normalized = normalizeSlug(slug);
+  if (!normalized) {
+    throw new HttpError(400, "Slug is empty after normalization");
+  }
+  if (RESERVED_SLUGS.has(normalized)) {
+    throw new HttpError(400, `Slug "${normalized}" is reserved`);
+  }
+  return normalized;
+}
+
+export async function validateIdentity(
+  db: SqlExecutor,
+  artworkId: string,
+  input: { slug?: string } = {},
+): Promise<{
+  ok: boolean;
+  accessionId: string;
+  accessionValid: boolean;
+  slug: string;
+  slugAvailable: boolean;
+  errors: string[];
+}> {
+  const artwork = await getArtwork(db, artworkId);
+  if (!artwork) throw new HttpError(404, "Artwork not found");
+
+  const errors: string[] = [];
+  const accessionValid = isValidAccessionId(artwork.accession_id);
+  if (!accessionValid) {
+    errors.push("Accession id has invalid format");
+  }
+
+  let slug = artwork.slug;
+  if (input.slug !== undefined) {
+    try {
+      slug = assertSlugFormat(input.slug);
+    } catch (err) {
+      if (err instanceof HttpError) {
+        errors.push(err.message);
+        return {
+          ok: false,
+          accessionId: artwork.accession_id,
+          accessionValid,
+          slug: artwork.slug,
+          slugAvailable: false,
+          errors,
+        };
+      }
+      throw err;
+    }
+  }
+
+  const conflict = await getArtworkBySlug(db, slug);
+  const slugAvailable = !conflict || conflict.id === artwork.id;
+  if (!slugAvailable) {
+    errors.push(`Slug "${slug}" is already in use`);
+  }
+
+  return {
+    ok: errors.length === 0,
+    accessionId: artwork.accession_id,
+    accessionValid,
+    slug,
+    slugAvailable,
+    errors,
+  };
+}
+
+/**
+ * Hard-delete never-published drafts only. Does not delete R2 objects.
+ */
+export async function deleteArtwork(
+  db: SqlExecutor,
+  artworkId: string,
+): Promise<{ deleted: true; id: string }> {
+  const artwork = await getArtwork(db, artworkId);
+  if (!artwork) throw new HttpError(404, "Artwork not found");
+
+  const deletableStatuses = new Set(["draft", "uploading", "ready"]);
+  if (!deletableStatuses.has(artwork.status)) {
+    throw new HttpError(
+      409,
+      `Cannot delete artwork with status "${artwork.status}"`,
+    );
+  }
+  if (artwork.published_revision != null || artwork.published_at != null) {
+    throw new HttpError(
+      409,
+      "Cannot delete artwork that has been published; unpublish or withdraw instead",
+    );
+  }
+
+  await db
+    .prepare(`DELETE FROM artworks WHERE id = ?`)
+    .bind(artworkId)
+    .run();
+
+  return { deleted: true, id: artworkId };
 }
 
 export class HttpError extends Error {

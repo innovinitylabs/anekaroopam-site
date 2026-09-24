@@ -29,10 +29,10 @@ export default function AdminLayout({
               Anekaroopam
             </Link>
             <Link
-              href="/admin/drafts"
+              href="/admin"
               className="text-[0.58rem] tracking-[0.18em] uppercase text-[var(--muted)] hover:text-[var(--foreground)]"
             >
-              Drafts
+              Dashboard
             </Link>
             <Link
               href="/admin/new"

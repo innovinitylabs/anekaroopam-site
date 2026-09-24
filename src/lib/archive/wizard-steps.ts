@@ -17,6 +17,7 @@ export const DURABLE_WIZARD_STEPS = [
   "Prepare",
   "Orientation",
   "Metadata",
+  "SEO",
   "Provenance",
   "Visibility",
   "Review",
@@ -59,7 +60,7 @@ export function footerPrimaryLabel(input: {
 }
 
 /** Post-commit destination for the durable wizard Done control. */
-export const WIZARD_DONE_HREF = "/admin/drafts";
+export const WIZARD_DONE_HREF = "/admin";
 
 export type FooterPrimaryAction = "commit" | "next" | "done" | "noop";
 

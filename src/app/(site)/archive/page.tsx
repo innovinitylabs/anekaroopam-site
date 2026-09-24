@@ -1,11 +1,20 @@
+import { Suspense } from "react";
 import { FadeIn } from "@/components/site/FadeIn";
 import { ArchiveGrid } from "@/components/site/ArchiveGrid";
+import { parseArchiveSearchParams } from "@/lib/archive/archive-search";
 import { listAllArtworks } from "@/lib/content/resolve-artwork";
 
 export const dynamic = "force-dynamic";
 
-export default async function ArchivePage() {
-  const artworks = await listAllArtworks();
+export default async function ArchivePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const filters = parseArchiveSearchParams(params);
+  const { artworks, total, facets, serverFiltered } =
+    await listAllArtworks(filters);
 
   return (
     <div className="mx-auto max-w-6xl px-6 pb-20 md:px-10 md:pb-24">
@@ -22,7 +31,15 @@ export default async function ArchivePage() {
         </p>
       </FadeIn>
 
-      <ArchiveGrid artworks={artworks} />
+      <Suspense fallback={<p className="mt-10 text-[var(--muted)]">Loading archive...</p>}>
+        <ArchiveGrid
+          artworks={artworks}
+          facets={facets}
+          initialFilters={filters}
+          serverFiltered={serverFiltered}
+          total={total}
+        />
+      </Suspense>
     </div>
   );
 }

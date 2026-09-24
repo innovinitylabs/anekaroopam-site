@@ -36,6 +36,21 @@ export interface ArtworkMetadata {
   rotationalObservations?: string;
   description?: string;
   tags?: string[];
+  /** Nested SEO copy stored with the revision metadata. */
+  seo?: {
+    pageTitle: string;
+    description: string;
+    ogTitle: string;
+    ogDescription: string;
+    twitterCard?: "summary" | "summary_large_image";
+    canonicalPath: string;
+    schemaOrg?: Record<string, unknown>;
+    archiveMarkdown?: string;
+    accessibleDescription?: string;
+    reviewed?: boolean;
+    generatedAt?: string;
+    generatedFrom?: string[];
+  };
 }
 
 export interface PerceptionArtwork {

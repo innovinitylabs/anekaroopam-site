@@ -72,6 +72,11 @@ import {
   WIZARD_DONE_HREF,
   type WizardStep,
 } from "@/lib/archive/wizard-steps";
+import {
+  generateSeoFromMetadata,
+  isMetadataFinalized,
+  type SeoMetadata,
+} from "@/lib/archive/archive-seo";
 import type { PerceptionArtwork } from "@/lib/perception/types";
 
 type StepId = WizardStep;
@@ -91,6 +96,8 @@ const STEP_TOOLTIPS: Record<string, string> = {
     "Define perceptual states, snap behavior, and the viewing background for export.",
   Metadata:
     "Edit accession title, date, process, and other archival metadata fields.",
+  SEO:
+    "Generate and review page title, description, and structured data from finalized metadata only.",
   Generate:
     "Local non-durable: deposit source and run server generate. Hidden in durable mode.",
   Publish:
@@ -405,6 +412,7 @@ export function IngestionWizard({
                 record.step === "Prepare" ||
                 record.step === "Orientation" ||
                 record.step === "Metadata" ||
+                record.step === "SEO" ||
                 record.step === "Provenance" ||
                 record.step === "Visibility" ||
                 record.step === "Review"
@@ -1049,6 +1057,35 @@ export function IngestionWizard({
   const handleSlugSave = async () => {
     if (!draftId) return;
     setError(null);
+    if (durableStorage && d1Archive) {
+      try {
+        const res = await adminFetch(
+          `/api/admin/archive/artworks/${encodeURIComponent(draftId)}/validate-identity`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ slug }),
+          },
+        );
+        const data = (await res.json()) as {
+          ok?: boolean;
+          errors?: string[];
+          error?: string;
+          slug?: string;
+        };
+        if (!res.ok || data.ok === false) {
+          throw new Error(
+            data.errors?.join("; ") || data.error || "Slug validation failed",
+          );
+        }
+        if (data.slug) setSlug(data.slug);
+        setSlugLocked(true);
+        await saveDraft();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Slug validation failed");
+      }
+      return;
+    }
     if (durableStorage) {
       setSlugLocked(true);
       await saveDraft();
@@ -1281,7 +1318,127 @@ export function IngestionWizard({
           <h2 className="text-[0.62rem] tracking-[0.18em] uppercase text-[var(--muted)]">
             4. Accession metadata
           </h2>
+          {accessionId && (
+            <p className="text-[0.75rem] text-[var(--muted)]">
+              Accession{" "}
+              <span className="font-mono text-[var(--foreground)]">{accessionId}</span>
+              {" "}(allocated; not editable)
+            </p>
+          )}
           <MetadataPanelSection controller={controller} />
+        </section>
+      )}
+
+      {step === "SEO" && (
+        <section className="max-w-xl space-y-6">
+          <h2 className="text-[0.62rem] tracking-[0.18em] uppercase text-[var(--muted)]">
+            SEO and archive description
+          </h2>
+          <p className="text-[0.85rem] leading-relaxed text-[var(--muted)]">
+            Generated only from finalized metadata (title, year, process, and optional
+            description). No invented facts. Review before publish; regenerating does
+            not reprocess images.
+          </p>
+          {!isMetadataFinalized(controller.artwork.metadata) && (
+            <p className="border border-[var(--border)] p-3 text-[0.78rem] text-[var(--muted)]">
+              Complete title, year, and process on the Metadata step before generating SEO.
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={!slug || !isMetadataFinalized(controller.artwork.metadata)}
+              className="border border-[var(--ink)] px-4 py-2 text-[0.68rem] tracking-[0.14em] uppercase disabled:opacity-40"
+              onClick={() => {
+                const generated = generateSeoFromMetadata({
+                  slug,
+                  metadata: {
+                    ...controller.artwork.metadata,
+                    accessionId: accessionId || controller.artwork.metadata.accessionId,
+                  },
+                });
+                controller.setArtwork({
+                  ...controller.artwork,
+                  metadata: {
+                    ...controller.artwork.metadata,
+                    seo: generated,
+                  },
+                });
+              }}
+            >
+              Generate SEO draft
+            </button>
+            {controller.artwork.metadata.seo && (
+              <button
+                type="button"
+                className="border border-[var(--border)] px-4 py-2 text-[0.68rem] tracking-[0.14em] uppercase"
+                onClick={() => {
+                  const current = controller.artwork.metadata.seo as SeoMetadata;
+                  controller.setArtwork({
+                    ...controller.artwork,
+                    metadata: {
+                      ...controller.artwork.metadata,
+                      seo: { ...current, reviewed: true },
+                    },
+                  });
+                }}
+              >
+                Mark reviewed
+              </button>
+            )}
+          </div>
+          {controller.artwork.metadata.seo && (
+            <div className="space-y-4 border border-[var(--border)] p-4">
+              <label className="block text-[0.62rem] tracking-[0.14em] uppercase text-[var(--muted)]">
+                Page title
+                <input
+                  className="mt-1 w-full border-b border-[var(--border)] bg-transparent py-2 text-sm normal-case tracking-normal outline-none"
+                  value={controller.artwork.metadata.seo.pageTitle}
+                  onChange={(e) => {
+                    const seo = {
+                      ...controller.artwork.metadata.seo!,
+                      pageTitle: e.target.value,
+                      ogTitle: e.target.value,
+                      reviewed: false,
+                    };
+                    controller.setArtwork({
+                      ...controller.artwork,
+                      metadata: { ...controller.artwork.metadata, seo },
+                    });
+                  }}
+                />
+              </label>
+              <label className="block text-[0.62rem] tracking-[0.14em] uppercase text-[var(--muted)]">
+                Description
+                <textarea
+                  rows={4}
+                  className="mt-1 w-full border border-[var(--border)] bg-transparent p-2 text-sm normal-case tracking-normal outline-none"
+                  value={controller.artwork.metadata.seo.description}
+                  onChange={(e) => {
+                    const seo = {
+                      ...controller.artwork.metadata.seo!,
+                      description: e.target.value,
+                      ogDescription: e.target.value,
+                      reviewed: false,
+                    };
+                    controller.setArtwork({
+                      ...controller.artwork,
+                      metadata: { ...controller.artwork.metadata, seo },
+                    });
+                  }}
+                />
+              </label>
+              <p className="text-[0.72rem] text-[var(--muted)]">
+                Status:{" "}
+                {controller.artwork.metadata.seo.reviewed
+                  ? "Reviewed"
+                  : "Draft — mark reviewed when ready"}
+              </p>
+              <pre className="max-h-40 overflow-auto text-[0.68rem] text-[var(--muted)]">
+                {controller.artwork.metadata.seo.archiveMarkdown}
+              </pre>
+            </div>
+          )}
         </section>
       )}
 
@@ -1541,6 +1698,16 @@ export function IngestionWizard({
           <h2 className="text-[0.62rem] tracking-[0.18em] uppercase text-[var(--muted)]">
             Review and commit
           </h2>
+          {durableStorage && (
+            <p className="border border-[var(--border)] p-3 text-[0.78rem] text-[var(--muted)]">
+              SEO:{" "}
+              {!controller.artwork.metadata.seo
+                ? "Not generated (publish allowed; public page will use basic title metadata)."
+                : controller.artwork.metadata.seo.reviewed
+                  ? "Reviewed and ready to store with the working revision."
+                  : "Draft generated but not marked reviewed."}
+            </p>
+          )}
           {(committing || commitPhase !== "idle") && !commitCompleted && (
             <p className="text-[0.72rem] tracking-[0.12em] uppercase text-[var(--muted)]">
               {commitPhaseLabel(commitPhase)}

@@ -72,6 +72,7 @@ describe("wizard final visible step", () => {
       "Prepare",
       "Orientation",
       "Metadata",
+      "SEO",
       "Provenance",
       "Visibility",
       "Review",
@@ -89,7 +90,7 @@ describe("wizard final visible step", () => {
       }),
       "Done",
     );
-    assert.equal(WIZARD_DONE_HREF, "/admin/drafts");
+    assert.equal(WIZARD_DONE_HREF, "/admin");
     assert.deepEqual(
       resolveFooterPrimaryAction({
         durableStorage: true,

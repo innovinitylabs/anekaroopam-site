@@ -172,7 +172,7 @@ export async function GET(request: Request) {
     method: "oauth",
   });
 
-  const response = NextResponse.redirect(`${origin}/admin/drafts`, 302);
+  const response = NextResponse.redirect(`${origin}/admin`, 302);
   clearOAuthState(response);
   response.cookies.set(
     ADMIN_SESSION_COOKIE,
