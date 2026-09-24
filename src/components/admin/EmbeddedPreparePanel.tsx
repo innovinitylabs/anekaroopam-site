@@ -19,8 +19,6 @@ export function EmbeddedPreparePanel({
   durableStorage = false,
   prepared,
   onPreparedLocal,
-  onCommit: _onCommit,
-  committing = false,
   onError,
 }: {
   draft: AccessionDraft | null;
@@ -29,11 +27,8 @@ export function EmbeddedPreparePanel({
   durableStorage?: boolean;
   prepared: LocalPreparedMaster | null;
   onPreparedLocal: (prepared: LocalPreparedMaster) => void;
-  onCommit: () => void;
-  committing?: boolean;
   onError: (message: string) => void;
 }) {
-  void _onCommit;
   const [preparing, setPreparing] = useState(false);
   const browserSource =
     sourceFile ??
@@ -79,8 +74,7 @@ export function EmbeddedPreparePanel({
   }
 
   const displaySrc = prepared?.objectUrl || previewSrc;
-  const canPrepare =
-    Boolean(draft) && hasBrowserSource && !preparing && !committing;
+  const canPrepare = Boolean(draft) && hasBrowserSource && !preparing;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
@@ -95,15 +89,15 @@ export function EmbeddedPreparePanel({
             />
           ) : (
             <div className="flex h-full items-center justify-center px-6 text-center text-[0.78rem] text-[var(--muted)]">
-              Select a master on Upload. The original stays in this browser tab
-              until you Commit.
+              Select a master on Upload. The original stays in this browser until
+              Review.
             </div>
           )}
         </div>
         {prepared && (
           <p className="mt-3 text-[0.72rem] text-[var(--muted)]">
             Local prepared master ready ({prepared.width}×{prepared.height} AVIF,
-            {Math.round(prepared.blob.size / 1024)} KB). Not committed yet.
+            {Math.round(prepared.blob.size / 1024)} KB). Not uploaded yet.
           </p>
         )}
       </div>
@@ -115,7 +109,7 @@ export function EmbeddedPreparePanel({
           </p>
           <p className="leading-relaxed text-[var(--muted)]">
             {durableStorage
-              ? "Encodes an orientation-safe prepared master in the browser only. Nothing is uploaded or committed until you click Commit."
+              ? "Encodes an orientation-safe prepared master in the browser only. Upload and metadata commit happen later on Review."
               : "Encodes a local preview master in the browser. Server Sharp runs only later on Generate (local non-durable fallback)."}
           </p>
           <button
@@ -138,19 +132,6 @@ export function EmbeddedPreparePanel({
                 : "Prepare working master"}
           </button>
         </div>
-
-        {durableStorage && (
-          <div className="space-y-2 border border-[var(--border)] p-4">
-            <p className="text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]">
-              Commit
-            </p>
-            <p className="leading-relaxed text-[var(--muted)]">
-              Preparation stays local. Advance to Review, then use Commit
-              Accession (or Commit Revision) for the single intentional GitHub
-              write.
-            </p>
-          </div>
-        )}
 
         <div className="space-y-2 border border-[var(--border)] p-4">
           <p className="text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]">

@@ -6,6 +6,8 @@ import {
   footerPrimaryLabel,
   isFinalVisibleStep,
   LOCAL_WIZARD_STEPS,
+  resolveFooterPrimaryAction,
+  WIZARD_DONE_HREF,
   wizardStepsForMode,
 } from "./wizard-steps.ts";
 
@@ -74,5 +76,41 @@ describe("wizard final visible step", () => {
       "Visibility",
       "Review",
     ]);
+  });
+
+  it("completed state enables Done navigation and never re-commits", () => {
+    const steps = wizardStepsForMode(true);
+    assert.equal(
+      footerPrimaryLabel({
+        steps,
+        step: "Review",
+        isRevision: false,
+        completed: true,
+      }),
+      "Done",
+    );
+    assert.equal(WIZARD_DONE_HREF, "/admin/drafts");
+    assert.deepEqual(
+      resolveFooterPrimaryAction({
+        durableStorage: true,
+        step: "Review",
+        steps,
+        commitCompleted: true,
+        reviewBusy: true,
+        reviewReady: false,
+      }),
+      { action: "done", disabled: false },
+    );
+    assert.deepEqual(
+      resolveFooterPrimaryAction({
+        durableStorage: true,
+        step: "Review",
+        steps,
+        commitCompleted: false,
+        reviewBusy: false,
+        reviewReady: true,
+      }),
+      { action: "commit", disabled: false },
+    );
   });
 });

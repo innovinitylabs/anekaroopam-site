@@ -57,3 +57,35 @@ export function footerPrimaryLabel(input: {
   }
   return "Next";
 }
+
+/** Post-commit destination for the durable wizard Done control. */
+export const WIZARD_DONE_HREF = "/admin/drafts";
+
+export type FooterPrimaryAction = "commit" | "next" | "done" | "noop";
+
+/**
+ * Resolve footer primary click/disabled behavior for the ingestion wizard.
+ * Completed durable commits use Done → navigate; never re-commit.
+ */
+export function resolveFooterPrimaryAction(input: {
+  durableStorage: boolean;
+  step: string;
+  steps: readonly string[];
+  commitCompleted: boolean;
+  reviewBusy: boolean;
+  reviewReady: boolean;
+}): { action: FooterPrimaryAction; disabled: boolean } {
+  if (input.commitCompleted) {
+    return { action: "done", disabled: false };
+  }
+  if (input.durableStorage && input.step === "Review") {
+    return {
+      action: "commit",
+      disabled: input.reviewBusy || !input.reviewReady,
+    };
+  }
+  if (!isFinalVisibleStep(input.steps, input.step)) {
+    return { action: "next", disabled: false };
+  }
+  return { action: "noop", disabled: true };
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { adminFetch } from "@/components/admin/admin-fetch";
 import {
   formatWizardStatusHeader,
@@ -66,8 +67,9 @@ import {
 } from "@/lib/archive/transient-upload-registry";
 import {
   footerPrimaryLabel,
-  isFinalVisibleStep,
+  resolveFooterPrimaryAction,
   wizardStepsForMode,
+  WIZARD_DONE_HREF,
   type WizardStep,
 } from "@/lib/archive/wizard-steps";
 import type { PerceptionArtwork } from "@/lib/perception/types";
@@ -149,6 +151,7 @@ export function IngestionWizard({
   initialDraftId?: string;
   initialEditSlug?: string;
 }) {
+  const router = useRouter();
   const [step, setStep] = useState<StepId>("Upload");
   const [sourceFile, setSourceFile] = useState<File | null>(null);
   const [draftId, setDraftId] = useState(initialDraftId ?? "");
@@ -1062,6 +1065,15 @@ export function IngestionWizard({
     return null;
   })();
 
+  const footerPrimary = resolveFooterPrimaryAction({
+    durableStorage,
+    step,
+    steps: STEPS,
+    commitCompleted,
+    reviewBusy: committing || commitInFlight,
+    reviewReady: Boolean(preparedLocal && sourceFile),
+  });
+
   return (
     <div className="mx-auto max-w-4xl px-6 py-12">
       <header className="mb-10 border-b border-[var(--border)] pb-8">
@@ -1190,10 +1202,6 @@ export function IngestionWizard({
             durableStorage={durableStorage}
             prepared={preparedLocal}
             onPreparedLocal={handlePreparedLocal}
-            onCommit={() => {
-              /* Commit moved to Review in durable mode */
-            }}
-            committing={committing}
             onError={(message) => setError(message || null)}
           />
         </section>
@@ -1648,30 +1656,23 @@ export function IngestionWizard({
         <button
           type="button"
           onClick={() => {
-            if (
-              durableStorage &&
-              step === "Review" &&
-              !commitCompleted
-            ) {
+            if (footerPrimary.action === "done") {
+              router.push(WIZARD_DONE_HREF);
+              return;
+            }
+            if (footerPrimary.action === "commit") {
               void handleCommitAccession();
               return;
             }
-            if (!isFinalVisibleStep(STEPS, step)) goNext();
+            if (footerPrimary.action === "next") goNext();
           }}
-          disabled={
-            commitCompleted
-              ? true
-              : durableStorage && step === "Review"
-                ? committing ||
-                  commitInFlight ||
-                  !preparedLocal ||
-                  !sourceFile
-                : stepIndex >= STEPS.length - 1
-          }
+          disabled={footerPrimary.disabled}
           title={
-            durableStorage && step === "Review"
-              ? "Validate and perform the single intentional GitHub commit."
-              : "Advance to the next accession step. Local draft autosaves in the browser."
+            commitCompleted
+              ? "Return to the admin drafts list."
+              : durableStorage && step === "Review"
+                ? "Validate and perform the single intentional commit."
+                : "Advance to the next accession step. Local draft autosaves in the browser."
           }
           className="text-[0.68rem] tracking-[0.14em] uppercase"
         >
