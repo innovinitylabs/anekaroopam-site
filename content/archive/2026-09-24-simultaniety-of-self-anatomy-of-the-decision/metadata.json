@@ -8,71 +8,70 @@
     "title": "simultaniety of self _ anatomy of the decision that wont resolve",
     "year": 2026,
     "date": "2026-09-24",
-    "process": "Sketchbook",
     "perceptualNotes": "R2_BROWSER_ACCESSION Binaries live in Cloudflare R2; GitHub holds metadata and manifests only. Included: metadata.json, states.json, notes.md, manifest.json. Excluded from this package: perception.html and mint-package export. Public Next.js archive pages need a redeploy to pick up new metadata.json."
   },
   "assets": {
-    "artwork": "https://media.anekaroopam.art/archive/AR-2026-0021/r1/derivatives/artwork.avif",
-    "preview": "https://media.anekaroopam.art/archive/AR-2026-0021/r1/derivatives/preview.avif",
-    "social": "https://media.anekaroopam.art/archive/AR-2026-0021/r1/derivatives/social.jpg",
-    "thumb": "https://media.anekaroopam.art/archive/AR-2026-0021/r1/derivatives/thumb.jpg",
-    "previewWebp": "https://media.anekaroopam.art/archive/AR-2026-0021/r1/derivatives/preview.webp",
-    "socialJpg": "https://media.anekaroopam.art/archive/AR-2026-0021/r1/derivatives/social.jpg"
+    "artwork": "https://media.anekaroopam.art/archive/AR-2026-0021/r2/derivatives/artwork.avif",
+    "preview": "https://media.anekaroopam.art/archive/AR-2026-0021/r2/derivatives/preview.avif",
+    "social": "https://media.anekaroopam.art/archive/AR-2026-0021/r2/derivatives/social.jpg",
+    "thumb": "https://media.anekaroopam.art/archive/AR-2026-0021/r2/derivatives/thumb.jpg",
+    "previewWebp": "https://media.anekaroopam.art/archive/AR-2026-0021/r2/derivatives/preview.webp",
+    "socialJpg": "https://media.anekaroopam.art/archive/AR-2026-0021/r2/derivatives/social.jpg"
   },
   "media": {
     "schemaVersion": 1,
     "storage": "r2",
     "accessionId": "AR-2026-0021",
-    "revision": 1,
+    "revision": 2,
     "original": {
-      "key": "archive/AR-2026-0021/r1/original/original.png",
+      "key": "archive/AR-2026-0021/r2/original/original.png",
       "mimeType": "image/png",
       "byteSize": 2980614
     },
     "prepared": {
-      "key": "archive/AR-2026-0021/r1/prepared/master-prepared.avif",
+      "key": "archive/AR-2026-0021/r2/prepared/master-prepared.avif",
       "mimeType": "image/avif",
-      "byteSize": 444532,
+      "byteSize": 444448,
       "width": 1034,
       "height": 1521
     },
     "derivatives": [
       {
-        "key": "archive/AR-2026-0021/r1/derivatives/artwork.avif",
+        "key": "archive/AR-2026-0021/r2/derivatives/artwork.avif",
         "mimeType": "image/avif",
-        "byteSize": 444532,
+        "byteSize": 444448,
         "width": 1034,
         "height": 1521,
         "role": "artwork"
       },
       {
-        "key": "archive/AR-2026-0021/r1/derivatives/preview.avif",
+        "key": "archive/AR-2026-0021/r2/derivatives/preview.avif",
         "mimeType": "image/avif",
-        "byteSize": 367020,
+        "byteSize": 366724,
         "width": 1034,
         "height": 1521,
         "role": "preview"
       },
       {
-        "key": "archive/AR-2026-0021/r1/derivatives/preview.webp",
+        "key": "archive/AR-2026-0021/r2/derivatives/preview.webp",
         "mimeType": "image/webp",
-        "byteSize": 230112,
+        "byteSize": 230234,
         "width": 1034,
         "height": 1521,
         "role": "preview"
       },
       {
-        "key": "archive/AR-2026-0021/r1/derivatives/social.jpg",
+        "key": "archive/AR-2026-0021/r2/derivatives/social.jpg",
         "mimeType": "image/jpeg",
-        "byteSize": 149844,
+        "byteSize": 149842,
         "width": 1200,
         "height": 630,
         "role": "social"
       },
       {
-        "key": "archive/AR-2026-0021/r1/derivatives/thumb.jpg",
+        "key": "archive/AR-2026-0021/r2/derivatives/thumb.jpg",
         "mimeType": "image/jpeg",
-        "byteSize": 37154,
+        "byteSize": 37139,
         "width": 326,
         "height": 480,
         "role": "thumb"
@@ -82,48 +81,48 @@
   "derivatives": [
     {
       "role": "artwork",
-      "path": "https://media.anekaroopam.art/archive/AR-2026-0021/r1/derivatives/artwork.avif",
+      "path": "https://media.anekaroopam.art/archive/AR-2026-0021/r2/derivatives/artwork.avif",
       "format": "avif",
       "width": 1034,
       "height": 1521,
-      "byteSize": 444532,
-      "generatedAt": "2026-09-24T07:16:22.841Z"
+      "byteSize": 444448,
+      "generatedAt": "2026-09-24T07:50:47.014Z"
     },
     {
       "role": "preview",
-      "path": "https://media.anekaroopam.art/archive/AR-2026-0021/r1/derivatives/preview.avif",
+      "path": "https://media.anekaroopam.art/archive/AR-2026-0021/r2/derivatives/preview.avif",
       "format": "avif",
       "width": 1034,
       "height": 1521,
-      "byteSize": 367020,
-      "generatedAt": "2026-09-24T07:16:22.841Z"
+      "byteSize": 366724,
+      "generatedAt": "2026-09-24T07:50:47.014Z"
     },
     {
       "role": "preview",
-      "path": "https://media.anekaroopam.art/archive/AR-2026-0021/r1/derivatives/preview.webp",
+      "path": "https://media.anekaroopam.art/archive/AR-2026-0021/r2/derivatives/preview.webp",
       "format": "webp",
       "width": 1034,
       "height": 1521,
-      "byteSize": 230112,
-      "generatedAt": "2026-09-24T07:16:22.841Z"
+      "byteSize": 230234,
+      "generatedAt": "2026-09-24T07:50:47.014Z"
     },
     {
       "role": "social",
-      "path": "https://media.anekaroopam.art/archive/AR-2026-0021/r1/derivatives/social.jpg",
+      "path": "https://media.anekaroopam.art/archive/AR-2026-0021/r2/derivatives/social.jpg",
       "format": "jpeg",
       "width": 1200,
       "height": 630,
-      "byteSize": 149844,
-      "generatedAt": "2026-09-24T07:16:22.841Z"
+      "byteSize": 149842,
+      "generatedAt": "2026-09-24T07:50:47.014Z"
     },
     {
       "role": "thumb",
-      "path": "https://media.anekaroopam.art/archive/AR-2026-0021/r1/derivatives/thumb.jpg",
+      "path": "https://media.anekaroopam.art/archive/AR-2026-0021/r2/derivatives/thumb.jpg",
       "format": "jpeg",
       "width": 326,
       "height": 480,
-      "byteSize": 37154,
-      "generatedAt": "2026-09-24T07:16:22.841Z"
+      "byteSize": 37139,
+      "generatedAt": "2026-09-24T07:50:47.014Z"
     }
   ],
   "exports": [],
@@ -133,29 +132,29 @@
     "storedFilename": "original.png",
     "mimeType": "image/png",
     "byteSize": 2980614,
-    "importedAt": "2026-09-24T07:16:22.841Z"
+    "importedAt": "2026-09-24T07:50:47.014Z"
   },
   "processing": {
-    "preparedSource": "archive/AR-2026-0021/r1/prepared/master-prepared.avif",
-    "preparedAt": "2026-09-24T07:14:37.718Z",
+    "preparedSource": "archive/AR-2026-0021/r2/prepared/master-prepared.avif",
+    "preparedAt": "2026-09-24T07:49:30.729Z",
     "prepareVersion": "browser-r2-v1"
   },
   "perception": {
     "states": [
       {
         "id": "s1",
-        "name": "",
+        "name": "anatomy of something",
         "angle": 0,
         "caption": ""
       },
       {
-        "id": "ps_286pcjtq",
+        "id": "ps_8r5ic5xw",
         "name": "",
         "angle": 45,
         "caption": ""
       },
       {
-        "id": "ps_miym5vwh",
+        "id": "ps_m3ivx1sn",
         "name": "",
         "angle": 90,
         "caption": ""
@@ -177,6 +176,6 @@
     "marketplace": []
   },
   "createdAt": "2026-09-24T07:16:22.842Z",
-  "updatedAt": "2026-09-24T07:16:22.842Z",
+  "updatedAt": "2026-09-24T07:50:47.015Z",
   "publishedAt": "2026-09-24T07:16:22.842Z"
 }

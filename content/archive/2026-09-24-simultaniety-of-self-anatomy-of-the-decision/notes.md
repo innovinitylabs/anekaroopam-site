@@ -10,7 +10,6 @@
 
 **Date:** 2026-09-24
 **Year:** 2026
-**Process:** Sketchbook
 
 ## Perceptual notes
 

@@ -6,18 +6,18 @@
     "states": [
       {
         "id": "s1",
-        "name": "",
+        "name": "anatomy of something",
         "angle": 0,
         "caption": ""
       },
       {
-        "id": "ps_286pcjtq",
+        "id": "ps_8r5ic5xw",
         "name": "",
         "angle": 45,
         "caption": ""
       },
       {
-        "id": "ps_miym5vwh",
+        "id": "ps_m3ivx1sn",
         "name": "",
         "angle": 90,
         "caption": ""
@@ -28,7 +28,7 @@
     "snapToState": true,
     "showMetadataOverlay": true
   },
-  "updatedAt": "2026-09-24T07:16:22.842Z",
+  "updatedAt": "2026-09-24T07:50:47.015Z",
   "browserMvpIncomplete": {
     "storage": "r2",
     "missing": [

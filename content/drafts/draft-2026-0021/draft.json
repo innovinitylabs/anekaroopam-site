@@ -4,7 +4,7 @@
   "accessionId": "AR-2026-0021",
   "status": "published",
   "slug": "2026-09-24-simultaniety-of-self-anatomy-of-the-decision",
-  "slugLocked": true,
+  "slugLocked": false,
   "slugHistory": [],
   "source": {
     "kind": "original",
@@ -12,11 +12,11 @@
     "storedFilename": "original.png",
     "mimeType": "image/png",
     "byteSize": 2980614,
-    "importedAt": "2026-09-24T07:16:22.841Z"
+    "importedAt": "2026-09-24T07:50:47.014Z"
   },
   "processing": {
-    "preparedSource": "archive/AR-2026-0021/r1/prepared/master-prepared.avif",
-    "preparedAt": "2026-09-24T07:14:37.718Z",
+    "preparedSource": "archive/AR-2026-0021/r2/prepared/master-prepared.avif",
+    "preparedAt": "2026-09-24T07:49:30.729Z",
     "prepareVersion": "browser-r2-v1"
   },
   "artwork": {
@@ -25,25 +25,24 @@
       "accessionId": "AR-2026-0021",
       "title": "simultaniety of self _ anatomy of the decision that wont resolve",
       "year": 2026,
-      "date": "2026-09-24",
-      "process": "Sketchbook"
+      "date": "2026-09-24"
     },
     "imageSrc": "",
     "states": [
       {
         "id": "s1",
-        "name": "",
+        "name": "anatomy of something",
         "angle": 0,
         "caption": ""
       },
       {
-        "id": "ps_286pcjtq",
+        "id": "ps_8r5ic5xw",
         "name": "",
         "angle": 45,
         "caption": ""
       },
       {
-        "id": "ps_miym5vwh",
+        "id": "ps_m3ivx1sn",
         "name": "",
         "angle": 90,
         "caption": ""
@@ -64,9 +63,9 @@
     "includeWebpFallback": true,
     "preset": "archival"
   },
-  "createdAt": "2026-09-24T07:14:18.821Z",
-  "updatedAt": "2026-09-24T07:16:22.842Z",
-  "preparedAt": "2026-09-24T07:14:37.718Z",
-  "generatedAt": "2026-09-24T07:16:22.842Z",
-  "publishedAt": "2026-09-24T07:16:22.842Z"
+  "createdAt": "2026-09-24T07:49:16.752Z",
+  "updatedAt": "2026-09-24T07:50:47.015Z",
+  "preparedAt": "2026-09-24T07:49:30.729Z",
+  "generatedAt": "2026-09-24T07:50:47.015Z",
+  "publishedAt": "2026-09-24T07:50:47.015Z"
 }
