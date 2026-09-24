@@ -123,7 +123,11 @@ export async function commitBrowserR2Bundle(input: {
     }
   } catch (error) {
     report("failed_upload", error instanceof Error ? error.message : undefined);
-    throw error;
+    const err = new Error(
+      error instanceof Error ? error.message : "R2 upload failed",
+    );
+    (err as Error & { phase?: ArchiveCommitPhase }).phase = "failed_upload";
+    throw err;
   }
 
   report("verifying");
@@ -139,7 +143,11 @@ export async function commitBrowserR2Bundle(input: {
     });
   } catch (error) {
     report("failed_verify", error instanceof Error ? error.message : undefined);
-    throw error;
+    const err = new Error(
+      error instanceof Error ? error.message : "upload-verify failed",
+    );
+    (err as Error & { phase?: ArchiveCommitPhase }).phase = "failed_verify";
+    throw err;
   }
 
   report("uploaded_pending_metadata");
@@ -229,6 +237,13 @@ export async function commitBrowserR2Bundle(input: {
           ? `archive: revision ${pack.slug} r${auth.revision}`
           : `archive: accession ${pack.slug}`),
       textFiles: pack.files,
+      accessionId: auth.accessionId,
+      revision: auth.revision,
+      mediaObjects: auth.uploads.map((u) => ({
+        key: u.key,
+        contentType: u.contentType,
+        contentLength: u.contentLength,
+      })),
     });
   } catch (error) {
     report(

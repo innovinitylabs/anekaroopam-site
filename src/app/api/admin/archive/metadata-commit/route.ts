@@ -2,12 +2,14 @@ import { NextResponse } from "next/server";
 import { requireAdminIngest } from "@/lib/archive/admin-ingest-response";
 import { githubStorageAvailable } from "@/lib/archive/draft-github-store";
 import { githubErrorResponse } from "@/lib/archive/github-admin-response";
+import { validateMetadataCommitMedia } from "@/lib/archive/metadata-commit-media";
 import {
   assertAllowedMetadataCommitPaths,
   normalizeMetadataCommitPath,
 } from "@/lib/archive/metadata-commit-paths";
 import { commitFiles } from "@/lib/github/git-commit";
 import { r2ArchiveReady } from "@/lib/r2/config";
+import { verifyR2Objects } from "@/lib/r2/verify";
 
 export const runtime = "nodejs";
 
@@ -16,6 +18,15 @@ interface MetadataCommitBody {
   draftId?: string;
   message?: string;
   textFiles?: Array<{ path: string; content: string }>;
+  media?: {
+    accessionId?: string;
+    revision?: number;
+    objects?: Array<{
+      key: string;
+      contentType: string;
+      contentLength: number;
+    }>;
+  };
 }
 
 export async function POST(request: Request) {
@@ -52,6 +63,34 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "slug is required" }, { status: 400 });
     }
 
+    const mediaCheck = validateMetadataCommitMedia(body.media ?? {});
+    if (!mediaCheck.ok) {
+      return NextResponse.json({ error: mediaCheck.error }, { status: 400 });
+    }
+
+    const { accessionId, revision, objects: mediaObjects } = mediaCheck.media;
+
+    const verified = await verifyR2Objects(
+      mediaObjects.map((obj) => ({
+        key: obj.key,
+        contentType: obj.contentType,
+        contentLength: obj.contentLength,
+      })),
+    );
+    if (!verified.ok) {
+      const detail = verified.results
+        .filter((r) => !r.ok)
+        .map((r) => `${r.key}: ${r.error ?? "failed"}`)
+        .join("; ");
+      return NextResponse.json(
+        {
+          error: `R2 verification failed before metadata commit. ${detail}`,
+          results: verified.results,
+        },
+        { status: 400 },
+      );
+    }
+
     const upserts = textFiles.map((file) => ({
       path: normalizeMetadataCommitPath(file.path),
       content: Buffer.from(file.content, "utf8"),
@@ -74,6 +113,9 @@ export async function POST(request: Request) {
       paths: result.paths,
       slug,
       draftId: draftId ?? null,
+      accessionId,
+      revision,
+      verifiedObjects: mediaObjects.length,
     });
   } catch (e) {
     const github = githubErrorResponse(e);

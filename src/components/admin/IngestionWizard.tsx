@@ -829,13 +829,23 @@ export function IngestionWizard({
     } catch (e) {
       const message = e instanceof Error ? e.message : "Commit failed";
       setError(message);
-      if (message.includes("metadata commit failed")) {
+      const phaseFromError =
+        e && typeof e === "object" && "phase" in e
+          ? (e as { phase?: ArchiveCommitPhase }).phase
+          : undefined;
+      if (phaseFromError) {
+        setCommitPhase(phaseFromError);
+      } else if (message.includes("metadata commit failed")) {
         setCommitPhase("failed_metadata");
-      } else if (commitPhase === "uploading" || commitPhase === "authorizing") {
-        setCommitPhase("failed_upload");
-      } else if (commitPhase === "verifying") {
+      } else if (message.includes("upload-verify") || message.includes("verification")) {
         setCommitPhase("failed_verify");
+      } else if (message.includes("R2 upload failed") || message.includes("upload-auth")) {
+        setCommitPhase("failed_upload");
+      } else {
+        setCommitPhase("failed_upload");
       }
+      // Never mark success on failure paths.
+      setCommitCompleted(false);
     } finally {
       setCommitting(false);
       setCommitInFlight(false);
@@ -844,7 +854,6 @@ export function IngestionWizard({
     applyDraft,
     commitCompleted,
     commitInFlight,
-    commitPhase,
     committing,
     currentDraft,
     draftId,
@@ -1488,6 +1497,13 @@ export function IngestionWizard({
             <p className="text-[0.72rem] tracking-[0.12em] uppercase text-[var(--muted)]">
               {commitPhaseLabel(commitPhase)}
               {r2Archive ? " (R2 + GitHub metadata)" : " (GitHub bundle)"}
+            </p>
+          )}
+          {commitPhase === "failed_metadata" && (
+            <p className="text-[0.78rem] text-[var(--muted)]">
+              Media may already be stored in R2. Metadata was not committed.
+              Retry metadata-only is a follow-up; re-run Commit after fixing the
+              error, or contact an admin if objects already exist for this revision.
             </p>
           )}
           {commitCompleted && lastCommittedSha ? (

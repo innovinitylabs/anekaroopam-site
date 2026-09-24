@@ -2,6 +2,8 @@
  * Server-only R2 configuration. Never import from client components.
  */
 
+import "server-only";
+
 export interface R2Config {
   accountId: string;
   accessKeyId: string;

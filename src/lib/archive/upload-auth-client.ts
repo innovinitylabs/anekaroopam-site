@@ -3,6 +3,7 @@
 import { adminFetch } from "@/components/admin/admin-fetch";
 import { readAdminJson } from "@/lib/archive/admin-response";
 import type { MetadataPackageFile } from "@/lib/archive/browser-metadata-package";
+import { browserPresignedPutHeaders } from "@/lib/r2/presign-headers";
 
 export interface PresignedPutClient {
   key: string;
@@ -10,7 +11,6 @@ export interface PresignedPutClient {
   method: "PUT";
   headers: {
     "Content-Type": string;
-    "Content-Length": string;
   };
   expiresAt: string;
   contentType: string;
@@ -31,6 +31,19 @@ export interface UploadAuthResponse {
   publicBaseUrl: string;
   uploads: PresignedPutClient[];
   existingEntry: unknown | null;
+}
+
+export interface MetadataCommitMediaObject {
+  key: string;
+  contentType: string;
+  contentLength: number;
+}
+
+/** @deprecated Prefer browserPresignedPutHeaders. */
+export function browserPutHeaders(contentType: string): {
+  "Content-Type": string;
+} {
+  return browserPresignedPutHeaders(contentType);
 }
 
 export async function requestUploadAuth(input: {
@@ -58,12 +71,11 @@ export async function putToPresignedUrl(
   upload: PresignedPutClient,
   blob: Blob,
 ): Promise<void> {
+  const contentType =
+    upload.headers["Content-Type"] || upload.contentType || blob.type;
   const res = await fetch(upload.url, {
     method: "PUT",
-    headers: {
-      "Content-Type": upload.headers["Content-Type"],
-      "Content-Length": upload.headers["Content-Length"],
-    },
+    headers: browserPresignedPutHeaders(contentType),
     body: blob,
   });
   if (!res.ok) {
@@ -108,11 +120,24 @@ export async function postMetadataCommit(input: {
   draftId?: string;
   message?: string;
   textFiles: MetadataPackageFile[];
+  accessionId: string;
+  revision: number;
+  mediaObjects: MetadataCommitMediaObject[];
 }): Promise<{ commitSha: string; paths: string[] }> {
   const res = await adminFetch("/api/admin/archive/metadata-commit", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      slug: input.slug,
+      draftId: input.draftId,
+      message: input.message,
+      textFiles: input.textFiles,
+      media: {
+        accessionId: input.accessionId,
+        revision: input.revision,
+        objects: input.mediaObjects,
+      },
+    }),
   });
   const parsed = await readAdminJson<{
     commitSha?: string;

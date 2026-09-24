@@ -2,6 +2,8 @@
  * Verify uploaded R2 objects exist with expected size and content type.
  */
 
+import "server-only";
+
 import { HeadObjectCommand } from "@aws-sdk/client-s3";
 import { createR2Client } from "./client";
 import { requireR2Config } from "./config";

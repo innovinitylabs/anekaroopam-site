@@ -1,15 +1,25 @@
 /**
  * Short-lived presigned PUT URLs for browser → R2 uploads.
+ *
+ * Browser-compatible: ContentLength is NOT included in the signed PutObject
+ * command. Browsers treat Content-Length as a forbidden fetch header; signing
+ * it causes signature/CORS mismatches. Object size is enforced by upload-verify.
  */
+
+import "server-only";
 
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { createR2Client } from "./client";
 import { requireR2Config } from "./config";
+import { browserPresignedPutHeaders } from "./presign-headers";
+
+export { browserPresignedPutHeaders } from "./presign-headers";
 
 export interface PresignedPutInput {
   key: string;
   contentType: string;
+  /** Expected byte size — recorded for verify, not signed into the PUT URL. */
   contentLength: number;
   expiresIn?: number;
 }
@@ -18,9 +28,9 @@ export interface PresignedPutResult {
   key: string;
   url: string;
   method: "PUT";
+  /** Headers the browser must send. Content-Type only (no Content-Length). */
   headers: {
     "Content-Type": string;
-    "Content-Length": string;
   };
   expiresAt: string;
   contentType: string;
@@ -41,11 +51,11 @@ export async function createPresignedPut(
     throw new Error("contentType is required");
   }
 
+  // Do not set ContentLength — it would be signed and break browser fetch.
   const command = new PutObjectCommand({
     Bucket: config.bucket,
     Key: input.key,
     ContentType: input.contentType,
-    ContentLength: input.contentLength,
   });
 
   const url = await getSignedUrl(client, command, { expiresIn });
@@ -55,10 +65,7 @@ export async function createPresignedPut(
     key: input.key,
     url,
     method: "PUT",
-    headers: {
-      "Content-Type": input.contentType,
-      "Content-Length": String(input.contentLength),
-    },
+    headers: browserPresignedPutHeaders(input.contentType),
     expiresAt,
     contentType: input.contentType,
     contentLength: input.contentLength,

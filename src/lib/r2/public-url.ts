@@ -1,21 +1,16 @@
 /**
- * Map R2 object keys to public CDN URLs.
+ * Client-safe public CDN URL helpers.
+ * Never import server R2 config or credentials from this module.
  */
 
-import { getR2Config, requireR2Config } from "./config";
-
-export function publicUrlForR2Key(key: string, publicBaseUrl?: string): string {
-  const base =
-    publicBaseUrl?.replace(/\/$/, "") ??
-    requireR2Config().publicBaseUrl.replace(/\/$/, "");
+/** Build a public media URL from an R2 object key and public base URL. */
+export function publicUrlForR2Key(key: string, publicBaseUrl: string): string {
+  const base = publicBaseUrl.trim().replace(/\/$/, "");
+  if (!base) {
+    throw new Error("publicBaseUrl is required");
+  }
   const normalizedKey = key.replace(/^\//, "");
   return `${base}/${normalizedKey}`;
-}
-
-export function tryPublicUrlForR2Key(key: string): string | null {
-  const config = getR2Config();
-  if (!config) return null;
-  return publicUrlForR2Key(key, config.publicBaseUrl);
 }
 
 /** True when a path is already an absolute http(s) media URL. */
