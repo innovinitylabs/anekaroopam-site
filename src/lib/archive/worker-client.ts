@@ -186,6 +186,14 @@ export async function workerGetArtwork(
   return archiveWorkerFetch(`/admin/artworks/${encodeURIComponent(id)}`);
 }
 
+export async function workerGetArtworkByDraftId(
+  draftId: string,
+): Promise<WorkerArtworkDetail> {
+  return archiveWorkerFetch(
+    `/admin/artworks/by-draft/${encodeURIComponent(draftId)}`,
+  );
+}
+
 export async function workerPatchArtwork(
   id: string,
   patch: {

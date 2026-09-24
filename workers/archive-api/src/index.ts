@@ -3,6 +3,8 @@ import {
   createDraft,
   freezeWorkingRevision,
   getArtwork,
+  getArtworkByAccessionId,
+  getArtworkByDraftId,
   getArtworkBySlug,
   getRevision,
   getWorkingRevision,
@@ -131,6 +133,14 @@ async function handle(request: Request, env: Env): Promise<Response> {
     return createArtwork(request, env);
   }
 
+  const byDraftMatch = /^\/admin\/artworks\/by-draft\/([^/]+)$/.exec(path);
+  if (byDraftMatch && request.method === "GET") {
+    const draftId = decodeURIComponent(byDraftMatch[1]);
+    const row = await getArtworkByDraftId(db(env), draftId);
+    if (!row) return errorJson(404, "Artwork not found");
+    return getArtworkDetail(env, row.id);
+  }
+
   const artworkMatch = /^\/admin\/artworks\/([^/]+)$/.exec(path);
   if (artworkMatch) {
     const id = decodeURIComponent(artworkMatch[1]);
@@ -247,8 +257,12 @@ async function createArtwork(request: Request, env: Env): Promise<Response> {
 }
 
 async function getArtworkDetail(env: Env, id: string): Promise<Response> {
-  const artwork = await getArtwork(db(env), id);
+  let artwork = await getArtwork(db(env), id);
+  if (!artwork) artwork = await getArtworkByDraftId(db(env), id);
+  if (!artwork) artwork = await getArtworkByAccessionId(db(env), id);
+  if (!artwork) artwork = await getArtworkBySlug(db(env), id);
   if (!artwork) return errorJson(404, "Artwork not found");
+  id = artwork.id;
   const working = await getWorkingRevision(db(env), id);
   const assets = working
     ? await listRevisionAssets(db(env), id, working.revision)

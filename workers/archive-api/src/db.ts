@@ -84,6 +84,26 @@ export async function getArtworkBySlug(
     .first<ArtworkRow>();
 }
 
+export async function getArtworkByDraftId(
+  db: SqlExecutor,
+  draftId: string,
+): Promise<ArtworkRow | null> {
+  return db
+    .prepare(`SELECT * FROM artworks WHERE draft_id = ?`)
+    .bind(draftId)
+    .first<ArtworkRow>();
+}
+
+export async function getArtworkByAccessionId(
+  db: SqlExecutor,
+  accessionId: string,
+): Promise<ArtworkRow | null> {
+  return db
+    .prepare(`SELECT * FROM artworks WHERE accession_id = ?`)
+    .bind(accessionId)
+    .first<ArtworkRow>();
+}
+
 export async function getWorkingRevision(
   db: SqlExecutor,
   artworkId: string,

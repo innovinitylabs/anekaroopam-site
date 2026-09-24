@@ -60,6 +60,31 @@ describe("r2 object-keys", () => {
     );
   });
 
+  it("applies dig key prefix when requested", () => {
+    const keys = buildAllRevisionKeys({
+      accessionId: "AR-2026-0001",
+      revision: 1,
+      storedFilename: "original.jpg",
+      keyPrefix: "dev/",
+    });
+    assert.equal(
+      keys.original,
+      "dev/archive/AR-2026-0001/r1/original/original.jpg",
+    );
+    assert.equal(
+      isAllowedArchiveObjectKey(keys.prepared, "AR-2026-0001", 1, "dev/"),
+      true,
+    );
+    assert.equal(
+      isAllowedArchiveObjectKey(keys.prepared, "AR-2026-0001", 1, ""),
+      false,
+    );
+    assert.deepEqual(
+      parseAccessionRevisionFromKey(keys.derivatives.thumb, "dev/"),
+      { accessionId: "AR-2026-0001", revision: 1 },
+    );
+  });
+
   it("parses accession and revision from keys", () => {
     const parsed = parseAccessionRevisionFromKey(
       "archive/AR-2026-0042/r2/derivatives/thumb.jpg",

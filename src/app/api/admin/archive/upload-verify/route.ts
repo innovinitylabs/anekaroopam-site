@@ -9,7 +9,10 @@ import {
 } from "@/lib/archive/worker-client";
 import { findWorkerArtworkByDraftOrSlug } from "@/lib/archive/worker-drafts";
 import { r2ArchiveReady } from "@/lib/r2/config";
-import { isAllowedArchiveObjectKey } from "@/lib/r2/object-keys";
+import {
+  getR2KeyPrefixFromEnv,
+  isAllowedArchiveObjectKey,
+} from "@/lib/r2/object-keys";
 import { verifyR2Objects } from "@/lib/r2/verify";
 
 export const runtime = "nodejs";
@@ -60,7 +63,14 @@ export async function POST(request: Request) {
     }
 
     for (const obj of objects) {
-      if (!isAllowedArchiveObjectKey(obj.key, accessionId, revision)) {
+      if (
+        !isAllowedArchiveObjectKey(
+          obj.key,
+          accessionId,
+          revision,
+          getR2KeyPrefixFromEnv(),
+        )
+      ) {
         return NextResponse.json(
           { error: `Unauthorized object key: ${obj.key}` },
           { status: 400 },
@@ -80,7 +90,7 @@ export async function POST(request: Request) {
       );
     }
 
-    let registered: Array<{ role: string; objectKey: string }> = [];
+    const registered: Array<{ role: string; objectKey: string }> = [];
     if (preferArchiveWorker()) {
       let artworkId = body.artworkId?.trim() || null;
       if (!artworkId) {

@@ -176,6 +176,7 @@ export function IngestionWizard({
   const [lastSyncCommitSha, setLastSyncCommitSha] = useState<string | null>(null);
   const [durableStorage, setDurableStorage] = useState(false);
   const [r2Archive, setR2Archive] = useState(false);
+  const [d1Archive, setD1Archive] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
   const [preparedLocal, setPreparedLocal] = useState<LocalPreparedMaster | null>(
     null,
@@ -197,10 +198,12 @@ export function IngestionWizard({
         const data = (await res.json().catch(() => ({}))) as {
           durableStorage?: boolean;
           r2Archive?: boolean;
+          d1Archive?: boolean;
         };
         if (!cancelled) {
           setDurableStorage(Boolean(data.durableStorage));
           setR2Archive(Boolean(data.r2Archive));
+          setD1Archive(Boolean(data.d1Archive));
           setSessionReady(true);
         }
       })
@@ -208,6 +211,7 @@ export function IngestionWizard({
         if (!cancelled) {
           setDurableStorage(false);
           setR2Archive(false);
+          setD1Archive(false);
           setSessionReady(true);
         }
       });
@@ -549,6 +553,8 @@ export function IngestionWizard({
   const saveDraft = useCallback(async () => {
     if (!draftLoaded || !draftId) return null;
 
+    // Durable browser path: keep blobs in IndexedDB (plan reuse).
+    // When D1 is preferred, also PATCH metadata to the Worker via /api/admin/drafts.
     if (durableStorage) {
       const snapshot = buildDraftSnapshot();
       if (!snapshot) return null;
@@ -581,6 +587,31 @@ export function IngestionWizard({
         // IndexedDB failure should not block editing; keep SPA state.
         console.warn("local draft save failed", e);
       }
+
+      if (d1Archive) {
+        const res = await adminFetch(
+          `/api/admin/drafts/${encodeURIComponent(draftId)}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              slug,
+              slugLocked,
+              artwork: artworkForStorage(controller.artwork, accessionId),
+              provenance,
+            }),
+          },
+        );
+        const data = (await res.json()) as DraftResponse;
+        if (!res.ok || !data.draft) {
+          throw new Error(data.error ?? "D1 draft save failed");
+        }
+        setStatus(data.draft.status);
+        setCurrentDraft(data.draft);
+        setAccessionId(data.draft.accessionId);
+        return data.draft;
+      }
+
       setStatus(snapshot.status);
       setCurrentDraft(snapshot);
       return snapshot;
@@ -607,6 +638,7 @@ export function IngestionWizard({
     accessionId,
     buildDraftSnapshot,
     controller.artwork,
+    d1Archive,
     draftId,
     draftLoaded,
     durableStorage,
@@ -625,13 +657,14 @@ export function IngestionWizard({
     if (!draftLoaded || !draftId) return;
     const timeout = window.setTimeout(() => {
       saveDraft().catch((e) => {
-        if (!durableStorage) {
+        // IndexedDB-only durable (GitHub path) soft-fails; D1/FS paths surface errors.
+        if (!durableStorage || d1Archive) {
           setError(e instanceof Error ? e.message : "Draft autosave failed");
         }
       });
     }, 700);
     return () => window.clearTimeout(timeout);
-  }, [draftId, draftLoaded, durableStorage, saveDraft]);
+  }, [d1Archive, draftId, draftLoaded, durableStorage, saveDraft]);
 
   const stepIndex = STEPS.indexOf(step as (typeof STEPS)[number]);
 
@@ -675,9 +708,11 @@ export function IngestionWizard({
       try {
         let nextDraft = currentDraft;
         if (!draftId) {
-          // Prefer browser-local drafts unless session confirms non-durable local mode.
-          // Avoids accidental GitHub draft commits while session is still loading.
-          const useLocalDraft = !sessionReady || durableStorage;
+          // D1 path: allocate accession at draft create via Worker (server mint).
+          // GitHub durable: keep browser-local draft until R2 commit (blobs stay local).
+          // Non-durable: create FS draft immediately.
+          const useLocalDraft =
+            !sessionReady || (durableStorage && !d1Archive);
           if (useLocalDraft) {
             nextDraft = createBrowserLocalDraft(titleFromFile);
             const key = newLocalDraftId();
@@ -693,6 +728,10 @@ export function IngestionWizard({
               throw new Error(data.error ?? "Could not create metadata draft");
             }
             nextDraft = data.draft;
+            if (d1Archive) {
+              const key = newLocalDraftId();
+              setLocalDraftKey(key);
+            }
           }
         }
 
@@ -712,6 +751,7 @@ export function IngestionWizard({
       accessionId,
       applyDraft,
       currentDraft,
+      d1Archive,
       draftId,
       durableStorage,
       preparedLocal,

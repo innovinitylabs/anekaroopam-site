@@ -161,6 +161,7 @@ export async function commitBrowserR2Bundle(input: {
     revision: auth.revision,
     storedFilename,
     publicBaseUrl: auth.publicBaseUrl,
+    keyPrefix: auth.keyPrefix ?? "",
     original: {
       mimeType: input.sourceFile.type || "application/octet-stream",
       byteSize: sourceBlob.size,

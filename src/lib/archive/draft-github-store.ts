@@ -28,6 +28,7 @@ import {
 } from "./schema";
 import { commitFiles, isGitCommitHookActiveForTests } from "@/lib/github/git-commit";
 import { GitHubNotConfiguredError } from "@/lib/github/errors";
+import { preferArchiveWorker } from "@/lib/archive/worker-config";
 import { listRepoPaths, readRepoFile } from "@/lib/github/git-read";
 import { getGitHubArchiveConfig } from "@/lib/github/types";
 import {
@@ -720,6 +721,8 @@ export async function discardGeneratedArchiveOnGitHub(
 }
 
 export function githubStorageAvailable(): boolean {
+  // D1 Worker is preferred SoT when configured — do not use GitHub as content store.
+  if (preferArchiveWorker()) return false;
   if (isGitCommitHookActiveForTests()) return true;
   if (!getGitHubArchiveConfig()) return false;
   // Durable GitHub SoT is required on Vercel (ephemeral FS). Local/dev keeps FS

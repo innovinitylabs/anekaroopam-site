@@ -20,6 +20,8 @@ export interface R2MediaBuildInput {
   revision: number;
   storedFilename: string;
   publicBaseUrl: string;
+  /** Dig isolation prefix, e.g. "dev/". Defaults to R2_KEY_PREFIX env when omitted. */
+  keyPrefix?: string | null;
   original: {
     mimeType: string;
     byteSize: number;
@@ -69,6 +71,7 @@ export function buildR2MediaBlock(input: R2MediaBuildInput): {
     accessionId: input.accessionId,
     revision: input.revision,
     storedFilename: input.storedFilename,
+    keyPrefix: input.keyPrefix,
   });
 
   const byFilename = new Map(
@@ -78,7 +81,16 @@ export function buildR2MediaBlock(input: R2MediaBuildInput): {
   const mediaDerivatives: ArchiveMediaObject[] = archiveImageOutputFilenames().map(
     (filename) => {
       const meta = byFilename.get(filename);
-      const key = `archive/${input.accessionId}/r${input.revision}/derivatives/${filename}`;
+      const key =
+        filename === ARCHIVE_IMAGE_OUTPUTS.artwork.filename
+          ? keys.derivatives.artwork
+          : filename === ARCHIVE_IMAGE_OUTPUTS.previewAvif.filename
+            ? keys.derivatives.preview
+            : filename === ARCHIVE_IMAGE_OUTPUTS.previewWebp.filename
+              ? keys.derivatives.previewWebp
+              : filename === ARCHIVE_IMAGE_OUTPUTS.socialJpg.filename
+                ? keys.derivatives.social
+                : keys.derivatives.thumb;
       return {
         key,
         role: roleForFilename(filename),

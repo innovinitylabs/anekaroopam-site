@@ -13,6 +13,7 @@ import { ArchiveWorkerError } from "@/lib/archive/worker-client";
 import { r2ArchiveReady, requireR2Config } from "@/lib/r2/config";
 import {
   buildAllRevisionKeys,
+  getR2KeyPrefixFromEnv,
   isAllowedArchiveObjectKey,
 } from "@/lib/r2/object-keys";
 import { createPresignedPut } from "@/lib/r2/presign";
@@ -112,10 +113,12 @@ export async function POST(request: Request) {
       existingEntry = identity.existingEntry;
     }
 
+    const keyPrefix = getR2KeyPrefixFromEnv();
     const keys = buildAllRevisionKeys({
       accessionId,
       revision,
       storedFilename,
+      keyPrefix,
     });
 
     const roleToKey = new Map<string, string>([
@@ -139,7 +142,7 @@ export async function POST(request: Request) {
           { status: 400 },
         );
       }
-      if (!isAllowedArchiveObjectKey(key, accessionId, revision)) {
+      if (!isAllowedArchiveObjectKey(key, accessionId, revision, keyPrefix)) {
         return NextResponse.json(
           { error: `Refusing unauthorized object key for role ${obj.role}` },
           { status: 400 },
@@ -184,6 +187,7 @@ export async function POST(request: Request) {
       draftId,
       revision,
       artworkId,
+      keyPrefix,
       publicBaseUrl: config.publicBaseUrl,
       uploads,
       existingEntry,

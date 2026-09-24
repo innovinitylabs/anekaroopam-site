@@ -30,6 +30,7 @@ export interface UploadAuthResponse {
   draftId: string;
   revision: number;
   artworkId?: string | null;
+  keyPrefix?: string;
   publicBaseUrl: string;
   uploads: PresignedPutClient[];
   existingEntry: unknown | null;

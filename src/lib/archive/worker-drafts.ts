@@ -12,6 +12,7 @@ import {
   ArchiveWorkerError,
   workerCreateArtwork,
   workerGetArtwork,
+  workerGetArtworkByDraftId,
   workerListArtworks,
   workerPatchArtwork,
   type WorkerArtwork,
@@ -120,6 +121,24 @@ export async function findWorkerArtworkByDraftOrSlug(input: {
   slug?: string;
   accessionId?: string;
 }): Promise<WorkerArtwork | null> {
+  if (input.draftId) {
+    try {
+      const detail = await workerGetArtworkByDraftId(input.draftId);
+      return detail.artwork;
+    } catch (e) {
+      if (!(e instanceof ArchiveWorkerError && e.status === 404)) throw e;
+    }
+  }
+  if (input.accessionId || input.slug) {
+    try {
+      const detail = await workerGetArtwork(
+        input.accessionId || input.slug!,
+      );
+      return detail.artwork;
+    } catch (e) {
+      if (!(e instanceof ArchiveWorkerError && e.status === 404)) throw e;
+    }
+  }
   const { artworks } = await workerListArtworks({ limit: 200 });
   return (
     artworks.find(
@@ -135,15 +154,19 @@ export async function loadDraftViaWorker(
   draftIdOrArtworkId: string,
 ): Promise<AccessionDraft | null> {
   try {
-    const { artworks } = await workerListArtworks({ limit: 200 });
-    const match =
-      artworks.find((a) => a.draftId === draftIdOrArtworkId) ||
-      artworks.find((a) => a.id === draftIdOrArtworkId) ||
-      artworks.find((a) => a.accessionId === draftIdOrArtworkId) ||
-      artworks.find((a) => a.slug === draftIdOrArtworkId);
-    if (!match) return null;
-    const detail = await workerGetArtwork(match.id);
-    return artworkToDraft(match, detail);
+    try {
+      const detail = await workerGetArtworkByDraftId(draftIdOrArtworkId);
+      return artworkToDraft(detail.artwork, detail);
+    } catch (e) {
+      if (!(e instanceof ArchiveWorkerError && e.status === 404)) throw e;
+    }
+    try {
+      const detail = await workerGetArtwork(draftIdOrArtworkId);
+      return artworkToDraft(detail.artwork, detail);
+    } catch (e) {
+      if (e instanceof ArchiveWorkerError && e.status === 404) return null;
+      throw e;
+    }
   } catch (e) {
     if (e instanceof ArchiveWorkerError && e.status === 404) return null;
     throw e;

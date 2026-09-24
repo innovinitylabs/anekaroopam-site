@@ -30,7 +30,8 @@ Set `ARCHIVE_WORKER_URL` and `ARCHIVE_WORKER_TOKEN` (same value as `WORKER_ADMIN
 
 - `GET /health`
 - `POST /admin/artworks` (+ `Idempotency-Key`)
-- `GET|PATCH /admin/artworks/:id`
+- `GET|PATCH /admin/artworks/:id` (also resolves draft_id / accession_id / slug)
+- `GET /admin/artworks/by-draft/:draftId`
 - `POST /admin/artworks/:id/assets`
 - `POST /admin/artworks/:id/assets/verify`
 - `POST /admin/artworks/:id/ready`
