@@ -81,6 +81,7 @@ import {
   hydrateOriginalFile,
   hydratePreparedLocal,
 } from "@/lib/archive/hydrate-worker-source";
+import { canUpdateAndPublish } from "@/lib/archive/ingest-source-gates";
 import type { PerceptionArtwork } from "@/lib/perception/types";
 
 type StepId = WizardStep;
@@ -1199,7 +1200,10 @@ export function IngestionWizard({
     steps: STEPS,
     commitCompleted,
     reviewBusy: committing || commitInFlight,
-    reviewReady: Boolean(preparedLocal && sourceFile),
+    reviewReady: canUpdateAndPublish({
+      hasSourceFile: Boolean(sourceFile),
+      hasPreparedLocal: Boolean(preparedLocal),
+    }),
   });
 
   return (
@@ -1892,8 +1896,10 @@ export function IngestionWizard({
                   commitInFlight ||
                   commitCompleted ||
                   !draftId ||
-                  !preparedLocal ||
-                  !sourceFile
+                  !canUpdateAndPublish({
+                    hasSourceFile: Boolean(sourceFile),
+                    hasPreparedLocal: Boolean(preparedLocal),
+                  })
                 }
                 title={
                   isExistingArchive

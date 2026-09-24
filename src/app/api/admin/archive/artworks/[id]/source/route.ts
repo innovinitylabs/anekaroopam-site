@@ -7,7 +7,10 @@ import {
   workerGetArtwork,
 } from "@/lib/archive/worker-client";
 import { preferArchiveWorker } from "@/lib/archive/worker-config";
-import { MAX_SOURCE_BYTES } from "@/lib/archive/commit-bundle-limits";
+import {
+  isSourceWithinLimit,
+  sourceOverLimitMessage,
+} from "@/lib/archive/commit-bundle-limits";
 import { getR2ClientOrNull } from "@/lib/r2/client";
 import { getR2Config } from "@/lib/r2/config";
 
@@ -65,11 +68,9 @@ export async function GET(
       );
     }
 
-    if (role === "original" && asset.byte_size > MAX_SOURCE_BYTES) {
+    if (role === "original" && !isSourceWithinLimit(asset.byte_size)) {
       return NextResponse.json(
-        {
-          error: `Original asset is ${asset.byte_size} bytes (limit ${MAX_SOURCE_BYTES}). Re-select a smaller master locally.`,
-        },
+        { error: sourceOverLimitMessage(asset.byte_size) },
         { status: 413 },
       );
     }

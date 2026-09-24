@@ -1,13 +1,16 @@
 /**
- * Client/server shared limits for browser commit-bundle payloads.
- * Vercel serverless request body limit is ~4.5MB; stay under with margin.
+ * Shared size limits for archive originals and commit payloads.
+ *
+ * MAX_SOURCE_BYTES caps the editable original for R2 upload, admin
+ * hydration (GetObject proxy), and browser prepare. It is independent of
+ * the multipart commit-bundle body cap used by the legacy non-R2 path.
  */
 
-/** Soft client guard before building the multipart body. */
-export const MAX_SOURCE_BYTES = 2_500_000;
-/** Total binary payload soft limit (source + prepared + derivatives). */
+/** Max editable original master (upload + hydrate + prepare). */
+export const MAX_SOURCE_BYTES = 10 * 1024 * 1024;
+/** Total binary payload soft limit for multipart commit-bundle (source + prepared + derivatives). */
 export const MAX_BUNDLE_BINARY_BYTES = 3_800_000;
-/** Server hard reject (must fit under platform body limit). */
+/** Server hard reject for multipart commit-bundle (must fit under platform body limit ~4.5MB). */
 export const MAX_COMMIT_BUNDLE_BYTES = 4_000_000;
 export const MAX_COMMIT_FILES = 64;
 
@@ -15,6 +18,15 @@ export function formatByteSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+/** True when an original is within the shared source master limit. */
+export function isSourceWithinLimit(byteSize: number): boolean {
+  return Number.isFinite(byteSize) && byteSize >= 0 && byteSize <= MAX_SOURCE_BYTES;
+}
+
+export function sourceOverLimitMessage(byteSize: number): string {
+  return `Original asset is ${formatByteSize(byteSize)} (limit ${formatByteSize(MAX_SOURCE_BYTES)}). Re-select a smaller master locally.`;
 }
 
 export function assertCommitBundleClientLimits(input: {

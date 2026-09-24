@@ -71,6 +71,7 @@ describe("GET /api/admin/archive/artworks/[id]/source auth", () => {
     const src = readFileSync(routePath, "utf8");
     assert.match(src, /GetObjectCommand/);
     assert.match(src, /ALLOWED_ROLES/);
+    assert.match(src, /isSourceWithinLimit/);
     assert.doesNotMatch(src, /publicUrlForR2Key/);
   });
 });

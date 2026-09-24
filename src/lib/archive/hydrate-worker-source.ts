@@ -4,7 +4,10 @@
 
 import { adminFetch } from "@/components/admin/admin-fetch";
 import type { LocalPreparedMaster } from "@/lib/archive/browser-durable-commit";
-import { MAX_SOURCE_BYTES } from "@/lib/archive/commit-bundle-limits";
+import {
+  isSourceWithinLimit,
+  sourceOverLimitMessage,
+} from "@/lib/archive/commit-bundle-limits";
 
 export type HydratedSource = {
   file: File;
@@ -67,11 +70,11 @@ export async function hydrateOriginalFile(
 ): Promise<HydratedSource | { error: HydrateSourceError }> {
   const result = await fetchWorkerAssetRole(artworkIdOrDraftId, "original");
   if (!result.ok) return { error: result.error };
-  if (result.blob.size > MAX_SOURCE_BYTES) {
+  if (!isSourceWithinLimit(result.blob.size)) {
     return {
       error: {
         status: 413,
-        message: `Hydrated original is too large (${result.blob.size} bytes). Re-select a smaller master.`,
+        message: sourceOverLimitMessage(result.blob.size),
       },
     };
   }

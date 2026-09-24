@@ -7,6 +7,7 @@ import {
 } from "@/lib/archive/browser-durable-commit";
 import { useState } from "react";
 import type { AccessionDraft } from "@/lib/archive/schema";
+import { canPrepareWorkingMaster } from "@/lib/archive/ingest-source-gates";
 import {
   resolveFileFromAnyTab,
   resolveObjectUrlFromAnyTab,
@@ -79,8 +80,12 @@ export function EmbeddedPreparePanel({
   }
 
   const displaySrc = prepared?.objectUrl || previewSrc;
-  const canPrepare =
-    Boolean(draft) && hasBrowserSource && !preparing && !sourceHydrating;
+  const canPrepare = canPrepareWorkingMaster({
+    hasDraft: Boolean(draft),
+    hasSourceFile: hasBrowserSource,
+    sourceHydrating,
+    preparing,
+  });
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">

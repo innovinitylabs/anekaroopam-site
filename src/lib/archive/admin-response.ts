@@ -1,5 +1,11 @@
 /** Safe parsing of admin API responses (handles 413 HTML/plaintext). */
 
+import {
+  formatByteSize,
+  MAX_BUNDLE_BINARY_BYTES,
+  MAX_SOURCE_BYTES,
+} from "./commit-bundle-limits";
+
 export async function readAdminJson<T extends { error?: string }>(
   res: Response,
 ): Promise<{ ok: boolean; status: number; data: T; rawText: string }> {
@@ -20,7 +26,7 @@ export async function readAdminJson<T extends { error?: string }>(
     if (!message) {
       if (res.status === 413) {
         message =
-          "Request too large (413). Reduce source size or re-prepare a smaller master. Supported: source under 2.5 MB, total binary bundle under 3.8 MB.";
+          `Request too large (413). Reduce source size or re-prepare a smaller master. Supported: source under ${formatByteSize(MAX_SOURCE_BYTES)}, total binary bundle under ${formatByteSize(MAX_BUNDLE_BINARY_BYTES)}.`;
       } else if (rawText.trim()) {
         message = rawText.trim().slice(0, 280);
       } else {

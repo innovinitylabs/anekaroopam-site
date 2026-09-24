@@ -4,6 +4,7 @@ import { readAdminJson } from "./admin-response.ts";
 import {
   assertCommitBundleClientLimits,
   formatByteSize,
+  isSourceWithinLimit,
   MAX_BUNDLE_BINARY_BYTES,
   MAX_SOURCE_BYTES,
 } from "./commit-bundle-limits.ts";
@@ -20,6 +21,16 @@ describe("commit-bundle client limits", () => {
     );
   });
 
+  it("accepts source at the shared 10 MB limit", () => {
+    assert.doesNotThrow(() =>
+      assertCommitBundleClientLimits({
+        sourceBytes: MAX_SOURCE_BYTES,
+        binaryBytes: 100,
+      }),
+    );
+    assert.equal(isSourceWithinLimit(2_685_375), true);
+  });
+
   it("rejects oversized binary total", () => {
     assert.throws(
       () =>
@@ -33,6 +44,7 @@ describe("commit-bundle client limits", () => {
 
   it("formats byte sizes", () => {
     assert.match(formatByteSize(2048), /KB/);
+    assert.match(formatByteSize(MAX_SOURCE_BYTES), /10\.00 MB/);
   });
 });
 
@@ -45,6 +57,7 @@ describe("readAdminJson", () => {
     const parsed = await readAdminJson(res);
     assert.equal(parsed.ok, false);
     assert.match(parsed.data.error ?? "", /413|too large/i);
+    assert.match(parsed.data.error ?? "", /10\.00 MB/);
   });
 
   it("parses JSON errors when present", async () => {
