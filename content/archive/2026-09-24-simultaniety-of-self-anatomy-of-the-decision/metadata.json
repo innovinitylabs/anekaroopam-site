@@ -1,0 +1,182 @@
+{
+  "version": 1,
+  "accessionId": "AR-2026-0021",
+  "slug": "2026-09-24-simultaniety-of-self-anatomy-of-the-decision",
+  "status": "published",
+  "metadata": {
+    "accessionId": "AR-2026-0021",
+    "title": "simultaniety of self _ anatomy of the decision that wont resolve",
+    "year": 2026,
+    "date": "2026-09-24",
+    "process": "Sketchbook",
+    "perceptualNotes": "R2_BROWSER_ACCESSION Binaries live in Cloudflare R2; GitHub holds metadata and manifests only. Included: metadata.json, states.json, notes.md, manifest.json. Excluded from this package: perception.html and mint-package export. Public Next.js archive pages need a redeploy to pick up new metadata.json."
+  },
+  "assets": {
+    "artwork": "https://media.anekaroopam.art/archive/AR-2026-0021/r1/derivatives/artwork.avif",
+    "preview": "https://media.anekaroopam.art/archive/AR-2026-0021/r1/derivatives/preview.avif",
+    "social": "https://media.anekaroopam.art/archive/AR-2026-0021/r1/derivatives/social.jpg",
+    "thumb": "https://media.anekaroopam.art/archive/AR-2026-0021/r1/derivatives/thumb.jpg",
+    "previewWebp": "https://media.anekaroopam.art/archive/AR-2026-0021/r1/derivatives/preview.webp",
+    "socialJpg": "https://media.anekaroopam.art/archive/AR-2026-0021/r1/derivatives/social.jpg"
+  },
+  "media": {
+    "schemaVersion": 1,
+    "storage": "r2",
+    "accessionId": "AR-2026-0021",
+    "revision": 1,
+    "original": {
+      "key": "archive/AR-2026-0021/r1/original/original.png",
+      "mimeType": "image/png",
+      "byteSize": 2980614
+    },
+    "prepared": {
+      "key": "archive/AR-2026-0021/r1/prepared/master-prepared.avif",
+      "mimeType": "image/avif",
+      "byteSize": 444532,
+      "width": 1034,
+      "height": 1521
+    },
+    "derivatives": [
+      {
+        "key": "archive/AR-2026-0021/r1/derivatives/artwork.avif",
+        "mimeType": "image/avif",
+        "byteSize": 444532,
+        "width": 1034,
+        "height": 1521,
+        "role": "artwork"
+      },
+      {
+        "key": "archive/AR-2026-0021/r1/derivatives/preview.avif",
+        "mimeType": "image/avif",
+        "byteSize": 367020,
+        "width": 1034,
+        "height": 1521,
+        "role": "preview"
+      },
+      {
+        "key": "archive/AR-2026-0021/r1/derivatives/preview.webp",
+        "mimeType": "image/webp",
+        "byteSize": 230112,
+        "width": 1034,
+        "height": 1521,
+        "role": "preview"
+      },
+      {
+        "key": "archive/AR-2026-0021/r1/derivatives/social.jpg",
+        "mimeType": "image/jpeg",
+        "byteSize": 149844,
+        "width": 1200,
+        "height": 630,
+        "role": "social"
+      },
+      {
+        "key": "archive/AR-2026-0021/r1/derivatives/thumb.jpg",
+        "mimeType": "image/jpeg",
+        "byteSize": 37154,
+        "width": 326,
+        "height": 480,
+        "role": "thumb"
+      }
+    ]
+  },
+  "derivatives": [
+    {
+      "role": "artwork",
+      "path": "https://media.anekaroopam.art/archive/AR-2026-0021/r1/derivatives/artwork.avif",
+      "format": "avif",
+      "width": 1034,
+      "height": 1521,
+      "byteSize": 444532,
+      "generatedAt": "2026-09-24T07:16:22.841Z"
+    },
+    {
+      "role": "preview",
+      "path": "https://media.anekaroopam.art/archive/AR-2026-0021/r1/derivatives/preview.avif",
+      "format": "avif",
+      "width": 1034,
+      "height": 1521,
+      "byteSize": 367020,
+      "generatedAt": "2026-09-24T07:16:22.841Z"
+    },
+    {
+      "role": "preview",
+      "path": "https://media.anekaroopam.art/archive/AR-2026-0021/r1/derivatives/preview.webp",
+      "format": "webp",
+      "width": 1034,
+      "height": 1521,
+      "byteSize": 230112,
+      "generatedAt": "2026-09-24T07:16:22.841Z"
+    },
+    {
+      "role": "social",
+      "path": "https://media.anekaroopam.art/archive/AR-2026-0021/r1/derivatives/social.jpg",
+      "format": "jpeg",
+      "width": 1200,
+      "height": 630,
+      "byteSize": 149844,
+      "generatedAt": "2026-09-24T07:16:22.841Z"
+    },
+    {
+      "role": "thumb",
+      "path": "https://media.anekaroopam.art/archive/AR-2026-0021/r1/derivatives/thumb.jpg",
+      "format": "jpeg",
+      "width": 326,
+      "height": 480,
+      "byteSize": 37154,
+      "generatedAt": "2026-09-24T07:16:22.841Z"
+    }
+  ],
+  "exports": [],
+  "source": {
+    "kind": "original",
+    "originalFilename": "simultaniety of self _ anatomy of the decision that wont resolve.png",
+    "storedFilename": "original.png",
+    "mimeType": "image/png",
+    "byteSize": 2980614,
+    "importedAt": "2026-09-24T07:16:22.841Z"
+  },
+  "processing": {
+    "preparedSource": "archive/AR-2026-0021/r1/prepared/master-prepared.avif",
+    "preparedAt": "2026-09-24T07:14:37.718Z",
+    "prepareVersion": "browser-r2-v1"
+  },
+  "perception": {
+    "states": [
+      {
+        "id": "s1",
+        "name": "",
+        "angle": 0,
+        "caption": ""
+      },
+      {
+        "id": "ps_286pcjtq",
+        "name": "",
+        "angle": 45,
+        "caption": ""
+      },
+      {
+        "id": "ps_miym5vwh",
+        "name": "",
+        "angle": 90,
+        "caption": ""
+      }
+    ],
+    "background": "paper",
+    "initialAngle": 0,
+    "snapToState": true,
+    "showMetadataOverlay": true
+  },
+  "export": {
+    "standaloneHtml": "perception.html",
+    "includeWebpFallback": true,
+    "preset": "archival"
+  },
+  "provenance": {
+    "mint": [],
+    "auction": [],
+    "marketplace": []
+  },
+  "createdAt": "2026-09-24T07:16:22.842Z",
+  "updatedAt": "2026-09-24T07:16:22.842Z",
+  "publishedAt": "2026-09-24T07:16:22.842Z"
+}

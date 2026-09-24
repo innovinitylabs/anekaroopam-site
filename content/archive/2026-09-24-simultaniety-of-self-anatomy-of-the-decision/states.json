@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "slug": "2026-09-24-simultaniety-of-self-anatomy-of-the-decision",
+  "perception": {
+    "states": [
+      {
+        "id": "s1",
+        "name": "",
+        "angle": 0,
+        "caption": ""
+      },
+      {
+        "id": "ps_286pcjtq",
+        "name": "",
+        "angle": 45,
+        "caption": ""
+      },
+      {
+        "id": "ps_miym5vwh",
+        "name": "",
+        "angle": 90,
+        "caption": ""
+      }
+    ],
+    "background": "paper",
+    "initialAngle": 0,
+    "snapToState": true,
+    "showMetadataOverlay": true
+  },
+  "exportedAt": "2026-09-24T07:16:22.845Z"
+}
