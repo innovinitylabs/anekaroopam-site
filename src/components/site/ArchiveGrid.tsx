@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { useState } from "react";
+import { ArchiveGalleryThumb } from "@/components/site/ArchiveGalleryThumb";
 import { DisplayTitle } from "@/components/site/DisplayTitle";
 import { FadeIn } from "@/components/site/FadeIn";
 import { hasTamilScript } from "@/lib/typography/tamil";
@@ -105,13 +105,10 @@ export function ArchiveGrid({
             <li>
               <Link href={`/archive/${artwork.id}`} className="group block">
                 <div className="archive-mount relative aspect-square overflow-hidden">
-                  <Image
+                  <ArchiveGalleryThumb
                     src={artwork.imageSrc}
                     alt={artwork.metadata.title}
-                    fill
-                    sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
                     priority={i === 0}
-                    className="relative z-[1] object-contain p-5 sm:p-6"
                   />
                 </div>
                 <div className="mt-4 flex items-baseline justify-between gap-4">
