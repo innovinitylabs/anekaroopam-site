@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "draftId": "draft-2026-0020",
+  "accessionId": "AR-2026-0020",
+  "status": "published",
+  "slug": "2026-09-24-img-2814",
+  "slugLocked": false,
+  "slugHistory": [],
+  "source": {
+    "kind": "original",
+    "originalFilename": "IMG_2814.png",
+    "storedFilename": "original.png",
+    "mimeType": "image/png",
+    "byteSize": 14557034,
+    "importedAt": "2026-09-24T06:00:21.916Z"
+  },
+  "processing": {
+    "preparedSource": "archive/AR-2026-0020/r1/prepared/master-prepared.avif",
+    "preparedAt": "2026-09-24T05:57:36.884Z",
+    "prepareVersion": "browser-r2-v1"
+  },
+  "artwork": {
+    "id": "draft-2026-0020",
+    "metadata": {
+      "accessionId": "AR-2026-0020",
+      "title": "IMG_2814",
+      "year": 2026,
+      "date": "2026-09-24"
+    },
+    "imageSrc": "",
+    "states": [
+      {
+        "id": "s1",
+        "name": "test",
+        "angle": 0,
+        "caption": ""
+      },
+      {
+        "id": "ps_id9zhmhi",
+        "name": "",
+        "angle": 45,
+        "caption": ""
+      }
+    ],
+    "background": "paper",
+    "initialAngle": 0,
+    "snapToState": true,
+    "showMetadataOverlay": true
+  },
+  "provenance": {
+    "mint": [],
+    "auction": [],
+    "marketplace": []
+  },
+  "export": {
+    "standaloneHtml": "perception.html",
+    "includeWebpFallback": true,
+    "preset": "archival"
+  },
+  "createdAt": "2026-09-24T05:57:15.415Z",
+  "updatedAt": "2026-09-24T06:00:21.917Z",
+  "preparedAt": "2026-09-24T05:57:36.884Z",
+  "generatedAt": "2026-09-24T06:00:21.917Z",
+  "publishedAt": "2026-09-24T06:00:21.917Z"
+}

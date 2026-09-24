@@ -1,0 +1,138 @@
+{
+  "archiveVersion": 1,
+  "manifestVersion": "manifest-v1",
+  "accessionId": "AR-2026-0020",
+  "slug": "2026-09-24-img-2814",
+  "generatedAt": "2026-09-24T06:00:21.917Z",
+  "updatedAt": "2026-09-24T06:00:21.917Z",
+  "storage": "r2",
+  "revision": 1,
+  "media": {
+    "schemaVersion": 1,
+    "storage": "r2",
+    "accessionId": "AR-2026-0020",
+    "revision": 1,
+    "original": {
+      "key": "archive/AR-2026-0020/r1/original/original.png",
+      "mimeType": "image/png",
+      "byteSize": 14557034
+    },
+    "prepared": {
+      "key": "archive/AR-2026-0020/r1/prepared/master-prepared.avif",
+      "mimeType": "image/avif",
+      "byteSize": 1686749,
+      "width": 2827,
+      "height": 3819
+    },
+    "derivatives": [
+      {
+        "key": "archive/AR-2026-0020/r1/derivatives/artwork.avif",
+        "role": "artwork",
+        "mimeType": "image/avif",
+        "byteSize": 1686749,
+        "width": 2827,
+        "height": 3819
+      },
+      {
+        "key": "archive/AR-2026-0020/r1/derivatives/preview.avif",
+        "role": "preview",
+        "mimeType": "image/avif",
+        "byteSize": 767059,
+        "width": 1516,
+        "height": 2048
+      },
+      {
+        "key": "archive/AR-2026-0020/r1/derivatives/preview.webp",
+        "role": "preview",
+        "mimeType": "image/webp",
+        "byteSize": 455608,
+        "width": 1516,
+        "height": 2048
+      },
+      {
+        "key": "archive/AR-2026-0020/r1/derivatives/social.jpg",
+        "role": "social",
+        "mimeType": "image/jpeg",
+        "byteSize": 177831,
+        "width": 1200,
+        "height": 630
+      },
+      {
+        "key": "archive/AR-2026-0020/r1/derivatives/thumb.jpg",
+        "role": "thumb",
+        "mimeType": "image/jpeg",
+        "byteSize": 37794,
+        "width": 355,
+        "height": 480
+      }
+    ]
+  },
+  "source": {
+    "kind": "original",
+    "originalFilename": "IMG_2814.png",
+    "storedFilename": "original.png",
+    "mimeType": "image/png",
+    "byteSize": 14557034,
+    "importedAt": "2026-09-24T06:00:21.916Z"
+  },
+  "prepared": {
+    "preparedSource": "archive/AR-2026-0020/r1/prepared/master-prepared.avif",
+    "preparedAt": "2026-09-24T05:57:36.884Z",
+    "prepareVersion": "browser-r2-v1"
+  },
+  "derivatives": [
+    {
+      "role": "artwork",
+      "path": "https://media.anekaroopam.art/archive/AR-2026-0020/r1/derivatives/artwork.avif",
+      "format": "avif",
+      "width": 2827,
+      "height": 3819,
+      "byteSize": 1686749,
+      "generatedAt": "2026-09-24T06:00:21.916Z"
+    },
+    {
+      "role": "preview",
+      "path": "https://media.anekaroopam.art/archive/AR-2026-0020/r1/derivatives/preview.avif",
+      "format": "avif",
+      "width": 1516,
+      "height": 2048,
+      "byteSize": 767059,
+      "generatedAt": "2026-09-24T06:00:21.916Z"
+    },
+    {
+      "role": "preview",
+      "path": "https://media.anekaroopam.art/archive/AR-2026-0020/r1/derivatives/preview.webp",
+      "format": "webp",
+      "width": 1516,
+      "height": 2048,
+      "byteSize": 455608,
+      "generatedAt": "2026-09-24T06:00:21.916Z"
+    },
+    {
+      "role": "social",
+      "path": "https://media.anekaroopam.art/archive/AR-2026-0020/r1/derivatives/social.jpg",
+      "format": "jpeg",
+      "width": 1200,
+      "height": 630,
+      "byteSize": 177831,
+      "generatedAt": "2026-09-24T06:00:21.916Z"
+    },
+    {
+      "role": "thumb",
+      "path": "https://media.anekaroopam.art/archive/AR-2026-0020/r1/derivatives/thumb.jpg",
+      "format": "jpeg",
+      "width": 355,
+      "height": 480,
+      "byteSize": 37794,
+      "generatedAt": "2026-09-24T06:00:21.916Z"
+    }
+  ],
+  "perceptualStateCount": 2,
+  "provenanceSummary": {
+    "mintLinks": 0,
+    "auctionLinks": 0,
+    "marketplaceLinks": 0
+  },
+  "exportPreset": "archival",
+  "visibilityStatus": "published"
+}

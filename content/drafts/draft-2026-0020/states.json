@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "draftId": "draft-2026-0020",
+  "slug": "2026-09-24-img-2814",
+  "perception": {
+    "states": [
+      {
+        "id": "s1",
+        "name": "test",
+        "angle": 0,
+        "caption": ""
+      },
+      {
+        "id": "ps_id9zhmhi",
+        "name": "",
+        "angle": 45,
+        "caption": ""
+      }
+    ],
+    "background": "paper",
+    "initialAngle": 0,
+    "snapToState": true,
+    "showMetadataOverlay": true
+  },
+  "updatedAt": "2026-09-24T06:00:21.917Z",
+  "browserMvpIncomplete": {
+    "storage": "r2",
+    "missing": [
+      "perception.html"
+    ],
+    "excluded": [
+      "mint-package",
+      "offline-html-distribution"
+    ]
+  }
+}
