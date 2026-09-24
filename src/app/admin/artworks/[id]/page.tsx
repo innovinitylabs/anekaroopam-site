@@ -76,9 +76,18 @@ export default async function AdminArtworkDetailPage({
               Public view
             </Link>
           )}
-          <AdminArtworkActions artwork={artwork} />
+          <AdminArtworkActions artwork={artwork} readiness={readiness} />
         </div>
       </header>
+
+      {artwork.status === "ready" && (
+        <p className="mt-6 border border-[var(--border)] p-4 text-[0.78rem] leading-relaxed text-[var(--muted)]">
+          Republish freezes the current working revision and points the public
+          listing at it. The accession stays the same; historical frozen revisions
+          are not modified. Use Edit working revision only when metadata or media
+          must change before publishing again.
+        </p>
+      )}
 
       <section className="mt-8">
         <h2 className="text-[0.62rem] tracking-[0.2em] uppercase text-[var(--muted)]">
@@ -86,7 +95,7 @@ export default async function AdminArtworkDetailPage({
         </h2>
         <p className="mt-2 text-[0.85rem]">
           {readiness.ok
-            ? "Required assets verified"
+            ? "Required assets verified — eligible to Republish when status is ready"
             : `Missing: ${readiness.missing.join(", ") || "unknown"}`}
         </p>
       </section>

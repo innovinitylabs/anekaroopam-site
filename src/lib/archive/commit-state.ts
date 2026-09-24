@@ -47,17 +47,17 @@ export function commitPhaseLabel(phase: ArchiveCommitPhase): string {
     case "verifying":
       return "Verifying uploads";
     case "uploaded_pending_metadata":
-      return "Media uploaded; metadata not committed";
+      return "Media uploaded; metadata not written";
     case "committing_metadata":
-      return "Committing metadata to GitHub";
+      return "Writing revision metadata";
     case "committed":
-      return "Committed";
+      return "Published";
     case "failed_upload":
       return "Upload failed";
     case "failed_verify":
       return "Verification failed";
     case "failed_metadata":
-      return "Metadata commit failed";
+      return "Metadata write failed";
     default:
       return phase;
   }

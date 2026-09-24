@@ -40,7 +40,7 @@ export function isFinalVisibleStep(
 }
 
 export function finalCommitLabel(isRevision: boolean): string {
-  return isRevision ? "Commit Revision" : "Commit Accession";
+  return isRevision ? "Update & Publish" : "Publish Artwork";
 }
 
 export function footerPrimaryLabel(input: {

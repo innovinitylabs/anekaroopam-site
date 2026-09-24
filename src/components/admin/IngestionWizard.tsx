@@ -89,9 +89,9 @@ type DraftResponse = {
 
 const STEP_TOOLTIPS: Record<string, string> = {
   Upload:
-    "Select the original master. It stays in this browser until Commit Accession; nothing is uploaded yet.",
+    "Select the original master. It stays in this browser until Publish Artwork; nothing is uploaded yet.",
   Prepare:
-    "Encode an orientation-safe prepared master locally in the browser. No GitHub write.",
+    "Encode an orientation-safe prepared master locally in the browser. No remote write.",
   Orientation:
     "Define perceptual states, snap behavior, and the viewing background for export.",
   Metadata:
@@ -103,11 +103,11 @@ const STEP_TOOLTIPS: Record<string, string> = {
   Publish:
     "Local non-durable: promote or sync on GitHub. Hidden in durable mode.",
   Provenance:
-    "Record mint, auction, and marketplace links. Stays local until Commit.",
+    "Record mint, auction, and marketplace links. Stays local until Publish.",
   Visibility:
-    "Choose whether this accession is public, admin-only (generated), or hidden after Commit.",
+    "Choose whether this accession is public, admin-only (generated), or hidden after Publish.",
   Review:
-    "Validate the local draft, then Commit Accession or Commit Revision once.",
+    "Validate the local draft, then Publish Artwork or Update & Publish once.",
 };
 
 function artworkForStorage(
@@ -808,7 +808,7 @@ export function IngestionWizard({
     try {
       if (!durableStorage) {
         throw new Error(
-          "Durable GitHub storage is required for Commit Accession.",
+          "Durable storage is required for Publish Artwork.",
         );
       }
       const saved = await saveDraft();
@@ -820,7 +820,7 @@ export function IngestionWizard({
         );
       }
       if (!preparedLocal) {
-        throw new Error("Prepare a working master before Commit.");
+        throw new Error("Prepare a working master before Publish.");
       }
 
       if (r2Archive) {
@@ -878,7 +878,7 @@ export function IngestionWizard({
         setCommitPhase("committed");
       }
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Commit failed";
+      const message = e instanceof Error ? e.message : "Publish failed";
       setError(message);
       const phaseFromError =
         e && typeof e === "object" && "phase" in e
@@ -936,7 +936,7 @@ export function IngestionWizard({
 
       if (durableStorage) {
         throw new Error(
-          "Durable mode does not Generate mid-wizard. Use Review → Commit Accession for the single GitHub write.",
+          "Durable mode does not Generate mid-wizard. Use Review → Publish Artwork for the single write.",
         );
       }
 
@@ -1248,8 +1248,8 @@ export function IngestionWizard({
           />
           <p className="text-[0.75rem] text-[var(--muted)]">
             Select a high-resolution master. In durable mode the original stays
-            in this browser (IndexedDB + tab memory) until you Commit Accession
-            on Review. No GitHub commit or upload happens on Select.
+            in this browser (IndexedDB + tab memory) until you Publish Artwork
+            on Review. No remote upload happens on Select.
           </p>
           {sourceFile && (
             <p className="text-[0.75rem] text-[var(--muted)]">
@@ -1268,8 +1268,8 @@ export function IngestionWizard({
             Prepare encodes an orientation-safe master locally in the browser.
             {durableStorage
               ? r2Archive
-                ? " Binaries upload to R2 only on Review → Commit; GitHub receives metadata."
-                : " Nothing is written to GitHub until Review → Commit Accession."
+                ? " Binaries upload to R2 only on Review → Publish; revision metadata is written to D1."
+                : " Nothing is written remotely until Review → Publish Artwork."
               : " Local/dev fallback may deposit to disk only when you continue past Prepare."}
           </p>
           <EmbeddedPreparePanel
@@ -1636,7 +1636,7 @@ export function IngestionWizard({
           )}
           {durableStorage && (
             <p className="text-[0.75rem] text-[var(--muted)]">
-              Provenance stays local until Commit Accession on Review.
+              Provenance stays local until Publish Artwork on Review.
             </p>
           )}
         </section>
@@ -1648,25 +1648,27 @@ export function IngestionWizard({
             Publication visibility
           </h2>
           <p className="text-[0.82rem] text-[var(--muted)]">
-            Stored in metadata on the intentional Commit. Opening or editing
-            locally does not change public visibility.
+            Stored in metadata on Publish. Opening or editing locally does not
+            change public visibility.
           </p>
           {(
             [
               {
                 value: "published" as const,
                 label: "Published",
-                help: "Listed on the public archive after the next deploy.",
+                help: "Listed on the public archive after publish.",
               },
               {
                 value: "generated" as const,
                 label: "Generated (admin only)",
-                help: "Files exist in GitHub; public site filters it out until published.",
+                help: d1Archive || r2Archive
+                  ? "Record stays admin-only until you publish it."
+                  : "Files exist in GitHub; public site filters it out until published.",
               },
               {
                 value: "hidden" as const,
                 label: "Hidden",
-                help: "Retained in the archive tree but not shown publicly.",
+                help: "Retained in the archive but not shown publicly.",
               },
             ] as const
           ).map((option) => (
@@ -1696,7 +1698,7 @@ export function IngestionWizard({
       {step === "Review" && (
         <section className="space-y-6">
           <h2 className="text-[0.62rem] tracking-[0.18em] uppercase text-[var(--muted)]">
-            Review and commit
+            Review and publish
           </h2>
           {durableStorage && (
             <p className="border border-[var(--border)] p-3 text-[0.78rem] text-[var(--muted)]">
@@ -1711,14 +1713,16 @@ export function IngestionWizard({
           {(committing || commitPhase !== "idle") && !commitCompleted && (
             <p className="text-[0.72rem] tracking-[0.12em] uppercase text-[var(--muted)]">
               {commitPhaseLabel(commitPhase)}
-              {r2Archive ? " (R2 + GitHub metadata)" : " (GitHub bundle)"}
+              {r2Archive || d1Archive
+                ? " (R2 + D1)"
+                : " (GitHub bundle)"}
             </p>
           )}
           {commitPhase === "failed_metadata" && (
             <p className="text-[0.78rem] text-[var(--muted)]">
-              Media may already be stored in R2. Metadata was not committed.
-              Retry metadata-only is a follow-up; re-run Commit after fixing the
-              error, or contact an admin if objects already exist for this revision.
+              Media may already be stored in R2. Revision metadata was not written.
+              Re-run Publish after fixing the error, or contact an admin if objects
+              already exist for this revision.
             </p>
           )}
           {commitCompleted && lastCommittedSha ? (
@@ -1727,10 +1731,24 @@ export function IngestionWizard({
                 Completed
               </p>
               <p className="text-[0.85rem] text-[var(--muted)]">
-                Intentional GitHub commit{" "}
-                <code className="text-[0.8rem]">{lastCommittedSha.slice(0, 7)}</code>
-                {result?.slug ? ` for ${result.slug}` : ""}. Public pages update
-                after Vercel redeploy.
+                {r2Archive || d1Archive ? (
+                  <>
+                    Revision published
+                    {result?.slug ? ` for ${result.slug}` : ""}.
+                    {lastCommittedSha
+                      ? ` Reference ${lastCommittedSha.slice(0, 7)}.`
+                      : ""}
+                  </>
+                ) : (
+                  <>
+                    Intentional GitHub commit{" "}
+                    <code className="text-[0.8rem]">
+                      {lastCommittedSha.slice(0, 7)}
+                    </code>
+                    {result?.slug ? ` for ${result.slug}` : ""}. Public pages
+                    update after Vercel redeploy.
+                  </>
+                )}
               </p>
               {result && (
                 <ul className="max-h-40 overflow-y-auto font-mono text-[0.7rem] opacity-80">
@@ -1800,7 +1818,7 @@ export function IngestionWizard({
                 </div>
               </div>
               <p className="text-[0.75rem] text-[var(--muted)]">
-                Required after Commit: metadata.json, states.json, notes.md, five
+                Required after Publish: metadata.json, states.json, notes.md, five
                 public derivatives, archive source + prepared master. MVP omits
                 perception.html and manifest.json.
               </p>
@@ -1826,8 +1844,12 @@ export function IngestionWizard({
                 }
                 title={
                   isExistingArchive
-                    ? "Validate and write one revision commit to GitHub."
-                    : "Validate and write one accession commit to GitHub."
+                    ? d1Archive || r2Archive
+                      ? "Validate and publish an updated working revision."
+                      : "Validate and write one revision update."
+                    : d1Archive || r2Archive
+                      ? "Validate and publish this artwork."
+                      : "Validate and publish this accession."
                 }
                 onClick={() => {
                   void handleCommitAccession();
@@ -1835,10 +1857,12 @@ export function IngestionWizard({
                 className="border border-[var(--ink)] px-5 py-3 text-[0.68rem] tracking-[0.16em] uppercase disabled:opacity-40"
               >
                 {committing
-                  ? "Committing..."
+                  ? isExistingArchive
+                    ? "Updating..."
+                    : "Publishing..."
                   : isExistingArchive
-                    ? "Commit Revision"
-                    : "Commit Accession"}
+                    ? "Update & Publish"
+                    : "Publish Artwork"}
               </button>
             </>
           )}

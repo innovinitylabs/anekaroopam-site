@@ -33,7 +33,7 @@ describe("wizard final visible step", () => {
         isRevision: false,
         completed: false,
       }),
-      "Commit Accession",
+      "Publish Artwork",
     );
     assert.equal(
       footerPrimaryLabel({
@@ -42,7 +42,7 @@ describe("wizard final visible step", () => {
         isRevision: true,
         completed: false,
       }),
-      "Commit Revision",
+      "Update & Publish",
     );
   });
 
@@ -62,8 +62,8 @@ describe("wizard final visible step", () => {
   });
 
   it("labels distinguish accession vs revision", () => {
-    assert.equal(finalCommitLabel(false), "Commit Accession");
-    assert.equal(finalCommitLabel(true), "Commit Revision");
+    assert.equal(finalCommitLabel(false), "Publish Artwork");
+    assert.equal(finalCommitLabel(true), "Update & Publish");
   });
 
   it("durable step list includes Visibility before Review", () => {

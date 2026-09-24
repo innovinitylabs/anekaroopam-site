@@ -23,11 +23,11 @@ export default async function ArchivePage({
           Archive
         </p>
         <h1 className="mt-4 font-display text-[2.45rem] leading-tight tracking-tight md:text-5xl">
-          Perceptual records
+          Perceptual archive
         </h1>
         <p className="mt-6 max-w-xl text-[var(--muted)] leading-relaxed">
-          Minimal metadata. Each entry opens into the orientation interface where
-          states await discovery.
+          Published works from the Anekaroopam practice. Enter a record to explore
+          orientation, rotation, and emergent forms.
         </p>
       </FadeIn>
 

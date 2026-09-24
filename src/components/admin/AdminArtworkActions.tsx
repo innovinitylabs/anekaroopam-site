@@ -5,7 +5,18 @@ import { useState } from "react";
 import { adminFetch } from "@/components/admin/admin-fetch";
 import type { WorkerArtwork } from "@/lib/archive/worker-client";
 
-export function AdminArtworkActions({ artwork }: { artwork: WorkerArtwork }) {
+export type ArtworkReadiness = {
+  ok: boolean;
+  missing: string[];
+};
+
+export function AdminArtworkActions({
+  artwork,
+  readiness,
+}: {
+  artwork: WorkerArtwork;
+  readiness?: ArtworkReadiness;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -31,9 +42,42 @@ export function AdminArtworkActions({ artwork }: { artwork: WorkerArtwork }) {
     artwork.publishedRevision == null &&
     artwork.publishedAt == null;
 
+  const canRepublish = artwork.status === "ready";
+  const readinessBlocks =
+    readiness != null && readiness.ok === false;
+  const republishDisabled = busy || readinessBlocks;
+  const republishTitle = readinessBlocks
+    ? `Missing verified assets: ${readiness.missing.join(", ") || "unknown"}`
+    : "Freeze the current working revision and publish without allocating a new accession.";
+
   return (
     <div className="flex flex-col items-end gap-2">
       <div className="flex flex-wrap justify-end gap-2">
+        {canRepublish && (
+          <button
+            type="button"
+            disabled={republishDisabled}
+            title={republishTitle}
+            className="border border-[var(--border)] px-3 py-1.5 text-[0.62rem] tracking-[0.12em] uppercase disabled:opacity-50"
+            onClick={() => {
+              if (
+                !window.confirm(
+                  "Republish this artwork using the current working revision? No new accession will be allocated.",
+                )
+              )
+                return;
+              void run("Republish", () =>
+                adminFetch("/api/admin/archive/publish", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ artworkId: artwork.id }),
+                }),
+              );
+            }}
+          >
+            {busy ? "Publishing..." : "Republish"}
+          </button>
+        )}
         {artwork.status === "published" && (
           <>
             <button
@@ -147,6 +191,11 @@ export function AdminArtworkActions({ artwork }: { artwork: WorkerArtwork }) {
           </button>
         )}
       </div>
+      {readinessBlocks && (
+        <p className="max-w-xs text-right text-[0.68rem] text-[var(--muted)]">
+          Republish unavailable: missing {readiness.missing.join(", ")}
+        </p>
+      )}
       {message && (
         <p className="max-w-xs text-right text-[0.68rem] text-[var(--muted)]">
           {message}
