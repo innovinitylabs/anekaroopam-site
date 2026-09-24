@@ -77,6 +77,10 @@ import {
   isMetadataFinalized,
   type SeoMetadata,
 } from "@/lib/archive/archive-seo";
+import {
+  hydrateOriginalFile,
+  hydratePreparedLocal,
+} from "@/lib/archive/hydrate-worker-source";
 import type { PerceptionArtwork } from "@/lib/perception/types";
 
 type StepId = WizardStep;
@@ -197,6 +201,8 @@ export function IngestionWizard({
   const [commitInFlight, setCommitInFlight] = useState(false);
   const [lastCommittedSha, setLastCommittedSha] = useState<string | null>(null);
   const [commitPhase, setCommitPhase] = useState<ArchiveCommitPhase>("idle");
+  const [sourceHydrating, setSourceHydrating] = useState(false);
+  const [serverSourceUnavailable, setServerSourceUnavailable] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -281,7 +287,9 @@ export function IngestionWizard({
     setArtwork(
       objectUrl
         ? hydrateArtworkPreview(draftArtwork, objectUrl)
-        : { ...draftArtwork, imageSrc: "" },
+        : draftArtwork.imageSrc
+          ? draftArtwork
+          : { ...draftArtwork, imageSrc: "" },
     );
     setDraftLoaded(true);
   }, []);
@@ -447,6 +455,49 @@ export function IngestionWizard({
         if (!cancelled) {
           applyDraft(data.draft);
           setArchiveStatus(data.archiveStatus ?? null);
+          setServerSourceUnavailable(
+            data.draft.source?.kind !== "original",
+          );
+
+          // D1/R2 reopen: hydrate original (+ prepared when present) via admin proxy.
+          if (
+            data.draft.source?.kind === "original" &&
+            !resolveFileFromAnyTab(data.draft.draftId)
+          ) {
+            setSourceHydrating(true);
+            try {
+              const hydrated = await hydrateOriginalFile(data.draft.draftId);
+              if ("error" in hydrated) {
+                if (!cancelled) {
+                  setServerSourceUnavailable(true);
+                  setError(hydrated.error.message);
+                }
+              } else if (!cancelled) {
+                setSourceFile(hydrated.file);
+                registerTransientUpload(data.draft.draftId, hydrated.file);
+                setServerSourceUnavailable(false);
+                if (data.draft.processing?.preparedSource) {
+                  const prepared = await hydratePreparedLocal(
+                    data.draft.draftId,
+                  );
+                  if (!("error" in prepared) && !cancelled) {
+                    setPreparedLocal(prepared);
+                  }
+                }
+              }
+            } catch (hydrateErr) {
+              if (!cancelled) {
+                setServerSourceUnavailable(true);
+                setError(
+                  hydrateErr instanceof Error
+                    ? hydrateErr.message
+                    : "Source hydration failed",
+                );
+              }
+            } finally {
+              if (!cancelled) setSourceHydrating(false);
+            }
+          }
         }
       } catch (e) {
         if (!cancelled) {
@@ -1278,6 +1329,8 @@ export function IngestionWizard({
             sourceFile={sourceFile}
             durableStorage={durableStorage}
             prepared={preparedLocal}
+            sourceHydrating={sourceHydrating}
+            serverSourceUnavailable={serverSourceUnavailable}
             onPreparedLocal={handlePreparedLocal}
             onError={(message) => setError(message || null)}
           />

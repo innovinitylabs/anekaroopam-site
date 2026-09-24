@@ -9,6 +9,11 @@ import {
   type CreateAccessionDraftInput,
 } from "./schema";
 import {
+  mapProcessingFromWorkerAssets,
+  mapSourceFromWorkerAssets,
+  previewImageSrcFromWorkerAssets,
+} from "./source-from-worker-assets";
+import {
   ArchiveWorkerError,
   workerCreateArtwork,
   workerGetArtwork,
@@ -40,11 +45,16 @@ function mapStatus(status: string): AccessionDraft["status"] {
   }
 }
 
-function artworkToDraft(
+function publicBaseUrl(): string | null {
+  return process.env.R2_PUBLIC_BASE_URL?.trim().replace(/\/$/, "") || null;
+}
+
+export function artworkToDraft(
   artwork: WorkerArtwork,
   detail?: WorkerArtworkDetail | null,
 ): AccessionDraft {
   const working = detail?.workingRevision;
+  const assets = detail?.assets ?? [];
   const meta = {
     title: artwork.title,
     year: artwork.year ?? undefined,
@@ -61,6 +71,10 @@ function artworkToDraft(
     (working?.provenance as AccessionDraft["provenance"] | undefined) ??
     emptyProvenance();
 
+  const source = mapSourceFromWorkerAssets(assets);
+  const processing = mapProcessingFromWorkerAssets(assets);
+  const imageSrc = previewImageSrcFromWorkerAssets(assets, publicBaseUrl());
+
   return {
     version: ARCHIVE_VERSION,
     draftId: artwork.draftId,
@@ -69,12 +83,12 @@ function artworkToDraft(
     slug: artwork.slug,
     slugLocked: true,
     slugHistory: [],
-    source: { kind: "migration-required" },
-    processing: {},
+    source,
+    processing,
     artwork: {
       id: artwork.draftId,
       metadata: meta,
-      imageSrc: "",
+      imageSrc,
       states: states as AccessionDraft["artwork"]["states"],
       background: (perception.background as string) || "paper",
       initialAngle: Number(perception.initialAngle ?? 0),
@@ -94,6 +108,7 @@ function artworkToDraft(
     publishedAt: artwork.publishedAt ?? undefined,
     hiddenAt: artwork.hiddenAt ?? undefined,
     withdrawnAt: artwork.withdrawnAt ?? undefined,
+    preparedAt: processing.preparedAt,
   };
 }
 

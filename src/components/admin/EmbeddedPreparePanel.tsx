@@ -18,6 +18,8 @@ export function EmbeddedPreparePanel({
   sourceFile,
   durableStorage = false,
   prepared,
+  sourceHydrating = false,
+  serverSourceUnavailable = false,
   onPreparedLocal,
   onError,
 }: {
@@ -26,6 +28,8 @@ export function EmbeddedPreparePanel({
   sourceFile?: File | null;
   durableStorage?: boolean;
   prepared: LocalPreparedMaster | null;
+  sourceHydrating?: boolean;
+  serverSourceUnavailable?: boolean;
   onPreparedLocal: (prepared: LocalPreparedMaster) => void;
   onError: (message: string) => void;
 }) {
@@ -34,16 +38,17 @@ export function EmbeddedPreparePanel({
     sourceFile ??
     (draft?.draftId ? resolveFileFromAnyTab(draft.draftId) : null) ??
     null;
-  const hasBrowserSource = Boolean(browserSource || previewSrc);
+  const hasBrowserSource = Boolean(browserSource);
   const serverSource =
     draft?.source.kind === "original" && Boolean(draft.source.storedFilename);
+  const serverSourceLabel = serverSourceUnavailable
+    ? "unavailable"
+    : serverSource
+      ? "deposited"
+      : "not deposited";
 
   async function resolveSourceBlob(): Promise<Blob> {
     if (browserSource) return browserSource;
-    if (previewSrc) {
-      const res = await fetch(previewSrc);
-      if (res.ok) return res.blob();
-    }
     if (draft?.draftId) {
       const objectUrl = resolveObjectUrlFromAnyTab(draft.draftId);
       if (objectUrl) {
@@ -74,7 +79,8 @@ export function EmbeddedPreparePanel({
   }
 
   const displaySrc = prepared?.objectUrl || previewSrc;
-  const canPrepare = Boolean(draft) && hasBrowserSource && !preparing;
+  const canPrepare =
+    Boolean(draft) && hasBrowserSource && !preparing && !sourceHydrating;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
@@ -89,8 +95,11 @@ export function EmbeddedPreparePanel({
             />
           ) : (
             <div className="flex h-full items-center justify-center px-6 text-center text-[0.78rem] text-[var(--muted)]">
-              Select a master on Upload. The original stays in this browser until
-              Review.
+              {sourceHydrating
+                ? "Loading original from archive storage..."
+                : serverSourceUnavailable
+                  ? "Server source unavailable. Select the original master again to update this artwork."
+                  : "Select a master on Upload. The original stays in this browser until Review."}
             </div>
           )}
         </div>
@@ -112,6 +121,12 @@ export function EmbeddedPreparePanel({
               ? "Encodes an orientation-safe prepared master in the browser only. Upload and metadata commit happen later on Review."
               : "Encodes a local preview master in the browser. Server Sharp runs only later on Generate (local non-durable fallback)."}
           </p>
+          {serverSourceUnavailable && !hasBrowserSource && (
+            <p className="border border-[var(--border)] p-3 text-[0.72rem] text-[var(--muted)]">
+              Server source: unavailable. Select the original master again to
+              update this artwork.
+            </p>
+          )}
           <button
             type="button"
             onClick={() => {
@@ -119,17 +134,21 @@ export function EmbeddedPreparePanel({
             }}
             disabled={!canPrepare}
             title={
-              hasBrowserSource
-                ? "Encode prepared master locally from the browser File."
-                : "Select a source image on Upload first."
+              sourceHydrating
+                ? "Loading original from archive storage..."
+                : hasBrowserSource
+                  ? "Encode prepared master locally from the browser File."
+                  : "Select a source image on Upload first."
             }
             className="mt-2 border border-[var(--ink)] px-4 py-2 text-[0.62rem] tracking-[0.14em] uppercase disabled:opacity-30"
           >
             {preparing
               ? "Preparing..."
-              : prepared
-                ? "Reprepare locally"
-                : "Prepare working master"}
+              : sourceHydrating
+                ? "Loading source..."
+                : prepared
+                  ? "Reprepare locally"
+                  : "Prepare working master"}
           </button>
         </div>
 
@@ -137,8 +156,15 @@ export function EmbeddedPreparePanel({
           <p className="text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]">
             Preparation state
           </p>
-          <p>Browser source: {hasBrowserSource ? "present" : "missing"}</p>
-          <p>Server source: {serverSource ? "deposited" : "not deposited"}</p>
+          <p>
+            Browser source:{" "}
+            {sourceHydrating
+              ? "loading"
+              : hasBrowserSource
+                ? "present"
+                : "missing"}
+          </p>
+          <p>Server source: {serverSourceLabel}</p>
           <p>Prepared locally: {prepared ? "yes" : "not yet"}</p>
           {durableStorage && (
             <p className="text-[var(--muted)]">Mode: browser-first (no Sharp)</p>
