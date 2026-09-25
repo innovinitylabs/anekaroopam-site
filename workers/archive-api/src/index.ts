@@ -10,6 +10,7 @@ import {
   getRevision,
   getWorkingRevision,
   HttpError,
+  listAllArtworkAssets,
   listArtworks,
   listEvents,
   listRevisionAssets,
@@ -33,7 +34,19 @@ import {
 } from "./types";
 
 function db(env: Env): SqlExecutor {
-  return env.DB as unknown as SqlExecutor;
+  const d1 = env.DB as D1Database;
+  return {
+    prepare(query: string) {
+      return d1.prepare(query) as unknown as ReturnType<SqlExecutor["prepare"]>;
+    },
+    async batch(statements) {
+      await d1.batch(
+        statements.map((statement) =>
+          d1.prepare(statement.sql).bind(...statement.binds),
+        ),
+      );
+    },
+  };
 }
 
 function corsHeaders(request: Request): HeadersInit {
@@ -249,12 +262,42 @@ async function handle(request: Request, env: Env): Promise<Response> {
     return json(result, result.ok ? 200 : 409);
   }
 
+  const ownedAssetsMatch =
+    /^\/admin\/artworks\/([^/]+)\/owned-assets$/.exec(path);
+  if (ownedAssetsMatch && request.method === "GET") {
+    const id = decodeURIComponent(ownedAssetsMatch[1]);
+    const artwork = await resolveArtworkId(db(env), id);
+    if (!artwork) return errorJson(404, "Artwork not found");
+    const assets = await listAllArtworkAssets(db(env), artwork.id);
+    return json({
+      artworkId: artwork.id,
+      accessionId: artwork.accession_id,
+      assets,
+    });
+  }
+
   const artworkMatch = /^\/admin\/artworks\/([^/]+)$/.exec(path);
   if (artworkMatch) {
     const id = decodeURIComponent(artworkMatch[1]);
     if (request.method === "GET") return getArtworkDetail(env, id);
     if (request.method === "PATCH") return patchArtwork(request, env, id);
     if (request.method === "DELETE") {
+      const url = new URL(request.url);
+      let confirm = url.searchParams.get("confirm");
+      if (!confirm) {
+        try {
+          const body = await readJson<{ confirm?: string }>(request);
+          confirm = body.confirm ?? null;
+        } catch {
+          confirm = null;
+        }
+      }
+      if (confirm !== "permanent") {
+        return errorJson(
+          400,
+          "Delete requires confirm=permanent query or body field",
+        );
+      }
       const artwork = await resolveArtworkId(db(env), id);
       if (!artwork) return errorJson(404, "Artwork not found");
       const result = await deleteArtwork(db(env), artwork.id);

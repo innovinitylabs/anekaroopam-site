@@ -127,16 +127,21 @@ export async function runArchiveExport(
   const preliminaryManifest = await generateAccessionManifest(entry);
   const payload = archiveEntryToExportPayload(entry);
   const includeWebpFallback = entry.export.includeWebpFallback !== false;
-  const html = await buildStandaloneHtmlFromBuffers(
+  const standalone = await buildStandaloneHtmlFromBuffers(
     payload,
     buffers.artwork,
     includeWebpFallback ? buffers.previewWebp : undefined,
     {
-      manifest: preliminaryManifest,
-      runtime,
-      standaloneVersion: "standalone-runtime-v1",
+      profile: "compatible",
+      includeWebpFallback,
+      archiveMeta: {
+        manifest: preliminaryManifest,
+        runtime,
+        standaloneVersion: "standalone-runtime-v1",
+      },
     },
   );
+  const html = standalone.html;
 
   const { stagingDir, written: stagedPublic } = await writePublicDerivativesToStaging(
     entry.slug,

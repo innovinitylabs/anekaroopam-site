@@ -77,6 +77,20 @@ describe("admin signed session + allowlist", () => {
     assert.equal(denied!.status, 401);
   });
 
+  it("rejects unauthenticated delete-shaped requests", () => {
+    snapshot();
+    process.env.ADMIN_INGEST_ENABLED = "true";
+    ensureTestAdminSessionSecret();
+    const denied = requireAdminIngest(
+      new Request(
+        "http://localhost/api/admin/archive/artworks/x?confirm=permanent",
+        { method: "DELETE" },
+      ),
+    );
+    assert.ok(denied);
+    assert.equal(denied!.status, 401);
+  });
+
   it("accepts a signed session bearer", () => {
     snapshot();
     process.env.ADMIN_INGEST_ENABLED = "true";

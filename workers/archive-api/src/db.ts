@@ -14,6 +14,11 @@ import {
 } from "./types";
 
 /** Minimal statement interface shared by D1 and node:sqlite adapters. */
+export type SqlBatchStatement = {
+  sql: string;
+  binds: unknown[];
+};
+
 export type SqlExecutor = {
   prepare(query: string): {
     bind(...values: unknown[]): {
@@ -22,6 +27,8 @@ export type SqlExecutor = {
       run(): Promise<{ success: boolean; meta?: { changes?: number } }>;
     };
   };
+  /** Optional atomic multi-statement execution (D1 batch / sqlite transaction). */
+  batch?(statements: SqlBatchStatement[]): Promise<void>;
 };
 
 function slugFromTitle(title: string, accessionId: string): string {
@@ -969,13 +976,46 @@ export async function validateIdentity(
   };
 }
 
+export type OwnedArtworkAsset = {
+  asset_id: string;
+  role: string;
+  object_key: string;
+  revision: number;
+  mime_type: string;
+  byte_size: number;
+};
+
 /**
- * Hard-delete never-published drafts only. Does not delete R2 objects.
+ * All assets linked to any revision of this artwork via revision_assets.
+ * Used for owned R2 cleanup before hard-delete.
+ */
+export async function listAllArtworkAssets(
+  db: SqlExecutor,
+  artworkId: string,
+): Promise<OwnedArtworkAsset[]> {
+  const res = await db
+    .prepare(
+      `SELECT DISTINCT a.id AS asset_id, ra.role AS role, a.object_key AS object_key,
+              ra.revision AS revision, a.mime_type AS mime_type, a.byte_size AS byte_size
+       FROM revision_assets ra
+       JOIN assets a ON a.id = ra.asset_id
+       WHERE ra.artwork_id = ?
+       ORDER BY ra.revision ASC, ra.role ASC`,
+    )
+    .bind(artworkId)
+    .all<OwnedArtworkAsset>();
+  return res.results;
+}
+
+/**
+ * Hard-delete never-published drafts only.
+ * Caller must delete R2 objects first. This removes D1 artwork (cascade
+ * revisions/events) and owned assets rows so they are not orphaned.
  */
 export async function deleteArtwork(
   db: SqlExecutor,
   artworkId: string,
-): Promise<{ deleted: true; id: string }> {
+): Promise<{ deleted: true; id: string; assetIdsRemoved: string[] }> {
   const artwork = await getArtwork(db, artworkId);
   if (!artwork) throw new HttpError(404, "Artwork not found");
 
@@ -993,12 +1033,29 @@ export async function deleteArtwork(
     );
   }
 
-  await db
-    .prepare(`DELETE FROM artworks WHERE id = ?`)
-    .bind(artworkId)
-    .run();
+  const owned = await listAllArtworkAssets(db, artworkId);
+  const assetIds = [...new Set(owned.map((a) => a.asset_id))];
 
-  return { deleted: true, id: artworkId };
+  const statements: SqlBatchStatement[] = [
+    { sql: `DELETE FROM artworks WHERE id = ?`, binds: [artworkId] },
+    ...assetIds.map((assetId) => ({
+      sql: `DELETE FROM assets WHERE id = ?`,
+      binds: [assetId] as unknown[],
+    })),
+  ];
+
+  if (db.batch) {
+    await db.batch(statements);
+  } else {
+    for (const statement of statements) {
+      await db
+        .prepare(statement.sql)
+        .bind(...statement.binds)
+        .run();
+    }
+  }
+
+  return { deleted: true, id: artworkId, assetIdsRemoved: assetIds };
 }
 
 export class HttpError extends Error {

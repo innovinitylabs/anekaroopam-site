@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   assembleHtmlPackageZip,
+  assembleOnchainHtmlPackageZip,
   assertPublishedForHtmlPackage,
   HTML_PACKAGE_EXPORT_VERSION,
 } from "./html-package-from-r2.ts";
@@ -28,6 +29,22 @@ test("assembleHtmlPackageZip includes mint-package-v1 required paths", () => {
   assert.ok(paths.includes("artwork.avif"));
   assert.ok(paths.includes("collector-notes.txt"));
   assert.equal(HTML_PACKAGE_EXPORT_VERSION, "mint-package-v1");
+});
+
+test("assembleOnchainHtmlPackageZip is HTML + size report only", () => {
+  const { files } = assembleOnchainHtmlPackageZip({
+    perceptionHtml: "<html>onchain</html>",
+    sizeReport: {
+      profile: "onchain",
+      htmlByteSize: 18,
+      embeddedAvifByteSize: 100,
+      embeddedWebpByteSize: null,
+    },
+  });
+  const paths = files.map((f) => f.path);
+  assert.deepEqual(paths.sort(), ["perception.html", "size-report.json"].sort());
+  assert.ok(!paths.includes("artwork.avif"));
+  assert.ok(!paths.includes("preview.webp"));
 });
 
 test("assertPublishedForHtmlPackage rejects unpublished", () => {

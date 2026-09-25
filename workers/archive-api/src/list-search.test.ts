@@ -4,6 +4,7 @@ import {
   createDraft,
   deleteArtwork,
   HttpError,
+  listAllArtworkAssets,
   listArtworks,
   patchWorkingRevision,
   publishRevision,
@@ -211,16 +212,33 @@ test("validateIdentity checks format and uniqueness", async () => {
   raw.close();
 });
 
-test("deleteArtwork only allows never-published drafts", async () => {
+test("deleteArtwork only allows never-published drafts and removes owned assets", async () => {
   const { raw, db } = openMemoryDb();
   const draft = await createDraft(db, {
     draftId: "del",
     title: "Delete me",
     idempotencyKey: "del",
   });
-  await deleteArtwork(db, draft.artwork.id);
+  await registerAsset(db, {
+    artworkId: draft.artwork.id,
+    role: "artwork",
+    objectKey: `archive/${draft.artwork.accession_id}/r1/derivatives/artwork.avif`,
+    mimeType: "image/avif",
+    byteSize: 10,
+    verifiedAt: new Date().toISOString(),
+  });
+  const before = await listAllArtworkAssets(db, draft.artwork.id);
+  assert.equal(before.length, 1);
+
+  const deleted = await deleteArtwork(db, draft.artwork.id);
+  assert.equal(deleted.assetIdsRemoved.length, 1);
   const gone = await listArtworks(db, { q: "Delete me" });
   assert.equal(gone.total, 0);
+  const assetsLeft = await db
+    .prepare(`SELECT COUNT(*) AS n FROM assets`)
+    .bind()
+    .first<{ n: number }>();
+  assert.equal(Number(assetsLeft?.n ?? -1), 0);
 
   const pubId = await seedPublished(db, {
     draftId: "no-del",
@@ -233,6 +251,44 @@ test("deleteArtwork only allows never-published drafts", async () => {
   );
 
   await setVisibility(db, pubId, "withdrawn");
+  await assert.rejects(
+    () => deleteArtwork(db, pubId),
+    (err: unknown) => err instanceof HttpError && err.status === 409,
+  );
+  raw.close();
+});
+
+test("deleteArtwork second call returns 404 (documented repeated-delete contract)", async () => {
+  const { raw, db } = openMemoryDb();
+  const draft = await createDraft(db, {
+    draftId: "del2",
+    title: "Delete twice",
+    idempotencyKey: "del2",
+  });
+  await deleteArtwork(db, draft.artwork.id);
+  await assert.rejects(
+    () => deleteArtwork(db, draft.artwork.id),
+    (err: unknown) => err instanceof HttpError && err.status === 404,
+  );
+  raw.close();
+});
+
+test("deleteArtwork rejects ready artwork with published_revision set", async () => {
+  const { raw, db } = openMemoryDb();
+  const pubId = await seedPublished(db, {
+    draftId: "rev-block",
+    title: "Has revision",
+    key: "rev-block",
+  });
+  const row = await db
+    .prepare(`SELECT status, published_revision, published_at FROM artworks WHERE id = ?`)
+    .bind(pubId)
+    .first<{
+      status: string;
+      published_revision: number | null;
+      published_at: string | null;
+    }>();
+  assert.ok(row?.published_revision != null);
   await assert.rejects(
     () => deleteArtwork(db, pubId),
     (err: unknown) => err instanceof HttpError && err.status === 409,

@@ -369,11 +369,28 @@ export async function workerValidateIdentity(
   );
 }
 
+export async function workerListOwnedAssets(artworkId: string): Promise<{
+  artworkId: string;
+  accessionId: string;
+  assets: Array<{
+    asset_id: string;
+    role: string;
+    object_key: string;
+    revision: number;
+    mime_type: string;
+    byte_size: number;
+  }>;
+}> {
+  return archiveWorkerFetch(
+    `/admin/artworks/${encodeURIComponent(artworkId)}/owned-assets`,
+  );
+}
+
 export async function workerDeleteArtwork(
   artworkId: string,
-): Promise<{ deleted: true; id: string }> {
+): Promise<{ deleted: true; id: string; assetIdsRemoved?: string[] }> {
   return archiveWorkerFetch(
-    `/admin/artworks/${encodeURIComponent(artworkId)}`,
+    `/admin/artworks/${encodeURIComponent(artworkId)}?confirm=permanent`,
     { method: "DELETE" },
   );
 }

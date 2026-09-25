@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { adminFetch } from "@/components/admin/admin-fetch";
+import { canPermanentlyDeleteArtwork } from "@/lib/archive/artwork-delete";
 import type { WorkerArtwork } from "@/lib/archive/worker-client";
 
 export type ArtworkReadiness = {
@@ -37,10 +38,12 @@ export function AdminArtworkActions({
     }
   };
 
-  const canDelete =
-    ["draft", "uploading", "ready"].includes(artwork.status) &&
-    artwork.publishedRevision == null &&
-    artwork.publishedAt == null;
+  const canDelete = canPermanentlyDeleteArtwork({
+    status: artwork.status,
+    publishedRevision: artwork.publishedRevision,
+    publishedAt: artwork.publishedAt,
+    accessionId: artwork.accessionId,
+  });
 
   const canRepublish = artwork.status === "ready";
   const canDownloadHtmlPackage = artwork.status === "published";
@@ -50,8 +53,8 @@ export function AdminArtworkActions({
     ? `Missing verified assets: ${readiness.missing.join(", ") || "unknown"}`
     : "Freeze the current working revision and publish without allocating a new accession.";
 
-  const downloadHtmlPackage = () => {
-    const href = `/api/admin/archive/artworks/${encodeURIComponent(artwork.id)}/html-package`;
+  const downloadHtmlPackage = (profile: "onchain" | "compatible") => {
+    const href = `/api/admin/archive/artworks/${encodeURIComponent(artwork.id)}/html-package?profile=${profile}`;
     window.open(href, "_blank", "noopener,noreferrer");
   };
 
@@ -59,16 +62,28 @@ export function AdminArtworkActions({
     <div className="flex flex-col items-end gap-2">
       <div className="flex flex-wrap justify-end gap-2">
         {canDownloadHtmlPackage && (
-          <button
-            type="button"
-            disabled={busy}
-            title="Download a portable mint-package ZIP (perception.html + assets) from the published revision for local use or NFT minting."
-            aria-label="Download HTML package"
-            className="border border-[var(--border)] px-3 py-1.5 text-[0.62rem] tracking-[0.12em] uppercase disabled:opacity-50"
-            onClick={downloadHtmlPackage}
-          >
-            Download HTML Package
-          </button>
+          <>
+            <button
+              type="button"
+              disabled={busy}
+              title="Download a minified single-AVIF perception.html ZIP for on-chain / NFT use. No WebP or archive derivatives."
+              aria-label="Download on-chain HTML package"
+              className="border border-[var(--border)] px-3 py-1.5 text-[0.62rem] tracking-[0.12em] uppercase disabled:opacity-50"
+              onClick={() => downloadHtmlPackage("onchain")}
+            >
+              Download On-chain HTML
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              title="Download mint-package ZIP with perception.html (AVIF + optional WebP), metadata, and public derivatives."
+              aria-label="Download compatible HTML mint package"
+              className="border border-[var(--border)] px-3 py-1.5 text-[0.62rem] tracking-[0.12em] uppercase disabled:opacity-50"
+              onClick={() => downloadHtmlPackage("compatible")}
+            >
+              Download Compatible Package
+            </button>
+          </>
         )}
         {canRepublish && (
           <button
@@ -201,25 +216,25 @@ export function AdminArtworkActions({
           <button
             type="button"
             disabled={busy}
-            title="Permanently delete this never-published draft from D1. Irreversible. R2 objects are not deleted."
-            aria-label="Delete draft artwork"
+            title="Permanently delete this never-published draft: owned R2 objects first, then D1. Irreversible."
+            aria-label="Delete permanently"
             className="border border-[var(--border)] px-3 py-1.5 text-[0.62rem] tracking-[0.12em] uppercase text-red-800 disabled:opacity-50"
             onClick={() => {
               if (
                 !window.confirm(
-                  "Permanently delete this never-published draft from D1? R2 objects are not deleted.",
+                  "Delete permanently? This removes all owned R2 objects for this artwork, then the D1 record. Irreversible.",
                 )
               )
                 return;
-              void run("Delete", () =>
+              void run("Delete permanently", () =>
                 adminFetch(
-                  `/api/admin/archive/artworks/${encodeURIComponent(artwork.id)}`,
+                  `/api/admin/archive/artworks/${encodeURIComponent(artwork.id)}?confirm=permanent`,
                   { method: "DELETE" },
                 ),
               );
             }}
           >
-            Delete
+            Delete permanently
           </button>
         )}
       </div>

@@ -6,6 +6,7 @@ import {
   workerGetArtwork,
 } from "@/lib/archive/worker-client";
 import { preferArchiveWorker } from "@/lib/archive/worker-config";
+import { parseStandaloneExportProfile } from "@/lib/html-export/standalone-profile";
 
 export const runtime = "nodejs";
 
@@ -27,9 +28,20 @@ export async function GET(
   }
 
   const { id } = await context.params;
+  const url = new URL(request.url);
+  const profile = parseStandaloneExportProfile(url.searchParams.get("profile"));
+  const includeWebp =
+    url.searchParams.get("webp") === "0" ||
+    url.searchParams.get("webp") === "false"
+      ? false
+      : undefined;
+
   try {
     const detail = await workerGetArtwork(id);
-    const pack = await buildHtmlPackageFromPublishedDetail(detail);
+    const pack = await buildHtmlPackageFromPublishedDetail(detail, {
+      profile,
+      includeWebpFallback: includeWebp,
+    });
     return new NextResponse(new Uint8Array(pack.zip), {
       status: 200,
       headers: {
@@ -40,6 +52,16 @@ export async function GET(
         "x-accession-id": pack.accessionId,
         "x-slug": pack.slug,
         "x-published-revision": String(pack.revision),
+        "x-standalone-profile": pack.profile,
+        "x-html-bytes": String(pack.sizeReport.htmlByteSize),
+        "x-embedded-avif-bytes": String(pack.sizeReport.embeddedAvifByteSize),
+        ...(pack.sizeReport.embeddedWebpByteSize != null
+          ? {
+              "x-embedded-webp-bytes": String(
+                pack.sizeReport.embeddedWebpByteSize,
+              ),
+            }
+          : {}),
       },
     });
   } catch (err) {

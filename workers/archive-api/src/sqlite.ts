@@ -41,6 +41,18 @@ export function asSqlExecutor(db: DatabaseSync): SqlExecutor {
         },
       };
     },
+    async batch(statements) {
+      db.exec("BEGIN");
+      try {
+        for (const statement of statements) {
+          db.prepare(statement.sql).run(...statement.binds);
+        }
+        db.exec("COMMIT");
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    },
   };
 }
 

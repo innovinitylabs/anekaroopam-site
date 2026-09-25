@@ -11,9 +11,14 @@ import { buildStoreZip, type ZipStoreEntry } from "@/lib/archive/zip-store";
 import type { PerceptionArtwork } from "@/lib/perception/types";
 import { createR2Client, getR2ClientOrNull } from "@/lib/r2/client";
 import { getR2Config } from "@/lib/r2/config";
+import type {
+  StandaloneExportProfile,
+  StandaloneSizeReport,
+} from "@/lib/html-export/standalone-profile";
 import { createHash } from "node:crypto";
 
 export const HTML_PACKAGE_EXPORT_VERSION = "mint-package-v1";
+export const ONCHAIN_HTML_PACKAGE_VERSION = "onchain-html-v1";
 
 const DERIVATIVE_ROLES = [
   { role: "artwork", filename: ARCHIVE_IMAGE_OUTPUTS.artwork.filename },
@@ -144,7 +149,39 @@ export type BuiltHtmlPackage = {
   accessionId: string;
   slug: string;
   revision: number;
+  profile: StandaloneExportProfile;
+  sizeReport: StandaloneSizeReport;
 };
+
+/** On-chain package: perception.html + size report only (no derivative duplicates). */
+export function assembleOnchainHtmlPackageZip(input: {
+  perceptionHtml: string;
+  sizeReport: StandaloneSizeReport;
+}): { zip: Buffer; files: { path: string; bytes: number; role: string }[] } {
+  const reportJson = `${JSON.stringify(input.sizeReport, null, 2)}\n`;
+  const entries: ZipStoreEntry[] = [
+    {
+      path: "perception.html",
+      data: Buffer.from(input.perceptionHtml, "utf8"),
+    },
+    { path: "size-report.json", data: Buffer.from(reportJson, "utf8") },
+  ];
+  return {
+    zip: buildStoreZip(entries),
+    files: [
+      {
+        path: "perception.html",
+        bytes: Buffer.byteLength(input.perceptionHtml, "utf8"),
+        role: "standalone-html",
+      },
+      {
+        path: "size-report.json",
+        bytes: Buffer.byteLength(reportJson, "utf8"),
+        role: "size-report",
+      },
+    ],
+  };
+}
 
 /** Pure assembly helper for tests — no R2 I/O. */
 export function assembleHtmlPackageZip(input: {
@@ -219,17 +256,26 @@ export function assembleHtmlPackageZip(input: {
 
 export async function buildHtmlPackageFromPublishedDetail(
   detail: WorkerArtworkDetail,
+  options: {
+    profile?: StandaloneExportProfile;
+    includeWebpFallback?: boolean;
+  } = {},
 ): Promise<BuiltHtmlPackage> {
+  const profile = options.profile ?? "compatible";
   const published = assertPublishedForHtmlPackage(detail);
   const artworkBuf = await getObjectBytes(
     findAsset(published.assets, "artwork")!.object_key,
   );
-  const webpAsset =
-    findAsset(published.assets, "preview_webp") ||
-    findAsset(published.assets, "previewWebp");
-  const webpBuf = webpAsset
-    ? await getObjectBytes(webpAsset.object_key)
-    : undefined;
+
+  let webpBuf: Buffer | undefined;
+  if (profile === "compatible" && options.includeWebpFallback !== false) {
+    const webpAsset =
+      findAsset(published.assets, "preview_webp") ||
+      findAsset(published.assets, "previewWebp");
+    webpBuf = webpAsset
+      ? await getObjectBytes(webpAsset.object_key)
+      : undefined;
+  }
 
   const perceptionArtwork = perceptionArtworkFromPublished({
     title: detail.artwork.title,
@@ -238,7 +284,7 @@ export async function buildHtmlPackageFromPublishedDetail(
     perception: published.perception,
   });
 
-  const html = await buildStandaloneHtmlFromBuffers(
+  const standalone = await buildStandaloneHtmlFromBuffers(
     {
       version: 1,
       artwork: perceptionArtwork,
@@ -246,7 +292,38 @@ export async function buildHtmlPackageFromPublishedDetail(
     },
     artworkBuf,
     webpBuf,
+    {
+      profile,
+      includeWebpFallback: profile === "compatible",
+    },
   );
+
+  if (profile === "onchain") {
+    const assembled = assembleOnchainHtmlPackageZip({
+      perceptionHtml: standalone.html,
+      sizeReport: {
+        profile: standalone.profile,
+        htmlByteSize: standalone.htmlByteSize,
+        embeddedAvifByteSize: standalone.embeddedAvifByteSize,
+        embeddedWebpByteSize: standalone.embeddedWebpByteSize,
+      },
+    });
+    return {
+      zip: assembled.zip,
+      filename: `${detail.artwork.slug}-onchain-html.zip`,
+      files: assembled.files,
+      accessionId: detail.artwork.accessionId,
+      slug: detail.artwork.slug,
+      revision: published.revision,
+      profile,
+      sizeReport: {
+        profile: standalone.profile,
+        htmlByteSize: standalone.htmlByteSize,
+        embeddedAvifByteSize: standalone.embeddedAvifByteSize,
+        embeddedWebpByteSize: standalone.embeddedWebpByteSize,
+      },
+    };
+  }
 
   const metadataJson = JSON.stringify(
     {
@@ -256,6 +333,7 @@ export async function buildHtmlPackageFromPublishedDetail(
       title: detail.artwork.title,
       publishedRevision: published.revision,
       exportVersion: HTML_PACKAGE_EXPORT_VERSION,
+      standaloneProfile: profile,
     },
     null,
     2,
@@ -280,7 +358,10 @@ export async function buildHtmlPackageFromPublishedDetail(
   }
 
   const manifestEntries = [
-    { path: "perception.html", sha256: sha256Hex(Buffer.from(html, "utf8")) },
+    {
+      path: "perception.html",
+      sha256: sha256Hex(Buffer.from(standalone.html, "utf8")),
+    },
     ...derivatives.map((d) => ({
       path: d.filename,
       sha256: sha256Hex(d.data),
@@ -292,6 +373,12 @@ export async function buildHtmlPackageFromPublishedDetail(
       accessionId: detail.artwork.accessionId,
       slug: detail.artwork.slug,
       publishedRevision: published.revision,
+      standaloneProfile: profile,
+      sizeReport: {
+        htmlByteSize: standalone.htmlByteSize,
+        embeddedAvifByteSize: standalone.embeddedAvifByteSize,
+        embeddedWebpByteSize: standalone.embeddedWebpByteSize,
+      },
       generatedAt: new Date().toISOString(),
       files: manifestEntries,
     },
@@ -350,7 +437,7 @@ export async function buildHtmlPackageFromPublishedDetail(
     .join("\n");
 
   const assembled = assembleHtmlPackageZip({
-    perceptionHtml: html,
+    perceptionHtml: standalone.html,
     metadataJson,
     statesJson,
     manifestJson,
@@ -366,5 +453,12 @@ export async function buildHtmlPackageFromPublishedDetail(
     accessionId: detail.artwork.accessionId,
     slug: detail.artwork.slug,
     revision: published.revision,
+    profile,
+    sizeReport: {
+      profile: standalone.profile,
+      htmlByteSize: standalone.htmlByteSize,
+      embeddedAvifByteSize: standalone.embeddedAvifByteSize,
+      embeddedWebpByteSize: standalone.embeddedWebpByteSize,
+    },
   };
 }
