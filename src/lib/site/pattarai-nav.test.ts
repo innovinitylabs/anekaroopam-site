@@ -15,6 +15,8 @@ test("Pattarai nav preserves English default and Tamil enhancement", () => {
   assert.equal(PATTARAI_TAMIL, "பட்டறை");
   assert.match(PATTARAI_MOBILE_LABEL, /Pattarai/);
   assert.match(PATTARAI_MOBILE_LABEL, /பட்டறை/);
+  assert.match(PATTARAI_ARIA_LABEL, /Pattarai/);
+  assert.match(PATTARAI_ARIA_LABEL, /பட்டறை/);
   assert.match(PATTARAI_ARIA_LABEL, /Perception tools/);
   assert.match(PATTARAI_ARIA_LABEL, /Artwork preparation/);
   assert.match(PATTARAI_TITLE, /பட்டறை/);

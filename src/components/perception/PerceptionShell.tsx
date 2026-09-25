@@ -4,11 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnekaroopamWordmark } from "@/components/site/AnekaroopamWordmark";
 import { BRAND } from "@/lib/brand";
-import {
-  PATTARAI_ARIA_LABEL,
-  PATTARAI_LABEL,
-  PATTARAI_TAMIL,
-} from "@/lib/site/pattarai-nav";
+import { PattaraiNavLabel } from "@/components/site/PattaraiNavLabel";
+import { PATTARAI_ARIA_LABEL } from "@/lib/site/pattarai-nav";
 import { PerceptionSubnav } from "./PerceptionSubnav";
 import { CreatorCredit } from "./CreatorCredit";
 
@@ -37,15 +34,15 @@ export function PerceptionShell({ children }: { children: React.ReactNode }) {
           <span className="hidden h-3 w-px bg-[var(--border)] sm:block" aria-hidden />
           <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-4">
             <p
-              className="shrink-0 text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]"
+              className="group/pattarai shrink-0 text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]"
               title={PATTARAI_ARIA_LABEL}
+              aria-label={PATTARAI_ARIA_LABEL}
             >
-              <span className="text-[var(--ink)]">{PATTARAI_LABEL}</span>
-              <span className="mx-1.5 opacity-40" aria-hidden>
-                ·
+              <span className="hidden text-[var(--ink)] sm:inline">
+                <PattaraiNavLabel variant="desktop" />
               </span>
-              <span lang="ta" className="font-normal tracking-normal normal-case">
-                {PATTARAI_TAMIL}
+              <span className="text-[var(--ink)] sm:hidden">
+                <PattaraiNavLabel variant="mobile" />
               </span>
             </p>
             <PerceptionSubnav />

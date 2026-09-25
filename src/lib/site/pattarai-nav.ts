@@ -9,9 +9,9 @@ export const PATTARAI_TAMIL = "பட்டறை" as const;
 /** Mobile / no-hover visible label. */
 export const PATTARAI_MOBILE_LABEL = `${PATTARAI_LABEL} · ${PATTARAI_TAMIL}` as const;
 
-/** Accessible name: workspace purpose, not a content section. */
+/** Accessible name: English + Tamil once, plus workspace purpose. */
 export const PATTARAI_ARIA_LABEL =
-  "Pattarai — Perception tools · Artwork preparation" as const;
+  "Pattarai (பட்டறை) — Perception tools · Artwork preparation" as const;
 
 export const PATTARAI_TITLE = `${PATTARAI_TAMIL} — Perception tools · Artwork preparation` as const;
 
