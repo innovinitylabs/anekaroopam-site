@@ -6,7 +6,6 @@ import {
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
-  type WheelEvent as ReactWheelEvent,
 } from "react";
 import { motion } from "framer-motion";
 import type { PerceptionArtwork } from "@/lib/perception/types";
@@ -17,6 +16,7 @@ import {
   getActiveState,
   lerpAngle,
   normalizeAngle,
+  PERCEPTION_WHEEL_LISTENER_OPTIONS,
   rotateByDirection,
 } from "@/lib/perception/engine";
 import { resolveBackground, foregroundForBackground } from "@/lib/perception/backgrounds";
@@ -123,18 +123,6 @@ export function PerceptionCanvas({
     [rotate],
   );
 
-  const handleWheel = useCallback(
-    (e: ReactWheelEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      setTransform((prev) => ({
-        ...prev,
-        zoom: clampZoom(prev.zoom + (e.deltaY < 0 ? 0.08 : -0.08)),
-      }));
-      pulseUi();
-    },
-    [pulseUi],
-  );
-
   const handlePointerDown = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
       if (e.detail > 1) return;
@@ -200,6 +188,27 @@ export function PerceptionCanvas({
   }, []);
 
   useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      setTransform((prev) => ({
+        ...prev,
+        zoom: clampZoom(prev.zoom + (e.deltaY < 0 ? 0.08 : -0.08)),
+      }));
+      pulseUi();
+    };
+    el.addEventListener("wheel", onWheel, PERCEPTION_WHEEL_LISTENER_OPTIONS);
+    return () => {
+      el.removeEventListener(
+        "wheel",
+        onWheel,
+        PERCEPTION_WHEEL_LISTENER_OPTIONS,
+      );
+    };
+  }, [pulseUi]);
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowLeft") rotate("ccw");
       if (e.key === "ArrowRight") rotate("cw");
@@ -229,9 +238,10 @@ export function PerceptionCanvas({
   return (
     <motion.div
       ref={containerRef}
+      data-perception-mode={mode}
       className={cn(
         "relative h-full w-full overflow-hidden select-none touch-none",
-        mode === "runtime" ? "cursor-crosshair" : "cursor-crosshair",
+        "cursor-crosshair",
         className,
       )}
       style={{ backgroundColor: bgColor, color: fgColor }}
@@ -240,7 +250,6 @@ export function PerceptionCanvas({
         e.preventDefault();
         resetView();
       }}
-      onWheel={handleWheel}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -248,8 +257,9 @@ export function PerceptionCanvas({
       role="application"
       aria-label={`Orientation interface for ${artwork.metadata.title}`}
     >
-      <div className="absolute inset-0 flex items-center justify-center">
+      <div className="absolute inset-0 flex items-center justify-center p-[4%]">
         <motion.div
+          className="flex h-full w-full items-center justify-center"
           style={{
             x: transform.panX,
             y: transform.panY,
@@ -260,7 +270,7 @@ export function PerceptionCanvas({
           <motion.img
             src={artwork.imageSrc}
             alt={artwork.metadata.title}
-            className="pointer-events-none max-h-[82vmin] max-w-[86vmin] sm:max-h-[88vmin] sm:max-w-[88vmin]"
+            className="pointer-events-none max-h-full max-w-full object-contain"
             style={{ rotate: transform.angle }}
             draggable={false}
           />

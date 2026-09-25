@@ -79,6 +79,14 @@ export function defaultTransform(initialAngle = 0): ViewTransform {
   return { angle: initialAngle, zoom: 1, panX: 0, panY: 0 };
 }
 
+/**
+ * Native wheel listener options for PerceptionCanvas.
+ * React onWheel is passive under React 19; preventDefault requires passive: false.
+ */
+export const PERCEPTION_WHEEL_LISTENER_OPTIONS: AddEventListenerOptions = {
+  passive: false,
+};
+
 export function clampZoom(
   zoom: number,
   options: PerceptionEngineOptions = {},

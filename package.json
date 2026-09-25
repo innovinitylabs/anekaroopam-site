@@ -7,7 +7,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --require ./scripts/stub-server-only.cjs --test src/lib/archive/*.test.ts src/lib/github/*.test.ts src/lib/r2/*.test.ts"
+    "test": "tsx --require ./scripts/stub-server-only.cjs --test src/lib/archive/*.test.ts src/lib/github/*.test.ts src/lib/r2/*.test.ts src/lib/perception/*.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1138.0",

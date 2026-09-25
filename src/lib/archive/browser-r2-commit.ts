@@ -290,7 +290,7 @@ export async function commitBrowserR2Bundle(input: {
     })),
     warnings: [
       ...pack.warnings,
-      `R2 revision r${auth.revision} for ${auth.accessionId}. Committed ${committed.commitSha.slice(0, 7)}.`,
+      `R2 revision r${auth.revision} for ${auth.accessionId}. Reference ${committed.commitSha.slice(0, 7)}.`,
     ],
     archiveStatus: pack.draft.status,
     binaryBytes,

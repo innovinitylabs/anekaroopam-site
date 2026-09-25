@@ -1,13 +1,43 @@
 /**
  * Shared size limits for archive originals and commit payloads.
  *
- * MAX_SOURCE_BYTES caps the editable original for R2 upload, admin
- * hydration (GetObject proxy), and browser prepare. It is independent of
- * the multipart commit-bundle body cap used by the legacy non-R2 path.
+ * Three tiers (do not conflate):
+ * 1. Original master — MAX_SOURCE_BYTES / resolveMaxSourceBytes()
+ *    Editable archival original for R2 upload, admin hydration, prepare.
+ * 2. Prepared derivative — no separate byte ceiling (encode quality only).
+ *    Do not force PNG masters into the public AVIF budget.
+ * 3. Public / commit-bundle budget — MAX_BUNDLE_BINARY_BYTES +
+ *    MAX_COMMIT_BUNDLE_BYTES for legacy multipart GitHub path only
+ *    (platform ~4.5 MB body). R2 direct PUT bypasses these.
  */
 
-/** Max editable original master (upload + hydrate + prepare). */
-export const MAX_SOURCE_BYTES = 10 * 1024 * 1024;
+/** Default archival original master limit (10 MiB). */
+export const DEFAULT_MAX_SOURCE_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Resolve archival master limit.
+ * Prefers ARCHIVE_MAX_SOURCE_BYTES (server) or NEXT_PUBLIC_ARCHIVE_MAX_SOURCE_BYTES
+ * (client/UI). Falls back to DEFAULT_MAX_SOURCE_BYTES.
+ */
+export function resolveMaxSourceBytes(): number {
+  const raw =
+    (typeof process !== "undefined" &&
+      (process.env.ARCHIVE_MAX_SOURCE_BYTES?.trim() ||
+        process.env.NEXT_PUBLIC_ARCHIVE_MAX_SOURCE_BYTES?.trim())) ||
+    "";
+  if (raw) {
+    const n = Number(raw);
+    if (Number.isFinite(n) && n > 0) return Math.floor(n);
+  }
+  return DEFAULT_MAX_SOURCE_BYTES;
+}
+
+/**
+ * Client/UI constant (build-time default). Server enforcement should call
+ * resolveMaxSourceBytes() so ARCHIVE_MAX_SOURCE_BYTES env overrides apply.
+ */
+export const MAX_SOURCE_BYTES = DEFAULT_MAX_SOURCE_BYTES;
+
 /** Total binary payload soft limit for multipart commit-bundle (source + prepared + derivatives). */
 export const MAX_BUNDLE_BINARY_BYTES = 3_800_000;
 /** Server hard reject for multipart commit-bundle (must fit under platform body limit ~4.5MB). */
@@ -21,21 +51,28 @@ export function formatByteSize(bytes: number): string {
 }
 
 /** True when an original is within the shared source master limit. */
-export function isSourceWithinLimit(byteSize: number): boolean {
-  return Number.isFinite(byteSize) && byteSize >= 0 && byteSize <= MAX_SOURCE_BYTES;
+export function isSourceWithinLimit(
+  byteSize: number,
+  limit: number = resolveMaxSourceBytes(),
+): boolean {
+  return Number.isFinite(byteSize) && byteSize >= 0 && byteSize <= limit;
 }
 
-export function sourceOverLimitMessage(byteSize: number): string {
-  return `Original asset is ${formatByteSize(byteSize)} (limit ${formatByteSize(MAX_SOURCE_BYTES)}). Re-select a smaller master locally.`;
+export function sourceOverLimitMessage(
+  byteSize: number,
+  limit: number = resolveMaxSourceBytes(),
+): string {
+  return `Original asset is ${formatByteSize(byteSize)} (limit ${formatByteSize(limit)}). Re-select a smaller master locally.`;
 }
 
 export function assertCommitBundleClientLimits(input: {
   sourceBytes: number;
   binaryBytes: number;
 }): void {
-  if (input.sourceBytes > MAX_SOURCE_BYTES) {
+  const sourceLimit = resolveMaxSourceBytes();
+  if (input.sourceBytes > sourceLimit) {
     throw new Error(
-      `Source file is ${formatByteSize(input.sourceBytes)} (limit ${formatByteSize(MAX_SOURCE_BYTES)}). Compress or resize before Commit.`,
+      `Source file is ${formatByteSize(input.sourceBytes)} (limit ${formatByteSize(sourceLimit)}). Compress or resize before Commit.`,
     );
   }
   if (input.binaryBytes > MAX_BUNDLE_BINARY_BYTES) {

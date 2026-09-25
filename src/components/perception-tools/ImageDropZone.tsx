@@ -14,11 +14,15 @@ export function ImageDropZone({
   onDragOver,
   onImport,
   compact,
+  label = "Import source artwork",
+  hint = "JPEG, PNG, WebP, AVIF, GIF, BMP, SVG, HEIC/HEIF, and other browser-readable images",
 }: {
   dragOver: boolean;
   onDragOver: (v: boolean) => void;
   onImport: (file: File) => void;
   compact?: boolean;
+  label?: string;
+  hint?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [inputKey, setInputKey] = useState(0);
@@ -36,7 +40,7 @@ export function ImageDropZone({
     <label
       className={cn(
         "flex cursor-pointer flex-col items-center justify-center border border-dashed border-[var(--border)] text-center transition-colors",
-        compact ? "p-6" : "min-h-[12rem] p-10",
+        compact ? "min-h-[3.5rem] px-4 py-3" : "min-h-[12rem] p-10",
         dragOver && "bg-[var(--surface-elevated)]",
       )}
       onDragOver={(e) => {
@@ -63,11 +67,13 @@ export function ImageDropZone({
         }}
       />
       <span className="text-[0.68rem] tracking-[0.18em] uppercase text-[var(--muted)]">
-        Import source artwork
+        {label}
       </span>
-      <span className="mt-2 max-w-sm text-[0.75rem] leading-relaxed opacity-60">
-        JPEG, PNG, WebP, AVIF, GIF, BMP, SVG, HEIC/HEIF, and other browser-readable images
-      </span>
+      {!compact && (
+        <span className="mt-2 max-w-sm text-[0.75rem] leading-relaxed opacity-60">
+          {hint}
+        </span>
+      )}
     </label>
   );
 }

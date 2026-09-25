@@ -50,8 +50,9 @@ export function footerPrimaryLabel(input: {
   completed: boolean;
 }): string {
   if (input.completed) return "Done";
-  if (isFinalVisibleStep(input.steps, input.step) && input.step === "Review") {
-    return finalCommitLabel(input.isRevision);
+  // Review commit lives in the Review panel only — footer waits for Done.
+  if (input.step === "Review") {
+    return input.completed ? "Done" : "Review";
   }
   if (isFinalVisibleStep(input.steps, input.step)) {
     return "Done";
@@ -66,7 +67,7 @@ export type FooterPrimaryAction = "commit" | "next" | "done" | "noop";
 
 /**
  * Resolve footer primary click/disabled behavior for the ingestion wizard.
- * Completed durable commits use Done → navigate; never re-commit.
+ * Durable Review commits only via the in-panel CTA; footer is Done after success.
  */
 export function resolveFooterPrimaryAction(input: {
   durableStorage: boolean;
@@ -80,13 +81,43 @@ export function resolveFooterPrimaryAction(input: {
     return { action: "done", disabled: false };
   }
   if (input.durableStorage && input.step === "Review") {
-    return {
-      action: "commit",
-      disabled: input.reviewBusy || !input.reviewReady,
-    };
+    return { action: "noop", disabled: true };
   }
   if (!isFinalVisibleStep(input.steps, input.step)) {
     return { action: "next", disabled: false };
   }
   return { action: "noop", disabled: true };
+}
+
+export type ReviewSubmitState = "ready" | "updating" | "completed" | "failed";
+
+export function resolveReviewSubmitState(input: {
+  commitCompleted: boolean;
+  committing: boolean;
+  commitInFlight: boolean;
+  hasCommitError: boolean;
+  reviewReady: boolean;
+}): ReviewSubmitState {
+  if (input.commitCompleted) return "completed";
+  if (input.committing || input.commitInFlight) return "updating";
+  if (input.hasCommitError) return "failed";
+  if (input.reviewReady) return "ready";
+  return "ready";
+}
+
+export function reviewSubmitLabel(
+  state: ReviewSubmitState,
+  isRevision: boolean,
+): string {
+  switch (state) {
+    case "updating":
+      return isRevision ? "Updating…" : "Publishing…";
+    case "completed":
+      return "Completed";
+    case "failed":
+      return isRevision ? "Retry Update & Publish" : "Retry Publish";
+    case "ready":
+    default:
+      return finalCommitLabel(isRevision);
+  }
 }

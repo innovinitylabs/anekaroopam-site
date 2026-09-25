@@ -68,6 +68,8 @@ import {
 import {
   footerPrimaryLabel,
   resolveFooterPrimaryAction,
+  resolveReviewSubmitState,
+  reviewSubmitLabel,
   wizardStepsForMode,
   WIZARD_DONE_HREF,
   type WizardStep,
@@ -82,6 +84,12 @@ import {
   hydratePreparedLocal,
 } from "@/lib/archive/hydrate-worker-source";
 import { canUpdateAndPublish } from "@/lib/archive/ingest-source-gates";
+import {
+  buildSourcePreviewMeta,
+  deriveSourcePipelineStatus,
+  PIPELINE_STATUS_LABELS,
+  readImageDimensions,
+} from "@/lib/archive/upload-source-preview";
 import type { PerceptionArtwork } from "@/lib/perception/types";
 
 type StepId = WizardStep;
@@ -204,6 +212,11 @@ export function IngestionWizard({
   const [commitPhase, setCommitPhase] = useState<ArchiveCommitPhase>("idle");
   const [sourceHydrating, setSourceHydrating] = useState(false);
   const [serverSourceUnavailable, setServerSourceUnavailable] = useState(false);
+  const [sourceDimensions, setSourceDimensions] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
+  const [commitError, setCommitError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -477,6 +490,9 @@ export function IngestionWizard({
                 setSourceFile(hydrated.file);
                 registerTransientUpload(data.draft.draftId, hydrated.file);
                 setServerSourceUnavailable(false);
+                void readImageDimensions(hydrated.file).then((dims) => {
+                  if (!cancelled) setSourceDimensions(dims);
+                });
                 if (data.draft.processing?.preparedSource) {
                   const prepared = await hydratePreparedLocal(
                     data.draft.draftId,
@@ -741,10 +757,15 @@ export function IngestionWizard({
   const handleSourceFile = useCallback(
     async (file: File) => {
       setError(null);
+      setCommitError(null);
       setCommitCompleted(false);
       setLastCommittedSha(null);
       registerTransientUpload(draftId || "pending-draft", file);
       setSourceFile(file);
+      setSourceDimensions(null);
+      void readImageDimensions(file).then((dims) => {
+        setSourceDimensions(dims);
+      });
       revokePreparedPreview(preparedLocal);
       setPreparedLocal(null);
 
@@ -855,6 +876,7 @@ export function IngestionWizard({
     setCommitInFlight(true);
     setCommitting(true);
     setError(null);
+    setCommitError(null);
     setResult(null);
     setCommitPhase("preparing");
     try {
@@ -866,9 +888,9 @@ export function IngestionWizard({
       const saved = await saveDraft();
       const draftForCommit = saved ?? currentDraft;
       const file = await resolveSourceBlob();
-      if (!r2Archive && file.size > MAX_SOURCE_BYTES) {
+      if (file.size > MAX_SOURCE_BYTES) {
         throw new Error(
-          `Source file is ${formatByteSize(file.size)} (limit ${formatByteSize(MAX_SOURCE_BYTES)}). Enable R2 for larger masters.`,
+          `Source file is ${formatByteSize(file.size)} (limit ${formatByteSize(MAX_SOURCE_BYTES)}). Use a smaller original master.`,
         );
       }
       if (!preparedLocal) {
@@ -932,6 +954,7 @@ export function IngestionWizard({
     } catch (e) {
       const message = e instanceof Error ? e.message : "Publish failed";
       setError(message);
+      setCommitError(message);
       const phaseFromError =
         e && typeof e === "object" && "phase" in e
           ? (e as { phase?: ArchiveCommitPhase }).phase
@@ -1216,8 +1239,18 @@ export function IngestionWizard({
           {accessionId ? `Accession draft ${accessionId}` : "Accession draft"}
         </h1>
         <p className="mt-3 max-w-xl text-[0.88rem] leading-relaxed text-[var(--muted)]">
-          Canonical source of truth: <code className="text-[0.8rem]">content/archive/</code>.
-          Exports and public assets are derivatives.
+          {d1Archive || r2Archive ? (
+            <>
+              Canonical storage: Cloudflare D1 metadata and R2 binaries. Public
+              pages read published revisions; the editable master stays private.
+            </>
+          ) : (
+            <>
+              Canonical source of truth:{" "}
+              <code className="text-[0.8rem]">content/archive/</code>. Exports
+              and public assets are derivatives.
+            </>
+          )}
         </p>
         <p className="mt-3 text-[0.68rem] tracking-[0.14em] uppercase text-[var(--muted)]">
           {formatWizardStatusHeader({
@@ -1295,21 +1328,103 @@ export function IngestionWizard({
           <h2 className="text-[0.62rem] tracking-[0.18em] uppercase text-[var(--muted)]">
             1. Upload source artwork
           </h2>
-          <ImageDropZone
-            key={uploadInputKey}
-            dragOver={controller.dragOver}
-            onDragOver={controller.setDragOver}
-            onImport={handleSourceFile}
-          />
-          <p className="text-[0.75rem] text-[var(--muted)]">
-            Select a high-resolution master. In durable mode the original stays
-            in this browser (IndexedDB + tab memory) until you Publish Artwork
-            on Review. No remote upload happens on Select.
-          </p>
-          {sourceFile && (
-            <p className="text-[0.75rem] text-[var(--muted)]">
-              Selected: {sourceFile.name} ({Math.round(sourceFile.size / 1024)} KB)
-            </p>
+          {!sourceFile ? (
+            <>
+              <ImageDropZone
+                key={uploadInputKey}
+                dragOver={controller.dragOver}
+                onDragOver={controller.setDragOver}
+                onImport={handleSourceFile}
+              />
+              <p className="text-[0.75rem] text-[var(--muted)]">
+                Select a high-resolution master. In durable mode the original
+                stays in this browser until Review. No remote upload happens on
+                select.
+              </p>
+            </>
+          ) : (
+            <>
+              {(() => {
+                const previewUrl =
+                  resolveObjectUrlFromAnyTab(draftId || "pending-draft") ||
+                  controller.artwork.imageSrc;
+                const meta = buildSourcePreviewMeta(
+                  sourceFile,
+                  sourceDimensions,
+                );
+                const pipeline = deriveSourcePipelineStatus({
+                  hasSourceFile: true,
+                  hasPreparedLocal: Boolean(preparedLocal),
+                  serverSourceKind: currentDraft?.source?.kind,
+                  archiveStatus,
+                  draftStatus: status,
+                  commitCompleted,
+                });
+                return (
+                  <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_16rem]">
+                    <div className="relative aspect-square overflow-hidden border border-[var(--border)] bg-black/10">
+                      {previewUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={previewUrl}
+                          alt=""
+                          className="h-full w-full object-contain"
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center text-[0.75rem] text-[var(--muted)]">
+                          Preview unavailable
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-4 text-[0.78rem]">
+                      <div className="space-y-1 border border-[var(--border)] p-4">
+                        <p className="text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]">
+                          Source file
+                        </p>
+                        <p className="break-all">{meta.name}</p>
+                        <p className="text-[var(--muted)]">{meta.sizeLabel}</p>
+                        <p className="text-[var(--muted)]">{meta.typeLabel}</p>
+                        {meta.width && meta.height ? (
+                          <p className="text-[var(--muted)]">
+                            {meta.width} × {meta.height}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="space-y-2 border border-[var(--border)] p-4">
+                        <p className="text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]">
+                          Pipeline
+                        </p>
+                        {(
+                          Object.keys(PIPELINE_STATUS_LABELS) as Array<
+                            keyof typeof PIPELINE_STATUS_LABELS
+                          >
+                        ).map((key) => (
+                          <p
+                            key={key}
+                            className={
+                              pipeline[key]
+                                ? "text-[var(--foreground)]"
+                                : "text-[var(--muted)] opacity-50"
+                            }
+                          >
+                            {PIPELINE_STATUS_LABELS[key]}
+                            {pipeline[key] ? "" : " — not yet"}
+                          </p>
+                        ))}
+                      </div>
+                      <ImageDropZone
+                        key={uploadInputKey}
+                        compact
+                        label="Replace source"
+                        dragOver={controller.dragOver}
+                        onDragOver={controller.setDragOver}
+                        onImport={handleSourceFile}
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
+            </>
           )}
         </section>
       )}
@@ -1767,164 +1882,179 @@ export function IngestionWizard({
                   : "Draft generated but not marked reviewed."}
             </p>
           )}
-          {(committing || commitPhase !== "idle") && !commitCompleted && (
-            <p className="text-[0.72rem] tracking-[0.12em] uppercase text-[var(--muted)]">
-              {commitPhaseLabel(commitPhase)}
-              {r2Archive || d1Archive
-                ? " (R2 + D1)"
-                : " (GitHub bundle)"}
-            </p>
-          )}
-          {commitPhase === "failed_metadata" && (
-            <p className="text-[0.78rem] text-[var(--muted)]">
-              Media may already be stored in R2. Revision metadata was not written.
-              Re-run Publish after fixing the error, or contact an admin if objects
-              already exist for this revision.
-            </p>
-          )}
-          {commitCompleted && lastCommittedSha ? (
-            <div className="space-y-3 border border-[var(--border)] p-4">
-              <p className="text-[0.78rem] tracking-[0.14em] uppercase">
-                Completed
-              </p>
-              <p className="text-[0.85rem] text-[var(--muted)]">
-                {r2Archive || d1Archive ? (
-                  <>
-                    Revision published
-                    {result?.slug ? ` for ${result.slug}` : ""}.
-                    {lastCommittedSha
-                      ? ` Reference ${lastCommittedSha.slice(0, 7)}.`
+          {(() => {
+            const reviewReady = canUpdateAndPublish({
+              hasSourceFile: Boolean(sourceFile),
+              hasPreparedLocal: Boolean(preparedLocal),
+            });
+            const submitState = resolveReviewSubmitState({
+              commitCompleted,
+              committing,
+              commitInFlight,
+              hasCommitError: Boolean(commitError),
+              reviewReady,
+            });
+            const busy = submitState === "updating";
+            return (
+              <div className="space-y-4 border border-[var(--border)] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]">
+                    Submission · {submitState}
+                    {busy || commitPhase !== "idle"
+                      ? ` · ${commitPhaseLabel(commitPhase)}${
+                          r2Archive || d1Archive
+                            ? " (R2 + D1)"
+                            : " (durable)"
+                        }`
                       : ""}
-                  </>
+                  </p>
+                </div>
+
+                {submitState === "completed" && lastCommittedSha ? (
+                  <div className="space-y-3">
+                    <p className="text-[0.85rem] text-[var(--muted)]">
+                      {r2Archive || d1Archive ? (
+                        <>
+                          Revision published
+                          {result?.slug ? ` for ${result.slug}` : ""}.
+                          {lastCommittedSha
+                            ? ` Reference ${lastCommittedSha.slice(0, 7)}.`
+                            : ""}
+                        </>
+                      ) : (
+                        <>
+                          Revision stored
+                          {result?.slug ? ` for ${result.slug}` : ""}.
+                          Reference{" "}
+                          <code className="text-[0.8rem]">
+                            {lastCommittedSha.slice(0, 7)}
+                          </code>
+                          .
+                        </>
+                      )}
+                    </p>
+                    {result && (
+                      <ul className="max-h-40 overflow-y-auto font-mono text-[0.7rem] opacity-80">
+                        {result.files.map((f) => (
+                          <li key={f.path}>
+                            {f.path} ({f.bytes} B)
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 ) : (
                   <>
-                    Intentional GitHub commit{" "}
-                    <code className="text-[0.8rem]">
-                      {lastCommittedSha.slice(0, 7)}
-                    </code>
-                    {result?.slug ? ` for ${result.slug}` : ""}. Public pages
-                    update after Vercel redeploy.
+                    <div className="grid gap-4 text-[0.78rem] sm:grid-cols-2">
+                      <div>
+                        <p className="text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]">
+                          Artwork
+                        </p>
+                        <p>
+                          {controller.artwork.metadata.title || "(untitled)"}
+                        </p>
+                        <p className="text-[var(--muted)]">{accessionId}</p>
+                        <p className="text-[var(--muted)]">slug: {slug}</p>
+                      </div>
+                      <div>
+                        <p className="text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]">
+                          Visibility
+                        </p>
+                        <p>{intendedStatus}</p>
+                        <p className="mt-2 text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]">
+                          Mode
+                        </p>
+                        <p>
+                          {isExistingArchive ? "Revision" : "New accession"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]">
+                          Provenance
+                        </p>
+                        <p>
+                          mint: {mint.platform || "(none)"}
+                          {mint.url ? ` — ${mint.url}` : ""}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]">
+                          Sizes
+                        </p>
+                        <p>
+                          Source:{" "}
+                          {sourceFile
+                            ? formatByteSize(sourceFile.size)
+                            : "missing"}
+                          {sourceFile && sourceFile.size > MAX_SOURCE_BYTES
+                            ? " (over limit)"
+                            : ""}
+                        </p>
+                        <p>
+                          Prepared:{" "}
+                          {preparedLocal
+                            ? formatByteSize(preparedLocal.blob.size)
+                            : "not prepared"}
+                        </p>
+                        <p className="text-[var(--muted)]">
+                          {r2Archive || d1Archive
+                            ? `Original master limit ${formatByteSize(MAX_SOURCE_BYTES)}`
+                            : `Binary budget ${formatByteSize(MAX_BUNDLE_BINARY_BYTES)} (platform ~4.5 MB)`}
+                        </p>
+                      </div>
+                    </div>
+                    {(preparedLocal?.objectUrl ||
+                      controller.artwork.imageSrc) && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={
+                          preparedLocal?.objectUrl ||
+                          controller.artwork.imageSrc
+                        }
+                        alt=""
+                        className="max-h-64 w-auto border border-[var(--border)] object-contain"
+                      />
+                    )}
                   </>
                 )}
-              </p>
-              {result && (
-                <ul className="max-h-40 overflow-y-auto font-mono text-[0.7rem] opacity-80">
-                  {result.files.map((f) => (
-                    <li key={f.path}>
-                      {f.path} ({f.bytes} B)
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ) : (
-            <>
-              <div className="grid gap-4 border border-[var(--border)] p-4 text-[0.78rem] sm:grid-cols-2">
-                <div>
-                  <p className="text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]">
-                    Artwork
-                  </p>
-                  <p>{controller.artwork.metadata.title || "(untitled)"}</p>
-                  <p className="text-[var(--muted)]">{accessionId}</p>
-                  <p className="text-[var(--muted)]">slug: {slug}</p>
-                </div>
-                <div>
-                  <p className="text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]">
-                    Visibility
-                  </p>
-                  <p>{intendedStatus}</p>
-                  <p className="mt-2 text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]">
-                    Mode
-                  </p>
-                  <p>
-                    {isExistingArchive ? "Revision" : "New accession"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]">
-                    Provenance
-                  </p>
-                  <p>
-                    mint: {mint.platform || "(none)"}
-                    {mint.url ? ` — ${mint.url}` : ""}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]">
-                    Sizes
-                  </p>
-                  <p>
-                    Source:{" "}
-                    {sourceFile
-                      ? formatByteSize(sourceFile.size)
-                      : "missing"}
-                    {sourceFile && sourceFile.size > MAX_SOURCE_BYTES
-                      ? " (over limit)"
-                      : ""}
-                  </p>
-                  <p>
-                    Prepared:{" "}
-                    {preparedLocal
-                      ? formatByteSize(preparedLocal.blob.size)
-                      : "not prepared"}
-                  </p>
-                  <p className="text-[var(--muted)]">
-                    Binary budget: {formatByteSize(MAX_BUNDLE_BINARY_BYTES)}{" "}
-                    (platform ~4.5 MB)
-                  </p>
-                </div>
+
+                {submitState === "failed" && commitError && (
+                  <div className="space-y-2 border border-red-900/30 bg-red-950/20 p-3 text-[0.8rem] text-red-200">
+                    <p>{commitError}</p>
+                    {commitPhase === "failed_metadata" && (
+                      <p className="text-[0.72rem] text-[var(--muted)]">
+                        Media may already be stored in R2. Revision metadata was
+                        not written. Retry after fixing the error.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {submitState !== "completed" && (
+                  <button
+                    type="button"
+                    disabled={
+                      busy ||
+                      commitCompleted ||
+                      !draftId ||
+                      (submitState === "ready" && !reviewReady)
+                    }
+                    title={
+                      isExistingArchive
+                        ? "Validate and publish an updated working revision."
+                        : "Validate and publish this artwork."
+                    }
+                    onClick={() => {
+                      void handleCommitAccession();
+                    }}
+                    className="border border-[var(--ink)] px-5 py-3 text-[0.68rem] tracking-[0.16em] uppercase disabled:opacity-40"
+                  >
+                    {reviewSubmitLabel(submitState, isExistingArchive)}
+                  </button>
+                )}
               </div>
-              <p className="text-[0.75rem] text-[var(--muted)]">
-                Required after Publish: metadata.json, states.json, notes.md, five
-                public derivatives, archive source + prepared master. MVP omits
-                perception.html and manifest.json.
-              </p>
-              {(preparedLocal?.objectUrl || controller.artwork.imageSrc) && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={
-                    preparedLocal?.objectUrl || controller.artwork.imageSrc
-                  }
-                  alt=""
-                  className="max-h-64 w-auto border border-[var(--border)] object-contain"
-                />
-              )}
-              <button
-                type="button"
-                disabled={
-                  committing ||
-                  commitInFlight ||
-                  commitCompleted ||
-                  !draftId ||
-                  !canUpdateAndPublish({
-                    hasSourceFile: Boolean(sourceFile),
-                    hasPreparedLocal: Boolean(preparedLocal),
-                  })
-                }
-                title={
-                  isExistingArchive
-                    ? d1Archive || r2Archive
-                      ? "Validate and publish an updated working revision."
-                      : "Validate and write one revision update."
-                    : d1Archive || r2Archive
-                      ? "Validate and publish this artwork."
-                      : "Validate and publish this accession."
-                }
-                onClick={() => {
-                  void handleCommitAccession();
-                }}
-                className="border border-[var(--ink)] px-5 py-3 text-[0.68rem] tracking-[0.16em] uppercase disabled:opacity-40"
-              >
-                {committing
-                  ? isExistingArchive
-                    ? "Updating..."
-                    : "Publishing..."
-                  : isExistingArchive
-                    ? "Update & Publish"
-                    : "Publish Artwork"}
-              </button>
-            </>
-          )}
+            );
+          })()}
           {result?.warnings?.map((w) => (
             <p key={w} className="text-[0.72rem] text-amber-200/80">
               {w}
@@ -1950,21 +2080,17 @@ export function IngestionWizard({
               router.push(WIZARD_DONE_HREF);
               return;
             }
-            if (footerPrimary.action === "commit") {
-              void handleCommitAccession();
-              return;
-            }
             if (footerPrimary.action === "next") goNext();
           }}
           disabled={footerPrimary.disabled}
           title={
-            commitCompleted
-              ? "Return to the admin drafts list."
-              : durableStorage && step === "Review"
-                ? "Validate and perform the single intentional commit."
-                : "Advance to the next accession step. Local draft autosaves in the browser."
+            footerPrimary.action === "done"
+              ? "Return to the admin archive list."
+              : footerPrimary.action === "noop"
+                ? "Use the publish action in the Review panel above."
+                : "Continue to the next accession step."
           }
-          className="text-[0.68rem] tracking-[0.14em] uppercase"
+          className="border border-[var(--ink)] px-5 py-3 text-[0.68rem] tracking-[0.16em] uppercase disabled:opacity-40"
         >
           {footerPrimaryLabel({
             steps: STEPS,

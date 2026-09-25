@@ -7,6 +7,8 @@ import {
   isFinalVisibleStep,
   LOCAL_WIZARD_STEPS,
   resolveFooterPrimaryAction,
+  resolveReviewSubmitState,
+  reviewSubmitLabel,
   WIZARD_DONE_HREF,
   wizardStepsForMode,
 } from "./wizard-steps.ts";
@@ -33,7 +35,7 @@ describe("wizard final visible step", () => {
         isRevision: false,
         completed: false,
       }),
-      "Publish Artwork",
+      "Review",
     );
     assert.equal(
       footerPrimaryLabel({
@@ -42,7 +44,7 @@ describe("wizard final visible step", () => {
         isRevision: true,
         completed: false,
       }),
-      "Update & Publish",
+      "Review",
     );
   });
 
@@ -111,7 +113,52 @@ describe("wizard final visible step", () => {
         reviewBusy: false,
         reviewReady: true,
       }),
-      { action: "commit", disabled: false },
+      { action: "noop", disabled: true },
     );
+  });
+
+  it("review submit states map Ready Updating Completed Failed", () => {
+    assert.equal(
+      resolveReviewSubmitState({
+        commitCompleted: false,
+        committing: false,
+        commitInFlight: false,
+        hasCommitError: false,
+        reviewReady: true,
+      }),
+      "ready",
+    );
+    assert.equal(
+      resolveReviewSubmitState({
+        commitCompleted: false,
+        committing: true,
+        commitInFlight: false,
+        hasCommitError: false,
+        reviewReady: true,
+      }),
+      "updating",
+    );
+    assert.equal(
+      resolveReviewSubmitState({
+        commitCompleted: true,
+        committing: false,
+        commitInFlight: false,
+        hasCommitError: false,
+        reviewReady: true,
+      }),
+      "completed",
+    );
+    assert.equal(
+      resolveReviewSubmitState({
+        commitCompleted: false,
+        committing: false,
+        commitInFlight: false,
+        hasCommitError: true,
+        reviewReady: true,
+      }),
+      "failed",
+    );
+    assert.equal(reviewSubmitLabel("updating", true), "Updating…");
+    assert.equal(reviewSubmitLabel("failed", false), "Retry Publish");
   });
 });

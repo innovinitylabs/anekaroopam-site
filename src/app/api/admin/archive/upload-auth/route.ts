@@ -4,6 +4,12 @@ import { resolveCommitIdentity } from "@/lib/archive/accession-mint";
 import { githubStorageAvailable } from "@/lib/archive/draft-github-store";
 import { githubErrorResponse } from "@/lib/archive/github-admin-response";
 import { sourceFilenameForUpload } from "@/lib/archive/schema";
+import {
+  formatByteSize,
+  isSourceWithinLimit,
+  resolveMaxSourceBytes,
+  sourceOverLimitMessage,
+} from "@/lib/archive/commit-bundle-limits";
 import { preferArchiveWorker } from "@/lib/archive/worker-config";
 import {
   ensureWorkerArtworkForDraft,
@@ -135,6 +141,28 @@ export async function POST(request: Request) {
     const uploads = [];
 
     for (const obj of objects) {
+      if (
+        !Number.isFinite(obj.contentLength) ||
+        obj.contentLength < 1
+      ) {
+        return NextResponse.json(
+          { error: `contentLength required for role ${obj.role}` },
+          { status: 400 },
+        );
+      }
+      if (
+        obj.role === "original" &&
+        !isSourceWithinLimit(obj.contentLength)
+      ) {
+        return NextResponse.json(
+          {
+            error: sourceOverLimitMessage(obj.contentLength),
+            limit: resolveMaxSourceBytes(),
+            detail: `Original master over limit (${formatByteSize(obj.contentLength)}).`,
+          },
+          { status: 413 },
+        );
+      }
       const key = roleToKey.get(obj.role);
       if (!key) {
         return NextResponse.json(

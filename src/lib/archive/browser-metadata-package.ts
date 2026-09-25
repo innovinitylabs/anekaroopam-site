@@ -173,12 +173,12 @@ export function buildBrowserMetadataPackage(input: {
   const incompleteNote = isR2
     ? [
         "R2_BROWSER_ACCESSION",
-        "Binaries live in Cloudflare R2; GitHub holds metadata and manifests only.",
+        "Binaries live in Cloudflare R2; revision metadata is stored with the archive record.",
         "Included: metadata.json, states.json, notes.md" +
           (input.includeManifest ? ", manifest.json" : "") +
           ".",
         "Excluded from this package: perception.html and mint-package export.",
-        "Public Next.js archive pages need a redeploy to pick up new metadata.json.",
+        "Public pages update when the published revision metadata is available.",
       ].join(" ")
     : [
         "BROWSER_MVP_INCOMPLETE",
@@ -199,7 +199,7 @@ export function buildBrowserMetadataPackage(input: {
   }
   if (isR2) {
     warnings.push(
-      "R2 media package: binaries are not committed to GitHub. Public View remains redeploy-bound for metadata.",
+      "R2 media package: binaries stay in Cloudflare R2; metadata is written with the revision. Public pages follow published revision data.",
     );
   } else {
     warnings.push(
@@ -225,7 +225,7 @@ export function buildBrowserMetadataPackage(input: {
     ? [
         "> R2 MEDIA PACKAGE",
         ">",
-        "> Written to GitHub: metadata.json, states.json, notes.md" +
+        "> Written with revision: metadata.json, states.json, notes.md" +
           (input.includeManifest ? ", manifest.json" : "") +
           ".",
         "> Binaries stored in Cloudflare R2 (see entry.media).",

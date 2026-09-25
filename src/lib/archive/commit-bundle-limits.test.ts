@@ -3,10 +3,12 @@ import { describe, it } from "node:test";
 import { readAdminJson } from "./admin-response.ts";
 import {
   assertCommitBundleClientLimits,
+  DEFAULT_MAX_SOURCE_BYTES,
   formatByteSize,
   isSourceWithinLimit,
   MAX_BUNDLE_BINARY_BYTES,
   MAX_SOURCE_BYTES,
+  resolveMaxSourceBytes,
 } from "./commit-bundle-limits.ts";
 
 describe("commit-bundle client limits", () => {
@@ -45,6 +47,25 @@ describe("commit-bundle client limits", () => {
   it("formats byte sizes", () => {
     assert.match(formatByteSize(2048), /KB/);
     assert.match(formatByteSize(MAX_SOURCE_BYTES), /10\.00 MB/);
+  });
+
+  it("resolveMaxSourceBytes defaults to 10 MiB and honors env", () => {
+    assert.equal(DEFAULT_MAX_SOURCE_BYTES, 10 * 1024 * 1024);
+    const previous = process.env.ARCHIVE_MAX_SOURCE_BYTES;
+    delete process.env.ARCHIVE_MAX_SOURCE_BYTES;
+    delete process.env.NEXT_PUBLIC_ARCHIVE_MAX_SOURCE_BYTES;
+    try {
+      assert.equal(resolveMaxSourceBytes(), DEFAULT_MAX_SOURCE_BYTES);
+      process.env.ARCHIVE_MAX_SOURCE_BYTES = String(20 * 1024 * 1024);
+      assert.equal(resolveMaxSourceBytes(), 20 * 1024 * 1024);
+      assert.equal(isSourceWithinLimit(15 * 1024 * 1024), true);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.ARCHIVE_MAX_SOURCE_BYTES;
+      } else {
+        process.env.ARCHIVE_MAX_SOURCE_BYTES = previous;
+      }
+    }
   });
 });
 
