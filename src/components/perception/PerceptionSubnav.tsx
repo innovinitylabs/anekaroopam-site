@@ -25,7 +25,7 @@ export function PerceptionSubnav() {
   return (
     <nav
       className="flex shrink-0 items-center gap-4 sm:gap-6"
-      aria-label="Perception system"
+      aria-label="Pattarai workspace"
     >
       {items.map((item) => {
         const active = item.exact

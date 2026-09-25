@@ -57,9 +57,11 @@ export default function ProcessPage() {
       <FadeIn delay={0.3} className="mt-20">
         <Link
           href="/perceive"
+          aria-label="Open Pattarai — Perception tools · Artwork preparation"
+          title="பட்டறை — Perception tools · Artwork preparation"
           className="text-[0.68rem] tracking-[0.2em] uppercase border-b border-[var(--ink)] pb-1"
         >
-          Configure orientations
+          Open Pattarai
         </Link>
       </FadeIn>
     </div>

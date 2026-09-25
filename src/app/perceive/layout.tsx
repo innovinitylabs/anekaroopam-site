@@ -3,11 +3,11 @@ import { PerceptionShell } from "@/components/perception/PerceptionShell";
 
 export const metadata: Metadata = {
   title: {
-    default: "Perception",
-    template: "%s — Perception",
+    default: "Pattarai",
+    template: "%s — Pattarai",
   },
   description:
-    "Orientation and archival preparation for multistable artworks.",
+    "Pattarai — perception tools and artwork preparation for multistable works.",
 };
 
 export default function PerceiveLayout({

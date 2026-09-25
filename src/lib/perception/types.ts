@@ -1,3 +1,10 @@
+import {
+  PERCEPTION_INTERPOLATE_MS,
+  PERCEPTION_MAX_ZOOM,
+  PERCEPTION_MIN_ZOOM,
+  PERCEPTION_ROTATION_STEP_DEG,
+} from "./constants";
+
 export type BackgroundPreset =
   | "black"
   | "paper"
@@ -89,10 +96,10 @@ export interface PerceptionEngineOptions {
 
 export const DEFAULT_ENGINE_OPTIONS: Required<PerceptionEngineOptions> = {
   snapToState: false,
-  rotationStep: 22.5,
-  minZoom: 0.4,
-  maxZoom: 4,
-  interpolateMs: 680,
+  rotationStep: PERCEPTION_ROTATION_STEP_DEG,
+  minZoom: PERCEPTION_MIN_ZOOM,
+  maxZoom: PERCEPTION_MAX_ZOOM,
+  interpolateMs: PERCEPTION_INTERPOLATE_MS,
 };
 
 export interface ExportPayload {

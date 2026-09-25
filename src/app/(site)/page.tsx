@@ -38,9 +38,11 @@ export default function HomePage() {
           </Link>
           <Link
             href="/perceive"
+            aria-label="Pattarai — Perception tools · Artwork preparation"
+            title="பட்டறை — Perception tools · Artwork preparation"
             className="-my-3 inline-block py-3 text-[0.68rem] tracking-[0.2em] uppercase opacity-50 hover:opacity-90"
           >
-            Perception
+            Pattarai
           </Link>
         </FadeIn>
       </section>

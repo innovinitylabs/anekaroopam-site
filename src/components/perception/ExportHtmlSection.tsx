@@ -102,6 +102,8 @@ export function ExportHtmlSection({
         conversion: converted,
         fallbacks,
         filename,
+        profile:
+          enableFallback && format === "avif" ? "compatible" : "onchain",
       });
     } finally {
       setExporting(false);
@@ -134,7 +136,7 @@ export function ExportHtmlSection({
         </select>
       </label>
       <label
-        title="Include a WebP source in the HTML picture element for browsers without AVIF support."
+        title="Include a WebP source only when needed for browsers without AVIF (compatible profile). Off for on-chain-sized AVIF-only exports."
         className="flex min-h-10 items-center gap-2 text-[0.68rem] sm:min-h-0"
       >
         <input
@@ -142,7 +144,7 @@ export function ExportHtmlSection({
           checked={enableFallback}
           onChange={(e) => setEnableFallback(e.target.checked)}
         />
-        WebP fallback (AVIF exports)
+        Compatible WebP fallback (AVIF only when checked)
       </label>
       {specs && <SpecTable rows={specs} />}
       {originalByteSize && !specs && (
@@ -151,14 +153,23 @@ export function ExportHtmlSection({
           artifact size.
         </p>
       )}
+      <p className="text-[0.62rem] leading-relaxed text-[var(--muted)]">
+        {enableFallback && format === "avif"
+          ? "Profile: Compatible — AVIF primary with WebP fallback, fully offline."
+          : "Profile: On-chain oriented — AVIF-first, no unused WebP unless fallback is enabled."}
+      </p>
       <button
         type="button"
         disabled={!imageSrc || exporting}
-        title="Build a self-contained HTML file with embedded image data and orientation runtime."
+        title="Build a self-contained HTML file with embedded image data and the shared Perception runtime."
         onClick={handleExport}
         className="w-full border border-[var(--border)] py-3 text-[0.68rem] tracking-[0.14em] uppercase transition-colors hover:border-[var(--foreground)] disabled:opacity-30 sm:py-2"
       >
-        {exporting ? "Preparing export..." : "Export standalone HTML"}
+        {exporting
+          ? "Preparing export..."
+          : enableFallback && format === "avif"
+            ? "Export compatible HTML"
+            : "Export standalone HTML"}
       </button>
     </div>
   );

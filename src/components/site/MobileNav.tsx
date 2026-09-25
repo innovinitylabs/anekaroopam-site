@@ -4,14 +4,21 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { PattaraiNavLabel } from "@/components/site/PattaraiNavLabel";
+import {
+  isPattaraiPath,
+  PATTARAI_ARIA_LABEL,
+  PATTARAI_HREF,
+  PATTARAI_TITLE,
+} from "@/lib/site/pattarai-nav";
 import { cn } from "@/lib/utils";
 
 export const mobileNavLinks = [
-  { href: "/archive", label: "Archive" },
-  { href: "/perceive", label: "Perceive" },
-  { href: "/manifesto", label: "Manifesto" },
-  { href: "/process", label: "Process" },
-  { href: "/about", label: "About" },
+  { href: "/archive", label: "Archive", kind: "text" as const },
+  { href: PATTARAI_HREF, label: "Pattarai", kind: "pattarai" as const },
+  { href: "/manifesto", label: "Manifesto", kind: "text" as const },
+  { href: "/process", label: "Process", kind: "text" as const },
+  { href: "/about", label: "About", kind: "text" as const },
 ] as const;
 
 interface MobileNavProps {
@@ -69,21 +76,34 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
             <ul className="mx-auto max-w-6xl px-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] pt-5">
               {mobileNavLinks.map((link) => {
                 const active =
-                  pathname === link.href ||
-                  pathname.startsWith(`${link.href}/`);
+                  link.kind === "pattarai"
+                    ? isPattaraiPath(pathname)
+                    : pathname === link.href ||
+                      pathname.startsWith(`${link.href}/`);
                 return (
                   <li key={link.href}>
                     <Link
                       href={link.href}
                       onClick={onClose}
+                      aria-label={
+                        link.kind === "pattarai" ? PATTARAI_ARIA_LABEL : undefined
+                      }
+                      title={link.kind === "pattarai" ? PATTARAI_TITLE : undefined}
                       className={cn(
-                        "block border-b border-[var(--border)] py-3.5 text-sm tracking-[0.14em] uppercase text-[var(--ink)] transition-opacity last:border-b-0 outline-none focus-visible:ring-1 focus-visible:ring-[var(--ink)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-elevated)]",
+                        "block border-b border-[var(--border)] py-3.5 text-sm text-[var(--ink)] transition-opacity last:border-b-0 outline-none focus-visible:ring-1 focus-visible:ring-[var(--ink)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-elevated)]",
+                        link.kind === "pattarai"
+                          ? "tracking-normal"
+                          : "tracking-[0.14em] uppercase",
                         active
                           ? "opacity-100"
                           : "opacity-50 hover:opacity-80",
                       )}
                     >
-                      {link.label}
+                      {link.kind === "pattarai" ? (
+                        <PattaraiNavLabel variant="mobile" />
+                      ) : (
+                        link.label
+                      )}
                     </Link>
                   </li>
                 );

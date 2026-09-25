@@ -1,6 +1,8 @@
 import sharp from "sharp";
 import { buildStandaloneHtml } from "@/lib/html-export/build-html";
 import type { EmbeddedImageAsset } from "@/lib/html-export/types";
+import type { StandaloneBuildResult } from "@/lib/html-export/standalone-profile";
+import type { StandaloneExportProfile } from "@/lib/html-export/standalone-profile";
 import type { ExportPayload } from "@/lib/perception/types";
 import { bufferToDataUrl, isArchiveImagePipelineTestMode } from "./image-pipeline";
 import type { AccessionManifest } from "./schema";
@@ -46,30 +48,71 @@ async function bufferToEmbedded(
   };
 }
 
-export async function buildStandaloneHtmlFromBuffers(
-  payload: ExportPayload,
-  artworkBuffer: Buffer,
-  previewWebpBuffer?: Buffer,
+export type BuildStandaloneFromBuffersOptions = {
+  profile?: StandaloneExportProfile;
+  /** When false, never embed WebP even for compatible. Default true for compatible. */
+  includeWebpFallback?: boolean;
   archiveMeta?: {
     manifest?: AccessionManifest;
     runtime?: AccessionRuntime;
     standaloneVersion?: string;
-  },
-): Promise<string> {
+  };
+};
+
+/**
+ * Build self-contained perception HTML from AVIF (+ optional WebP) buffers.
+ * Returns size report for on-chain budgeting.
+ */
+export async function buildStandaloneHtmlFromBuffers(
+  payload: ExportPayload,
+  artworkBuffer: Buffer,
+  previewWebpBuffer?: Buffer,
+  archiveMetaOrOptions?:
+    | BuildStandaloneFromBuffersOptions["archiveMeta"]
+    | BuildStandaloneFromBuffersOptions,
+): Promise<StandaloneBuildResult> {
+  const options: BuildStandaloneFromBuffersOptions =
+    archiveMetaOrOptions &&
+    ("profile" in archiveMetaOrOptions ||
+      "includeWebpFallback" in archiveMetaOrOptions ||
+      "archiveMeta" in archiveMetaOrOptions)
+      ? (archiveMetaOrOptions as BuildStandaloneFromBuffersOptions)
+      : { archiveMeta: archiveMetaOrOptions as BuildStandaloneFromBuffersOptions["archiveMeta"] };
+
+  const profile = options.profile ?? "compatible";
+  const includeWebp =
+    profile === "compatible" &&
+    options.includeWebpFallback !== false &&
+    Boolean(previewWebpBuffer);
+
   const embedded = await bufferToEmbedded(artworkBuffer, "avif");
-  const fallbacks = previewWebpBuffer
-    ? [await bufferToEmbedded(previewWebpBuffer, "webp")]
-    : undefined;
+  const fallbacks =
+    includeWebp && previewWebpBuffer
+      ? [await bufferToEmbedded(previewWebpBuffer, "webp")]
+      : undefined;
 
   const artwork = {
     ...payload.artwork,
-    imageSrc: embedded.dataUrl,
+    // Markup carries the data URL; keep payload imageSrc empty to avoid callers
+    // treating this as a remote URL.
+    imageSrc: "",
   };
 
-  return buildStandaloneHtml({
+  const html = buildStandaloneHtml({
     payload: { ...payload, artwork },
     embedded,
     fallbacks,
-    archiveMeta,
+    archiveMeta: options.archiveMeta,
+    profile,
   });
+
+  return {
+    html,
+    profile,
+    htmlByteSize: Buffer.byteLength(html, "utf8"),
+    embeddedAvifByteSize: artworkBuffer.length,
+    embeddedWebpByteSize: includeWebp && previewWebpBuffer
+      ? previewWebpBuffer.length
+      : null,
+  };
 }

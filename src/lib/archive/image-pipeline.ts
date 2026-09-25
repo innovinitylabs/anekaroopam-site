@@ -23,7 +23,11 @@ export function setArchiveImagePipelineForTests(
 }
 
 export function isArchiveImagePipelineTestMode(): boolean {
-  return testPipelineHook !== undefined;
+  if (testPipelineHook !== undefined) return true;
+  return (
+    typeof process !== "undefined" &&
+    process.env.ARCHIVE_IMAGE_PIPELINE_TEST === "1"
+  );
 }
 
 async function encodeVariant(

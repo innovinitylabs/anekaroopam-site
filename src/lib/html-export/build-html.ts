@@ -1,11 +1,23 @@
 import type { ExportPayload } from "@/lib/perception/types";
+import { DEFAULT_ENGINE_OPTIONS } from "@/lib/perception/types";
 import { resolveBackground } from "@/lib/perception/backgrounds";
 import {
   advancedMetadataEntries,
   primaryOverlayDetails,
 } from "@/lib/perception/metadata";
+import {
+  PERCEPTION_ACTIVE_STATE_THRESHOLD_DEG,
+  PERCEPTION_OBJECT_FIT,
+  PERCEPTION_VIEWPORT_PADDING_PCT,
+  STANDALONE_RUNTIME_MARKERS,
+} from "@/lib/perception/constants";
+import { emitStandaloneRuntimeScript } from "@/lib/perception/emit-standalone-runtime";
 import { mimeForFormat } from "@/lib/image-processing/format-support";
 import type { EmbeddedImageAsset, StandaloneArchiveMeta } from "./types";
+import { minifyStandaloneHtml } from "./minify-standalone";
+import type { StandaloneExportProfile } from "./standalone-profile";
+
+export { STANDALONE_RUNTIME_MARKERS };
 
 function escapeHtml(value: string): string {
   return value
@@ -32,17 +44,14 @@ function buildPictureMarkup(
       (asset) =>
         `<source srcset="${asset.dataUrl}" type="${mimeForFormat(asset.format, false)}" />`,
     )
-    .join("\n      ");
+    .join("");
 
   const fallback =
     [...fallbacks, primary].find((a) => a.format === "jpeg") ??
     [...fallbacks, primary].find((a) => a.format === "webp") ??
     primary;
 
-  return `<picture>
-      ${sources}
-      <img id="artwork" alt="" src="${fallback.dataUrl}" />
-    </picture>`;
+  return `<picture>${sources}<img id="artwork" alt="" src="${fallback.dataUrl}" /></picture>`;
 }
 
 export interface BuildHtmlInput {
@@ -50,6 +59,10 @@ export interface BuildHtmlInput {
   embedded?: EmbeddedImageAsset;
   fallbacks?: EmbeddedImageAsset[];
   archiveMeta?: StandaloneArchiveMeta;
+  /** Default compatible. onchain = single AVIF, minified, no WebP. */
+  profile?: StandaloneExportProfile;
+  /** Force minify independently of profile (onchain always minifies). */
+  minify?: boolean;
 }
 
 export function buildStandaloneHtml(
@@ -64,9 +77,17 @@ export function buildStandaloneHtml(
     : (input as BuildHtmlInput).embedded;
   const fallbacks = isLegacy ? [] : ((input as BuildHtmlInput).fallbacks ?? []);
   const archiveMeta = isLegacy ? undefined : (input as BuildHtmlInput).archiveMeta;
+  const profile: StandaloneExportProfile = isLegacy
+    ? "compatible"
+    : ((input as BuildHtmlInput).profile ?? "compatible");
+  const shouldMinify =
+    profile === "onchain" ||
+    (!isLegacy && (input as BuildHtmlInput).minify === true);
+
+  const effectiveFallbacks =
+    profile === "onchain" ? [] : fallbacks.filter((f) => f.format === "webp");
 
   const { artwork } = payload;
-  const imageSrc = embedded?.dataUrl ?? artwork.imageSrc;
   const bg = resolveBackground(artwork.background);
   const overlayFields = artwork.overlayFields ?? {
     title: true,
@@ -77,8 +98,15 @@ export function buildStandaloneHtml(
     advanced: true,
   };
 
+  // When the image is embedded in markup, omit data URL from CONFIG to avoid
+  // doubling base64 payload size (critical for on-chain).
+  const imageInMarkup = Boolean(embedded);
+  const configImageSrc = imageInMarkup
+    ? ""
+    : (embedded?.dataUrl ?? artwork.imageSrc);
+
   const configJson = JSON.stringify({
-    imageSrc,
+    imageSrc: configImageSrc,
     states: artwork.states,
     metadata: artwork.metadata,
     background: bg,
@@ -90,21 +118,58 @@ export function buildStandaloneHtml(
     primaryDetails: primaryOverlayDetails(artwork.metadata, overlayFields),
     advancedMetadata: advancedMetadataEntries(artwork.metadata),
     embedFormat: embedded?.format ?? null,
-    standaloneRuntimeVersion: archiveMeta?.standaloneVersion ?? "standalone-runtime-v1",
+    profile,
+    displayAsset: embedded
+      ? {
+          format: embedded.format,
+          embedded: true,
+          source: profile === "onchain" ? "artwork.avif" : "artwork+optional-webp",
+        }
+      : { format: null, embedded: false, source: "config.imageSrc" },
+    standaloneRuntimeVersion:
+      profile === "onchain"
+        ? "standalone-onchain-v1"
+        : (archiveMeta?.standaloneVersion ?? "standalone-runtime-v1"),
+    interpolateMs: DEFAULT_ENGINE_OPTIONS.interpolateMs,
+    rotationStep: DEFAULT_ENGINE_OPTIONS.rotationStep,
+    minZoom: DEFAULT_ENGINE_OPTIONS.minZoom,
+    maxZoom: DEFAULT_ENGINE_OPTIONS.maxZoom,
+    activeStateThreshold: PERCEPTION_ACTIVE_STATE_THRESHOLD_DEG,
   });
-  const archiveMetaJson = JSON.stringify({
-    standaloneVersion: archiveMeta?.standaloneVersion ?? "standalone-runtime-v1",
-    manifest: archiveMeta?.manifest ?? null,
-    runtime: archiveMeta?.runtime ?? null,
-  });
+  const archiveMetaJson =
+    profile === "onchain"
+      ? JSON.stringify({
+          standaloneVersion: "standalone-onchain-v1",
+          profile: "onchain",
+        })
+      : JSON.stringify({
+          standaloneVersion:
+            archiveMeta?.standaloneVersion ?? "standalone-runtime-v1",
+          profile: "compatible",
+          manifest: archiveMeta?.manifest ?? null,
+          runtime: archiveMeta?.runtime ?? null,
+        });
 
   const title = escapeHtml(artwork.metadata.title);
-  const usePicture = embedded && (fallbacks.length > 0 || embedded.format !== "png");
-  const artworkMarkup = usePicture
-    ? buildPictureMarkup(embedded, fallbacks)
-    : `<img id="artwork" alt="" />`;
+  let artworkMarkup: string;
+  if (embedded && profile === "onchain") {
+    artworkMarkup = `<img id="artwork" alt="" src="${embedded.dataUrl}" />`;
+  } else if (
+    embedded &&
+    (effectiveFallbacks.length > 0 || embedded.format !== "png")
+  ) {
+    artworkMarkup = buildPictureMarkup(embedded, effectiveFallbacks);
+  } else if (embedded) {
+    artworkMarkup = `<img id="artwork" alt="" src="${embedded.dataUrl}" />`;
+  } else {
+    artworkMarkup = `<img id="artwork" alt="" />`;
+  }
 
-  return `<!DOCTYPE html>
+  const pad = PERCEPTION_VIEWPORT_PADDING_PCT;
+  const objectFit = PERCEPTION_OBJECT_FIT;
+  const runtimeScript = emitStandaloneRuntimeScript(configJson, archiveMetaJson);
+
+  const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -114,10 +179,10 @@ export function buildStandaloneHtml(
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: ${bg}; font-family: Georgia, serif; }
   #stage { position: fixed; inset: 0; cursor: crosshair; touch-action: none; }
-  #viewport { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
-  #transform { will-change: transform; transform-origin: center center; }
-  #artwork, picture img { max-width: 88vmin; max-height: 88vmin; display: block; user-select: none; pointer-events: none; }
-  picture { display: block; line-height: 0; }
+  #viewport { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: ${pad}%; }
+  #transform { will-change: transform; transform-origin: center center; max-width: 100%; max-height: 100%; display: flex; align-items: center; justify-content: center; }
+  #artwork, picture img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: ${objectFit}; display: block; user-select: none; pointer-events: none; }
+  picture { display: block; line-height: 0; max-width: 100%; max-height: 100%; }
   #meta { position: fixed; left: 0; right: 0; bottom: 0; padding: 2rem 2.5rem calc(env(safe-area-inset-bottom) + 2.25rem); color: rgba(26,24,20,0.72); transition: opacity 0.5s; pointer-events: none; max-height: 55vh; overflow-y: auto; }
   #meta.dark { color: rgba(232,228,220,0.72); }
   #meta.hidden { opacity: 0; }
@@ -151,7 +216,7 @@ export function buildStandaloneHtml(
   #hint { position: fixed; top: calc(env(safe-area-inset-top) + 1.25rem); left: 50%; transform: translateX(-50%); font-size: 0.62rem; letter-spacing: 0.22em; text-transform: uppercase; opacity: 0; transition: opacity 0.4s; pointer-events: none; }
   #hint.visible { opacity: 0.35; }
   @media (max-width: 640px) {
-    #artwork, picture img { max-width: 86vmin; max-height: 82vmin; }
+    #viewport { padding: 3%; }
     #controls { top: calc(env(safe-area-inset-top) + 0.9rem); right: 1rem; max-width: 44vw; font-size: 0.56rem; line-height: 1.45; }
     #meta { padding: 1.25rem 1.25rem calc(env(safe-area-inset-bottom) + 4.75rem); max-height: 48vh; }
     #meta h1 { font-size: 0.66rem; letter-spacing: 0.2em; }
@@ -202,268 +267,10 @@ export function buildStandaloneHtml(
   <div id="hint">Orientation is emergent</div>
 </div>
 <script>
-(function(){
-  var CONFIG = ${configJson};
-  var ARCHIVE_META = ${archiveMetaJson};
-  window.__ANEKAROOPAM_ARCHIVE__ = ARCHIVE_META;
-  var stage = document.getElementById('stage');
-  var transformEl = document.getElementById('transform');
-  var img = document.getElementById('artwork');
-  var meta = document.getElementById('meta');
-  var controls = document.getElementById('controls');
-  var mobileRotate = document.getElementById('mobile-rotate');
-  var snapToggle = document.getElementById('snap-toggle');
-  var hint = document.getElementById('hint');
-  var metaAdvWrap = document.getElementById('meta-adv-wrap');
-  var metaAdvToggle = document.getElementById('meta-adv-toggle');
-  var metaAdv = document.getElementById('meta-adv');
-  var metaAdvList = metaAdv.querySelector('dl');
-  var angle = CONFIG.initialAngle || 0;
-  var zoom = 1, panX = 0, panY = 0, targetAngle = angle, animStart = null, animFrom = angle;
-  var metaAdvOpen = false;
-  var overlaysEnabled = CONFIG.showMetadata !== false;
-  var metaContent = document.getElementById('meta-content');
-  var overlayToggle = document.getElementById('overlay-toggle');
-  var pointers = {};
-  var pinchStart = null;
-  var suppressClick = false;
-  var SNAP_KEY = 'anek_snap_' + (CONFIG.artworkId || 'artwork');
-  var snapToState = !!CONFIG.initialSnapToState;
-  try {
-    var stored = localStorage.getItem(SNAP_KEY);
-    if (stored === '1') snapToState = true;
-    if (stored === '0') snapToState = false;
-  } catch (e) {}
-  document.body.style.background = CONFIG.background;
-  var hex = CONFIG.background.replace('#','');
-  if (hex.length === 6) {
-    var r = parseInt(hex.slice(0,2),16), g = parseInt(hex.slice(2,4),16), b = parseInt(hex.slice(4,6),16);
-    if ((0.299*r + 0.587*g + 0.114*b) / 255 < 0.45) {
-      meta.classList.add('dark');
-      controls.classList.add('dark');
-      mobileRotate.classList.add('dark');
-    }
-  }
-  if (!img.getAttribute('src')) img.src = CONFIG.imageSrc;
-  img.alt = CONFIG.metadata.title || 'Artwork';
-  snapToggle.checked = snapToState;
-  function persistSnap() {
-    try { localStorage.setItem(SNAP_KEY, snapToState ? '1' : '0'); } catch (e) {}
-  }
-  function renderAdvancedMeta() {
-    if (!CONFIG.advancedMetadata || !CONFIG.advancedMetadata.length) {
-      metaAdvWrap.style.display = 'none';
-      return;
-    }
-    if (CONFIG.overlayFields.advanced === false) {
-      metaAdvWrap.style.display = 'none';
-      return;
-    }
-    metaAdvWrap.style.display = 'block';
-    metaAdvList.innerHTML = CONFIG.advancedMetadata.map(function(entry) {
-      return '<dt>' + entry.label + '</dt><dd>' + entry.value.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</dd>';
-    }).join('');
-  }
-  renderAdvancedMeta();
-  function syncOverlayToggleUi() {
-    if (!overlayToggle) return;
-    overlayToggle.textContent = overlaysEnabled ? 'Artwork only' : 'Show overlays';
-    overlayToggle.setAttribute('aria-pressed', overlaysEnabled ? 'false' : 'true');
-    if (metaContent) metaContent.style.display = overlaysEnabled ? '' : 'none';
-  }
-  syncOverlayToggleUi();
-  if (overlayToggle) {
-    overlayToggle.addEventListener('click', function(e) {
-      e.stopPropagation();
-      overlaysEnabled = !overlaysEnabled;
-      syncOverlayToggleUi();
-      if (overlaysEnabled) updateMeta();
-      pulseUi();
-    });
-  }
-  metaAdvToggle.addEventListener('click', function(e) {
-    e.stopPropagation();
-    metaAdvOpen = !metaAdvOpen;
-    metaAdvToggle.classList.toggle('open', metaAdvOpen);
-    metaAdv.classList.toggle('open', metaAdvOpen);
-    meta.classList.add('interactive');
-    pulseUi();
-  });
-  metaAdv.addEventListener('click', function(e) { e.stopPropagation(); });
-  metaAdvWrap.addEventListener('click', function(e) { e.stopPropagation(); });
-  meta.addEventListener('click', function(e) { e.stopPropagation(); });
-  controls.addEventListener('click', function(e) { e.stopPropagation(); });
-  mobileRotate.addEventListener('click', function(e) {
-    e.stopPropagation();
-    var button = e.target.closest('button');
-    if (!button) return;
-    if (button.dataset.rotate) rotate(button.dataset.rotate);
-    if (button.dataset.reset !== undefined) resetView();
-  });
-  snapToggle.addEventListener('change', function(e) {
-    e.stopPropagation();
-    snapToState = snapToggle.checked;
-    persistSnap();
-    pulseUi();
-  });
-  function norm(a) { a %= 360; return a < 0 ? a + 360 : a; }
-  function delta(from, to) {
-    var a = norm(from), b = norm(to), d = b - a;
-    if (d > 180) d -= 360;
-    if (d < -180) d += 360;
-    return d;
-  }
-  function nearestState(a) {
-    if (!CONFIG.states.length) return null;
-    var best = CONFIG.states[0], min = Math.abs(delta(a, best.angle));
-    CONFIG.states.forEach(function(s) {
-      var dist = Math.abs(delta(a, s.angle));
-      if (dist < min) { min = dist; best = s; }
-    });
-    return best;
-  }
-  function nextState(dir) {
-    if (!CONFIG.states.length) return null;
-    var sorted = CONFIG.states.slice().sort(function(a,b) { return a.angle - b.angle; });
-    var active = nearestState(angle);
-    var idx = active ? sorted.findIndex(function(s) { return s.id === active.id; }) : 0;
-    return sorted[dir === 'cw' ? (idx + 1) % sorted.length : (idx - 1 + sorted.length) % sorted.length];
-  }
-  function updateMeta() {
-    if (!CONFIG.showMetadata || !overlaysEnabled) return;
-    var active = nearestState(angle);
-    var h1 = meta.querySelector('h1');
-    var titleText = CONFIG.overlayFields.title !== false ? (CONFIG.metadata.title || '') : '';
-    h1.textContent = titleText;
-    if (/[\\u0B80-\\u0BFF]/.test(titleText)) h1.classList.add('tamil-title');
-    else h1.classList.remove('tamil-title');
-    meta.querySelector('.detail').textContent = CONFIG.primaryDetails ? CONFIG.primaryDetails.join(' · ') : '';
-    meta.querySelector('.state').textContent = CONFIG.overlayFields.state !== false && active ? (active.name && active.name.trim() ? active.name : (Math.round(active.angle) + '°')) : '';
-    meta.querySelector('.caption').textContent = CONFIG.overlayFields.caption !== false && active && active.caption ? active.caption : '';
-  }
-  function applyTransform() {
-    transformEl.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + zoom + ')';
-    img.style.transform = 'rotate(' + angle + 'deg)';
-    updateMeta();
-  }
-  function animate() {
-    if (animStart === null) { applyTransform(); return; }
-    var t = Math.min(1, (performance.now() - animStart) / DURATION);
-    angle = norm(animFrom + delta(animFrom, targetAngle) * (1 - Math.pow(1 - t, 3)));
-    applyTransform();
-    if (t < 1) requestAnimationFrame(animate);
-    else { angle = targetAngle; animStart = null; applyTransform(); }
-  }
-  function goTo(newAngle) {
-    animFrom = angle; targetAngle = norm(newAngle); animStart = performance.now();
-    requestAnimationFrame(animate);
-  }
-  function rotate(dir) {
-    if (snapToState && CONFIG.states.length) {
-      var s = nextState(dir);
-      if (s) goTo(s.angle);
-    } else {
-      goTo(angle + (dir === 'cw' ? 22.5 : -22.5));
-    }
-    pulseUi();
-  }
-  function resetView() { zoom = 1; panX = 0; panY = 0; goTo(CONFIG.initialAngle || 0); pulseUi(); }
-  function pulseUi() {
-    meta.classList.remove('hidden');
-    controls.classList.add('visible');
-    mobileRotate.classList.add('visible');
-    hint.classList.add('visible');
-    clearTimeout(idleTimer);
-    idleTimer = setTimeout(function() {
-      if (!metaAdvOpen) meta.classList.remove('interactive');
-      meta.classList.add('hidden');
-      controls.classList.remove('visible');
-      mobileRotate.classList.remove('visible');
-      hint.classList.remove('visible');
-    }, 3200);
-  }
-  stage.addEventListener('click', function(e) {
-    if (dragging || suppressClick) {
-      suppressClick = false;
-      return;
-    }
-    var rect = stage.getBoundingClientRect();
-    rotate((e.clientX - rect.left) < rect.width / 2 ? 'ccw' : 'cw');
-  });
-  stage.addEventListener('dblclick', function(e) { e.preventDefault(); resetView(); });
-  stage.addEventListener('wheel', function(e) {
-    e.preventDefault();
-    zoom = Math.min(4, Math.max(0.4, zoom + (e.deltaY < 0 ? 0.08 : -0.08)));
-    applyTransform();
-    pulseUi();
-  }, { passive: false });
-  var dragging = false, lastX = 0, lastY = 0;
-  function pointerDistance() {
-    var ids = Object.keys(pointers);
-    if (ids.length < 2) return 0;
-    var a = pointers[ids[0]], b = pointers[ids[1]];
-    return Math.hypot(a.x - b.x, a.y - b.y);
-  }
-  stage.addEventListener('pointerdown', function(e) {
-    if (e.detail > 1) return;
-    dragging = false;
-    pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
-    if (Object.keys(pointers).length === 2) {
-      pinchStart = { distance: pointerDistance(), zoom: zoom };
-      suppressClick = true;
-    }
-    lastX = e.clientX;
-    lastY = e.clientY;
-    stage.setPointerCapture(e.pointerId);
-  });
-  stage.addEventListener('pointermove', function(e) {
-    if (!stage.hasPointerCapture(e.pointerId)) return;
-    pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
-    if (pinchStart && Object.keys(pointers).length >= 2) {
-      var distance = pointerDistance();
-      if (pinchStart.distance > 0) {
-        zoom = Math.min(4, Math.max(0.4, pinchStart.zoom * (distance / pinchStart.distance)));
-        applyTransform();
-        pulseUi();
-      }
-      suppressClick = true;
-      return;
-    }
-    var dx = e.clientX - lastX;
-    var dy = e.clientY - lastY;
-    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
-      dragging = true;
-      suppressClick = true;
-    }
-    if (!dragging) return;
-    panX += dx;
-    panY += dy;
-    lastX = e.clientX;
-    lastY = e.clientY;
-    applyTransform();
-    pulseUi();
-  });
-  function endPointer(e) {
-    if (stage.hasPointerCapture(e.pointerId)) {
-      try { stage.releasePointerCapture(e.pointerId); } catch (err) {}
-    }
-    delete pointers[e.pointerId];
-    if (Object.keys(pointers).length < 2) pinchStart = null;
-    setTimeout(function() { dragging = false; }, 0);
-  }
-  stage.addEventListener('pointerup', endPointer);
-  stage.addEventListener('pointercancel', endPointer);
-  window.addEventListener('keydown', function(e) {
-    if (e.key === 'ArrowLeft') rotate('ccw');
-    if (e.key === 'ArrowRight') rotate('cw');
-    if (e.key === '+' || e.key === '=') { zoom = Math.min(4, zoom + 0.1); applyTransform(); pulseUi(); }
-    if (e.key === '-') { zoom = Math.max(0.4, zoom - 0.1); applyTransform(); pulseUi(); }
-    if (e.key === '0') resetView();
-  });
-  applyTransform();
-  pulseUi();
-})();
+${runtimeScript}
 </script>
 </body>
 </html>`;
+
+  return shouldMinify ? minifyStandaloneHtml(html) : html;
 }

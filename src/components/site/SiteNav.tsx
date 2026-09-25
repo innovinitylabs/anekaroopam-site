@@ -6,10 +6,17 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { BrandLogo } from "@/components/site/BrandLogo";
 import { MobileNav } from "@/components/site/MobileNav";
+import { PattaraiNavLabel } from "@/components/site/PattaraiNavLabel";
 import {
   isSiteNavScrolled,
   SITE_NAV_SCROLL_THRESHOLD_PX,
 } from "@/lib/site/site-nav-scroll";
+import {
+  isPattaraiPath,
+  PATTARAI_ARIA_LABEL,
+  PATTARAI_HREF,
+  PATTARAI_TITLE,
+} from "@/lib/site/pattarai-nav";
 import { cn } from "@/lib/utils";
 
 const links = [
@@ -25,7 +32,7 @@ const linkFocusClass =
 
 export function SiteNav() {
   const pathname = usePathname();
-  const onPerceive = pathname.startsWith("/perceive");
+  const onPattarai = isPattaraiPath(pathname);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -93,14 +100,16 @@ export function SiteNav() {
             Menu
           </button>
           <Link
-            href="/perceive"
+            href={PATTARAI_HREF}
+            aria-label={PATTARAI_ARIA_LABEL}
+            title={PATTARAI_TITLE}
             className={cn(
-              "hidden py-3 text-[0.62rem] tracking-[0.18em] uppercase text-[var(--ink)] transition-opacity md:inline-block",
+              "group/pattarai hidden py-3 text-[0.62rem] text-[var(--ink)] transition-opacity md:inline-block",
               linkFocusClass,
-              onPerceive ? "opacity-100" : "opacity-50 hover:opacity-90",
+              onPattarai ? "opacity-100" : "opacity-50 hover:opacity-90",
             )}
           >
-            Perception
+            <PattaraiNavLabel variant="desktop" />
           </Link>
         </div>
       </nav>

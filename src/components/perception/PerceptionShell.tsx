@@ -4,6 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnekaroopamWordmark } from "@/components/site/AnekaroopamWordmark";
 import { BRAND } from "@/lib/brand";
+import {
+  PATTARAI_ARIA_LABEL,
+  PATTARAI_LABEL,
+  PATTARAI_TAMIL,
+} from "@/lib/site/pattarai-nav";
 import { PerceptionSubnav } from "./PerceptionSubnav";
 import { CreatorCredit } from "./CreatorCredit";
 
@@ -30,9 +35,23 @@ export function PerceptionShell({ children }: { children: React.ReactNode }) {
             <AnekaroopamWordmark />
           </Link>
           <span className="hidden h-3 w-px bg-[var(--border)] sm:block" aria-hidden />
-          <PerceptionSubnav />
+          <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-4">
+            <p
+              className="shrink-0 text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]"
+              title={PATTARAI_ARIA_LABEL}
+            >
+              <span className="text-[var(--ink)]">{PATTARAI_LABEL}</span>
+              <span className="mx-1.5 opacity-40" aria-hidden>
+                ·
+              </span>
+              <span lang="ta" className="font-normal tracking-normal normal-case">
+                {PATTARAI_TAMIL}
+              </span>
+            </p>
+            <PerceptionSubnav />
+          </div>
         </div>
-        <nav className="hidden items-center gap-6 md:flex">
+        <nav className="hidden items-center gap-6 md:flex" aria-label="Site">
           {siteLinks.map((link) => (
             <Link
               key={link.href}
@@ -46,9 +65,13 @@ export function PerceptionShell({ children }: { children: React.ReactNode }) {
         </nav>
       </header>
 
-      {onPrepare && (
+      {onPrepare ? (
         <p className="shrink-0 border-b border-[var(--border)] px-4 py-2 text-[0.64rem] leading-relaxed tracking-[0.1em] text-[var(--muted)] sm:px-6 sm:text-[0.68rem] sm:tracking-[0.12em]">
-          Archival conversion and export preparation
+          Pattarai prepare — archival conversion and standalone viewer export
+        </p>
+      ) : (
+        <p className="shrink-0 border-b border-[var(--border)] px-4 py-2 text-[0.64rem] leading-relaxed tracking-[0.1em] text-[var(--muted)] sm:px-6 sm:text-[0.68rem] sm:tracking-[0.12em]">
+          Pattarai orient — perceptual states, metadata, and rotational preview
         </p>
       )}
 

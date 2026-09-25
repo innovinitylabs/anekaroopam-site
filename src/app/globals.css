@@ -237,26 +237,18 @@ body {
   background-size: 320px 320px, 400px 400px;
 }
 
-/* Dark perception workspace — matte surface, minimal cool grain */
+/* Pattarai workspace — paper tokens, denser tool chrome (not a second design system) */
 .perceive-theme {
   position: relative;
   z-index: 1;
-  --background: #0f0f0f;
-  --foreground: #e8e4dc;
-  --border: rgba(232, 228, 220, 0.1);
-  --surface: #141414;
-  --surface-elevated: #1a1a1a;
-  --muted: #9a9488;
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --border: rgba(26, 24, 20, 0.12);
+  --surface: rgba(248, 244, 236, 0.72);
+  --surface-elevated: #faf8f4;
+  --muted: #8a8478;
 }
 
 .perceive-theme::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  opacity: 0.018;
-  mix-blend-mode: soft-light;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='d'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23d)'/%3E%3C/svg%3E");
-  background-size: 520px 520px;
+  content: none;
 }

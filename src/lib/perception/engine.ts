@@ -1,5 +1,30 @@
 import type { PerceptualState, ViewTransform } from "./types";
-import { DEFAULT_ENGINE_OPTIONS, type PerceptionEngineOptions } from "./types";
+import {
+  DEFAULT_ENGINE_OPTIONS,
+  type PerceptionEngineOptions,
+} from "./types";
+import {
+  PERCEPTION_ACTIVE_STATE_THRESHOLD_DEG,
+  PERCEPTION_DRAG_THRESHOLD_PX,
+  PERCEPTION_KEYBOARD_ZOOM_DELTA,
+  PERCEPTION_WHEEL_ZOOM_DELTA,
+} from "./constants";
+
+export {
+  PERCEPTION_WHEEL_LISTENER_OPTIONS,
+  PERCEPTION_IDLE_MS,
+  PERCEPTION_INTERPOLATE_MS,
+  PERCEPTION_ROTATION_STEP_DEG,
+  PERCEPTION_MIN_ZOOM,
+  PERCEPTION_MAX_ZOOM,
+  PERCEPTION_ACTIVE_STATE_THRESHOLD_DEG,
+  PERCEPTION_WHEEL_ZOOM_DELTA,
+  PERCEPTION_KEYBOARD_ZOOM_DELTA,
+  PERCEPTION_DRAG_THRESHOLD_PX,
+  PERCEPTION_VIEWPORT_PADDING_PCT,
+  PERCEPTION_OBJECT_FIT,
+  STANDALONE_RUNTIME_MARKERS,
+} from "./constants";
 
 export function normalizeAngle(angle: number): number {
   const mod = angle % 360;
@@ -43,7 +68,7 @@ export function findNearestState(
 export function getActiveState(
   angle: number,
   states: PerceptualState[],
-  threshold = 8,
+  threshold = PERCEPTION_ACTIVE_STATE_THRESHOLD_DEG,
 ): PerceptualState | null {
   const nearest = findNearestState(angle, states);
   if (!nearest) return null;
@@ -79,14 +104,6 @@ export function defaultTransform(initialAngle = 0): ViewTransform {
   return { angle: initialAngle, zoom: 1, panX: 0, panY: 0 };
 }
 
-/**
- * Native wheel listener options for PerceptionCanvas.
- * React onWheel is passive under React 19; preventDefault requires passive: false.
- */
-export const PERCEPTION_WHEEL_LISTENER_OPTIONS: AddEventListenerOptions = {
-  passive: false,
-};
-
 export function clampZoom(
   zoom: number,
   options: PerceptionEngineOptions = {},
@@ -108,4 +125,45 @@ export function rotateByDirection(
   }
   const delta = direction === "cw" ? merged.rotationStep : -merged.rotationStep;
   return normalizeAngle(transform.angle + delta);
+}
+
+/** Half-click rotation: left half = ccw, right half = cw. */
+export function clickRotationDirection(
+  clientX: number,
+  stageLeft: number,
+  stageWidth: number,
+): "cw" | "ccw" {
+  return clientX - stageLeft < stageWidth / 2 ? "ccw" : "cw";
+}
+
+export function wheelZoomDelta(deltaY: number): number {
+  return deltaY < 0
+    ? PERCEPTION_WHEEL_ZOOM_DELTA
+    : -PERCEPTION_WHEEL_ZOOM_DELTA;
+}
+
+export function keyboardZoomDelta(key: string): number | null {
+  if (key === "+" || key === "=") return PERCEPTION_KEYBOARD_ZOOM_DELTA;
+  if (key === "-") return -PERCEPTION_KEYBOARD_ZOOM_DELTA;
+  return null;
+}
+
+export function exceedsDragThreshold(dx: number, dy: number): boolean {
+  return (
+    Math.abs(dx) > PERCEPTION_DRAG_THRESHOLD_PX ||
+    Math.abs(dy) > PERCEPTION_DRAG_THRESHOLD_PX
+  );
+}
+
+/**
+ * Control elements must not trigger stage rotation.
+ * Adapters call stopPropagation on these; tests assert the contract.
+ */
+export const PERCEPTION_CONTROL_STOP_PROPAGATION = true as const;
+
+export function shouldIgnoreStageClick(options: {
+  dragging: boolean;
+  suppressClick: boolean;
+}): boolean {
+  return options.dragging || options.suppressClick;
 }

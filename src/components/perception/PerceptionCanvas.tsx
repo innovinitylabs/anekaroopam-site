@@ -11,13 +11,22 @@ import { motion } from "framer-motion";
 import type { PerceptionArtwork } from "@/lib/perception/types";
 import {
   clampZoom,
+  clickRotationDirection,
   defaultTransform,
   easeOutCubic,
+  exceedsDragThreshold,
   getActiveState,
+  keyboardZoomDelta,
   lerpAngle,
   normalizeAngle,
+  PERCEPTION_IDLE_MS,
+  PERCEPTION_INTERPOLATE_MS,
+  PERCEPTION_OBJECT_FIT,
+  PERCEPTION_VIEWPORT_PADDING_PCT,
   PERCEPTION_WHEEL_LISTENER_OPTIONS,
   rotateByDirection,
+  shouldIgnoreStageClick,
+  wheelZoomDelta,
 } from "@/lib/perception/engine";
 import { resolveBackground, foregroundForBackground } from "@/lib/perception/backgrounds";
 import { PerceptionMetadata } from "./PerceptionMetadata";
@@ -62,7 +71,10 @@ export function PerceptionCanvas({
     setUiVisible(true);
     onInteraction?.();
     if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    idleTimerRef.current = setTimeout(() => setUiVisible(false), 3200);
+    idleTimerRef.current = setTimeout(
+      () => setUiVisible(false),
+      PERCEPTION_IDLE_MS,
+    );
   }, [onInteraction]);
 
   const animateToAngle = useCallback(
@@ -70,7 +82,7 @@ export function PerceptionCanvas({
       if (animRef.current) cancelAnimationFrame(animRef.current);
       const from = transform.angle;
       const start = performance.now();
-      const duration = 680;
+      const duration = PERCEPTION_INTERPOLATE_MS;
 
       const tick = (now: number) => {
         const t = Math.min(1, (now - start) / duration);
@@ -115,13 +127,17 @@ export function PerceptionCanvas({
 
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
-      if (draggingRef.current || suppressClickRef.current) {
+      if (
+        shouldIgnoreStageClick({
+          dragging: draggingRef.current,
+          suppressClick: suppressClickRef.current,
+        })
+      ) {
         suppressClickRef.current = false;
         return;
       }
       const rect = e.currentTarget.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      rotate(x < rect.width / 2 ? "ccw" : "cw");
+      rotate(clickRotationDirection(e.clientX, rect.left, rect.width));
     },
     [rotate],
   );
@@ -166,7 +182,7 @@ export function PerceptionCanvas({
       }
       const dx = e.clientX - lastPointerRef.current.x;
       const dy = e.clientY - lastPointerRef.current.y;
-      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+      if (exceedsDragThreshold(dx, dy)) {
         draggingRef.current = true;
         suppressClickRef.current = true;
       }
@@ -197,7 +213,7 @@ export function PerceptionCanvas({
       e.preventDefault();
       setTransform((prev) => ({
         ...prev,
-        zoom: clampZoom(prev.zoom + (e.deltaY < 0 ? 0.08 : -0.08)),
+        zoom: clampZoom(prev.zoom + wheelZoomDelta(e.deltaY)),
       }));
       pulseUi();
     };
@@ -215,12 +231,12 @@ export function PerceptionCanvas({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowLeft") rotate("ccw");
       if (e.key === "ArrowRight") rotate("cw");
-      if (e.key === "+" || e.key === "=") {
-        setTransform((prev) => ({ ...prev, zoom: clampZoom(prev.zoom + 0.1) }));
-        pulseUi();
-      }
-      if (e.key === "-") {
-        setTransform((prev) => ({ ...prev, zoom: clampZoom(prev.zoom - 0.1) }));
+      const zoomDelta = keyboardZoomDelta(e.key);
+      if (zoomDelta !== null) {
+        setTransform((prev) => ({
+          ...prev,
+          zoom: clampZoom(prev.zoom + zoomDelta),
+        }));
         pulseUi();
       }
       if (e.key === "0") resetView();
@@ -238,10 +254,13 @@ export function PerceptionCanvas({
     };
   }, [pulseUi]);
 
+  const pad = `${PERCEPTION_VIEWPORT_PADDING_PCT}%`;
+
   return (
     <motion.div
       ref={containerRef}
       data-perception-mode={mode}
+      data-perception-engine="shared"
       className={cn(
         "relative h-full w-full overflow-hidden select-none touch-none",
         "cursor-crosshair",
@@ -260,7 +279,10 @@ export function PerceptionCanvas({
       role="application"
       aria-label={`Orientation interface for ${artwork.metadata.title}`}
     >
-      <div className="absolute inset-0 flex items-center justify-center p-[4%]">
+      <div
+        className="absolute inset-0 flex items-center justify-center"
+        style={{ padding: pad }}
+      >
         <motion.div
           className="flex h-full w-full items-center justify-center"
           style={{
@@ -273,8 +295,8 @@ export function PerceptionCanvas({
           <motion.img
             src={artwork.imageSrc}
             alt={artwork.metadata.title}
-            className="pointer-events-none max-h-full max-w-full object-contain"
-            style={{ rotate: transform.angle }}
+            className="pointer-events-none max-h-full max-w-full"
+            style={{ rotate: transform.angle, objectFit: PERCEPTION_OBJECT_FIT }}
             draggable={false}
           />
         </motion.div>
