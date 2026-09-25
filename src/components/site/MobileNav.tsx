@@ -77,7 +77,7 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
                       href={link.href}
                       onClick={onClose}
                       className={cn(
-                        "block border-b border-[var(--border)] py-3.5 text-sm tracking-[0.14em] uppercase transition-opacity last:border-b-0",
+                        "block border-b border-[var(--border)] py-3.5 text-sm tracking-[0.14em] uppercase text-[var(--ink)] transition-opacity last:border-b-0 outline-none focus-visible:ring-1 focus-visible:ring-[var(--ink)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-elevated)]",
                         active
                           ? "opacity-100"
                           : "opacity-50 hover:opacity-80",

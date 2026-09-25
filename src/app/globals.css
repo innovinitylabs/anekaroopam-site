@@ -42,6 +42,7 @@
 /* Archival paper material system — layered, museum rag */
 html {
   scroll-behavior: smooth;
+  scroll-padding-top: calc(env(safe-area-inset-top, 0px) + 5.5rem);
   min-height: 100%;
   overflow-x: clip;
   background-color: var(--paper);
