@@ -5,6 +5,7 @@ import {
   revokePreparedPreview,
   type LocalPreparedMaster,
 } from "@/lib/archive/browser-durable-commit";
+import { formatByteSize } from "@/lib/archive/commit-bundle-limits";
 import { useState } from "react";
 import type { AccessionDraft } from "@/lib/archive/schema";
 import { canPrepareWorkingMaster } from "@/lib/archive/ingest-source-gates";
@@ -110,8 +111,8 @@ export function EmbeddedPreparePanel({
         </div>
         {prepared && (
           <p className="mt-3 text-[0.72rem] text-[var(--muted)]">
-            Local prepared master ready ({prepared.width}×{prepared.height} AVIF,
-            {Math.round(prepared.blob.size / 1024)} KB). Not uploaded yet.
+            Local prepared master ready ({prepared.width}×{prepared.height} AVIF,{" "}
+            {formatByteSize(prepared.blob.size)}). Not uploaded yet.
           </p>
         )}
       </div>

@@ -46,8 +46,18 @@ export type WorkerRevisionDetail = {
 export type WorkerArtworkDetail = {
   artwork: WorkerArtwork;
   workingRevision: WorkerRevisionDetail | null;
-  publishedRevision: { revision: number; kind: string; metadata: Record<string, unknown> } | null;
+  publishedRevision: WorkerRevisionDetail | null;
   assets: Array<{
+    role: string;
+    object_key: string;
+    mime_type: string;
+    byte_size: number;
+    verified_at: string | null;
+    width: number | null;
+    height: number | null;
+  }>;
+  /** Assets registered on the published frozen revision (mint/HTML package source). */
+  publishedAssets?: Array<{
     role: string;
     object_key: string;
     mime_type: string;

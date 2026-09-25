@@ -208,6 +208,13 @@ export function ArchiveEntryActions({
         type="button"
         onClick={regenerate}
         disabled={busy || !hasSource || status === "withdrawn"}
+        title={
+          status === "withdrawn"
+            ? "Withdrawn archives cannot be regenerated. Restore first."
+            : !hasSource
+              ? "Deposit a source image before regenerating."
+              : "Rebuild local archive derivatives and metadata from the deposited source."
+        }
         className="border border-[var(--border)] px-3 py-2 text-[0.62rem] tracking-[0.14em] uppercase disabled:opacity-30"
       >
         Regenerate
@@ -236,6 +243,7 @@ export function ArchiveEntryActions({
         type="button"
         onClick={() => runArchiveAction("mint-package", "Mint package exported")}
         disabled={busy}
+        title="Write a local mint-package folder (perception.html + derivatives) under content/archive for this slug."
         className="border border-[var(--border)] px-3 py-2 text-[0.62rem] tracking-[0.14em] uppercase disabled:opacity-30"
       >
         Export mint package
@@ -244,6 +252,7 @@ export function ArchiveEntryActions({
         type="button"
         onClick={() => runArchiveAction("manifest", "Manifest rebuilt")}
         disabled={busy}
+        title="Rebuild the archive manifest.json from the current local entry."
         className="border border-[var(--border)] px-3 py-2 text-[0.62rem] tracking-[0.14em] uppercase disabled:opacity-30"
       >
         Rebuild manifest
@@ -252,6 +261,7 @@ export function ArchiveEntryActions({
         type="button"
         onClick={() => runArchiveAction("exports", "Exports rebuilt")}
         disabled={busy}
+        title="Rebuild export derivatives for this local archive entry."
         className="border border-[var(--border)] px-3 py-2 text-[0.62rem] tracking-[0.14em] uppercase disabled:opacity-30"
       >
         Rebuild exports
@@ -261,6 +271,7 @@ export function ArchiveEntryActions({
           type="button"
           onClick={discardGenerated}
           disabled={busy}
+          title="Permanently remove this unpublished generated archive from local storage. Draft workspace is kept."
           className="border border-[var(--border)] px-3 py-2 text-[0.62rem] tracking-[0.14em] uppercase text-red-200/90 disabled:opacity-30"
         >
           Discard generated archive
@@ -271,6 +282,7 @@ export function ArchiveEntryActions({
           type="button"
           onClick={() => setVisibility(restoreTarget)}
           disabled={busy}
+          title="Restore prior visibility (published or generated) without allocating a new accession."
           className="border border-[var(--border)] px-3 py-2 text-[0.62rem] tracking-[0.14em] uppercase disabled:opacity-30"
         >
           Unhide
@@ -280,6 +292,7 @@ export function ArchiveEntryActions({
           type="button"
           onClick={() => setVisibility("hidden")}
           disabled={busy}
+          title="Hide this archive from the public listing while keeping the local record."
           className="border border-[var(--border)] px-3 py-2 text-[0.62rem] tracking-[0.14em] uppercase disabled:opacity-30"
         >
           Hide
@@ -290,6 +303,7 @@ export function ArchiveEntryActions({
           type="button"
           onClick={() => setVisibility(restoreTarget)}
           disabled={busy}
+          title="Restore prior visibility so working edits are allowed again."
           className="border border-[var(--border)] px-3 py-2 text-[0.62rem] tracking-[0.14em] uppercase disabled:opacity-30"
         >
           Restore
@@ -299,13 +313,17 @@ export function ArchiveEntryActions({
           type="button"
           onClick={() => setVisibility("withdrawn")}
           disabled={busy}
+          title="Withdraw this archive. Editing is blocked until restored."
           className="border border-[var(--border)] px-3 py-2 text-[0.62rem] tracking-[0.14em] uppercase disabled:opacity-30"
         >
           Withdraw
         </button>
       )}
       {!hasSource && (
-        <label className="cursor-pointer border border-[var(--border)] px-3 py-2 text-[0.62rem] tracking-[0.14em] uppercase">
+        <label
+          title="Upload the original master into the local archive source deposit."
+          className="cursor-pointer border border-[var(--border)] px-3 py-2 text-[0.62rem] tracking-[0.14em] uppercase"
+        >
           Deposit source
           <input
             ref={inputRef}

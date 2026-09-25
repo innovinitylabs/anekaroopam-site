@@ -385,6 +385,10 @@ async function getArtworkDetail(env: Env, id: string): Promise<Response> {
     artwork.published_revision != null
       ? await getRevision(db(env), id, artwork.published_revision)
       : null;
+  const publishedAssets =
+    artwork.published_revision != null
+      ? await listRevisionAssets(db(env), id, artwork.published_revision)
+      : [];
   const required = parseRequiredRoles(env.REQUIRED_ROLES);
   const readiness = working
     ? await revisionHasRequiredAssets(db(env), id, working.revision, required)
@@ -407,9 +411,13 @@ async function getArtworkDetail(env: Env, id: string): Promise<Response> {
           revision: published.revision,
           kind: published.kind,
           metadata: JSON.parse(published.metadata_json),
+          perception: JSON.parse(published.perception_json),
+          export: JSON.parse(published.export_json),
+          provenance: JSON.parse(published.provenance_json),
         }
       : null,
     assets,
+    publishedAssets,
     readiness,
   });
 }

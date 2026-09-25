@@ -163,12 +163,14 @@ export default async function AdminDashboardPage({
                   <div className="flex flex-wrap gap-2">
                     <Link
                       href={`/admin/new?draft=${encodeURIComponent(artwork.draftId)}`}
+                      title="Open the working revision in the ingestion wizard to edit metadata, media, or orientation."
                       className="border border-[var(--border)] px-3 py-1.5 text-[0.62rem] tracking-[0.12em] uppercase"
                     >
                       Edit working
                     </Link>
                     <Link
                       href={`/admin/artworks/${encodeURIComponent(artwork.id)}`}
+                      title="Open admin detail: readiness, revisions, assets, and lifecycle actions."
                       className="border border-[var(--border)] px-3 py-1.5 text-[0.62rem] tracking-[0.12em] uppercase"
                     >
                       Detail
@@ -176,6 +178,7 @@ export default async function AdminDashboardPage({
                     {artwork.status === "published" && (
                       <Link
                         href={`/archive/${encodeURIComponent(artwork.slug)}`}
+                        title="Open the public archive viewer for the published revision."
                         className="border border-[var(--border)] px-3 py-1.5 text-[0.62rem] tracking-[0.12em] uppercase"
                       >
                         View
@@ -260,6 +263,7 @@ export default async function AdminDashboardPage({
                         <div className="flex flex-wrap gap-2">
                           <Link
                             href={`/admin/new?draft=${encodeURIComponent(draft.draftId)}`}
+                            title="Continue editing this unfinished accession draft in the wizard."
                             className="border border-[var(--border)] px-3 py-1.5 text-[0.62rem] tracking-[0.12em] uppercase"
                           >
                             Resume
@@ -293,12 +297,14 @@ export default async function AdminDashboardPage({
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Link
                         href={`/admin/new?edit=${encodeURIComponent(entry.slug)}`}
+                        title="Open this archive record in the ingestion wizard for revision."
                         className="border border-[var(--border)] px-3 py-1.5 text-[0.62rem] tracking-[0.12em] uppercase"
                       >
                         Edit
                       </Link>
                       <Link
                         href={`/archive/${encodeURIComponent(entry.slug)}`}
+                        title="Open the public archive viewer for this slug."
                         className="border border-[var(--border)] px-3 py-1.5 text-[0.62rem] tracking-[0.12em] uppercase"
                       >
                         View

@@ -38,6 +38,7 @@ export interface BrowserR2CommitResult {
   draft: AccessionDraft;
   commitSha: string;
   accessionId: string;
+  artworkId: string | null;
   revision: number;
   files: { path: string; bytes: number }[];
   warnings: string[];
@@ -290,8 +291,9 @@ export async function commitBrowserR2Bundle(input: {
     })),
     warnings: [
       ...pack.warnings,
-      `R2 revision r${auth.revision} for ${auth.accessionId}. Reference ${committed.commitSha.slice(0, 7)}.`,
+      `Revision r${auth.revision} stored for ${auth.accessionId} (ref ${committed.commitSha.slice(0, 7)}).`,
     ],
+    artworkId: auth.artworkId ?? null,
     archiveStatus: pack.draft.status,
     binaryBytes,
     sourceBytes: sourceBlob.size,

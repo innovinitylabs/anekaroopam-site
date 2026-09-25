@@ -143,6 +143,8 @@ export function buildStandaloneHtml(
   #controls.dark { color: rgba(232,228,220,0.5); }
   #controls.visible { opacity: 1; pointer-events: auto; }
   #controls label { display: flex; align-items: center; gap: 0.45rem; cursor: pointer; user-select: none; }
+  #controls #overlay-toggle { display: block; margin-top: 0.55rem; border: 1px solid currentColor; background: transparent; color: inherit; font: inherit; font-size: 0.56rem; letter-spacing: 0.14em; text-transform: uppercase; padding: 0.35rem 0.5rem; cursor: pointer; opacity: 0.75; }
+  #controls #overlay-toggle:hover { opacity: 1; }
   #controls input[type="checkbox"] { width: 0.75rem; height: 0.75rem; margin: 0; accent-color: rgba(26,24,20,0.45); cursor: pointer; }
   #controls.dark input[type="checkbox"] { accent-color: rgba(232,228,220,0.45); }
   #mobile-rotate { display: none; }
@@ -173,6 +175,7 @@ export function buildStandaloneHtml(
       <input type="checkbox" id="snap-toggle" />
       <span>Snap to perceptual states</span>
     </label>
+    <button type="button" id="overlay-toggle" title="Hide or show archival overlays" aria-label="Toggle archival overlays">Artwork only</button>
   </div>
   <div id="mobile-rotate">
     <button type="button" data-rotate="ccw" aria-label="Rotate counterclockwise">Ccw</button>
@@ -180,6 +183,7 @@ export function buildStandaloneHtml(
     <button type="button" data-rotate="cw" aria-label="Rotate clockwise">Cw</button>
   </div>
   <div id="meta">
+    <div id="meta-content">
     <h1></h1>
     <div class="state"></div>
     <div class="caption"></div>
@@ -192,6 +196,7 @@ export function buildStandaloneHtml(
         <span class="rule"></span>
       </button>
       <div id="meta-adv"><dl></dl></div>
+    </div>
     </div>
   </div>
   <div id="hint">Orientation is emergent</div>
@@ -215,7 +220,10 @@ export function buildStandaloneHtml(
   var metaAdvList = metaAdv.querySelector('dl');
   var angle = CONFIG.initialAngle || 0;
   var zoom = 1, panX = 0, panY = 0, targetAngle = angle, animStart = null, animFrom = angle;
-  var DURATION = 680, idleTimer = null, metaAdvOpen = false;
+  var metaAdvOpen = false;
+  var overlaysEnabled = CONFIG.showMetadata !== false;
+  var metaContent = document.getElementById('meta-content');
+  var overlayToggle = document.getElementById('overlay-toggle');
   var pointers = {};
   var pinchStart = null;
   var suppressClick = false;
@@ -257,6 +265,22 @@ export function buildStandaloneHtml(
     }).join('');
   }
   renderAdvancedMeta();
+  function syncOverlayToggleUi() {
+    if (!overlayToggle) return;
+    overlayToggle.textContent = overlaysEnabled ? 'Artwork only' : 'Show overlays';
+    overlayToggle.setAttribute('aria-pressed', overlaysEnabled ? 'false' : 'true');
+    if (metaContent) metaContent.style.display = overlaysEnabled ? '' : 'none';
+  }
+  syncOverlayToggleUi();
+  if (overlayToggle) {
+    overlayToggle.addEventListener('click', function(e) {
+      e.stopPropagation();
+      overlaysEnabled = !overlaysEnabled;
+      syncOverlayToggleUi();
+      if (overlaysEnabled) updateMeta();
+      pulseUi();
+    });
+  }
   metaAdvToggle.addEventListener('click', function(e) {
     e.stopPropagation();
     metaAdvOpen = !metaAdvOpen;
@@ -265,6 +289,9 @@ export function buildStandaloneHtml(
     meta.classList.add('interactive');
     pulseUi();
   });
+  metaAdv.addEventListener('click', function(e) { e.stopPropagation(); });
+  metaAdvWrap.addEventListener('click', function(e) { e.stopPropagation(); });
+  meta.addEventListener('click', function(e) { e.stopPropagation(); });
   controls.addEventListener('click', function(e) { e.stopPropagation(); });
   mobileRotate.addEventListener('click', function(e) {
     e.stopPropagation();
@@ -303,7 +330,7 @@ export function buildStandaloneHtml(
     return sorted[dir === 'cw' ? (idx + 1) % sorted.length : (idx - 1 + sorted.length) % sorted.length];
   }
   function updateMeta() {
-    if (!CONFIG.showMetadata) return;
+    if (!CONFIG.showMetadata || !overlaysEnabled) return;
     var active = nearestState(angle);
     var h1 = meta.querySelector('h1');
     var titleText = CONFIG.overlayFields.title !== false ? (CONFIG.metadata.title || '') : '';

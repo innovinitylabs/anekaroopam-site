@@ -110,6 +110,7 @@ export default async function ArchiveArtworkPage({
       {entry?.provenance && <ArchiveProvenance provenance={entry.provenance} />}
       <Link
         href="/archive"
+        title="Return to the public archive listing."
         className="fixed top-6 left-6 z-[60] rounded-sm bg-black/20 px-3 py-2 text-[0.62rem] tracking-[0.2em] uppercase text-white/80 backdrop-blur-sm transition-colors hover:bg-black/35 hover:text-white"
       >
         Back to archive

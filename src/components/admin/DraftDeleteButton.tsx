@@ -47,6 +47,7 @@ export function DraftDeleteButton({ draftId }: { draftId: string }) {
         type="button"
         onClick={deleteDraft}
         disabled={busy}
+        title="Delete this unfinished draft workspace only. Does not remove archive records or R2 objects."
         className="border border-[var(--border)] px-4 py-2 text-[0.68rem] tracking-[0.14em] uppercase text-[var(--muted)]"
       >
         Delete draft

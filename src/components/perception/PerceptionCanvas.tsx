@@ -43,6 +43,9 @@ export function PerceptionCanvas({
     defaultTransform(artwork.initialAngle ?? 0),
   );
   const [uiVisible, setUiVisible] = useState(true);
+  const [overlaysEnabled, setOverlaysEnabled] = useState(
+    artwork.showMetadataOverlay !== false,
+  );
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const animRef = useRef<number | null>(null);
   const draggingRef = useRef(false);
@@ -283,6 +286,8 @@ export function PerceptionCanvas({
           activeState={activeState}
           visible={uiVisible}
           foreground={fgColor}
+          overlaysEnabled={overlaysEnabled}
+          onOverlaysEnabledChange={setOverlaysEnabled}
         />
       )}
 

@@ -4,6 +4,9 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+/** Alias for shared archive admin formatting (same rules as formatBytes). */
+export { formatBytes as formatByteSize };
+
 export function compressionRatio(original: number, converted: number): number {
   if (original <= 0) return 0;
   return Math.round((1 - converted / original) * 100);

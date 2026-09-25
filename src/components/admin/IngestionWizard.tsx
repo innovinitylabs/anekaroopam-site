@@ -178,6 +178,9 @@ export function IngestionWizard({
   const [accessionId, setAccessionId] = useState("");
   const [slug, setSlug] = useState("");
   const [slugLocked, setSlugLocked] = useState(false);
+  const [slugValidation, setSlugValidation] = useState<
+    "idle" | "validating" | "valid" | "invalid" | "locked"
+  >("idle");
   const [status, setStatus] = useState("draft");
   const [provenance, setProvenance] = useState<ProvenanceRecord>(emptyProvenance());
   const [currentDraft, setCurrentDraft] = useState<AccessionDraft | null>(null);
@@ -209,6 +212,9 @@ export function IngestionWizard({
   const [commitCompleted, setCommitCompleted] = useState(false);
   const [commitInFlight, setCommitInFlight] = useState(false);
   const [lastCommittedSha, setLastCommittedSha] = useState<string | null>(null);
+  const [lastCommittedArtworkId, setLastCommittedArtworkId] = useState<
+    string | null
+  >(null);
   const [commitPhase, setCommitPhase] = useState<ArchiveCommitPhase>("idle");
   const [sourceHydrating, setSourceHydrating] = useState(false);
   const [serverSourceUnavailable, setServerSourceUnavailable] = useState(false);
@@ -289,6 +295,7 @@ export function IngestionWizard({
     setCurrentDraft(draft);
     setSlug(draft.slug);
     setSlugLocked(draft.slugLocked);
+    setSlugValidation(draft.slugLocked ? "locked" : "idle");
     setProvenance(draft.provenance);
     if (mappedFile) setSourceFile(mappedFile);
     const draftArtwork = {
@@ -760,6 +767,7 @@ export function IngestionWizard({
       setCommitError(null);
       setCommitCompleted(false);
       setLastCommittedSha(null);
+      setLastCommittedArtworkId(null);
       registerTransientUpload(draftId || "pending-draft", file);
       setSourceFile(file);
       setSourceDimensions(null);
@@ -919,6 +927,7 @@ export function IngestionWizard({
         setStatus(committed.archiveStatus);
         setLastSyncCommitSha(committed.commitSha);
         setLastCommittedSha(committed.commitSha);
+        setLastCommittedArtworkId(committed.artworkId);
         setCommitCompleted(true);
         setSyncUiState("synced");
         setCommitPhase("committed");
@@ -1132,6 +1141,7 @@ export function IngestionWizard({
   const handleSlugSave = async () => {
     if (!draftId) return;
     setError(null);
+    setSlugValidation("validating");
     if (durableStorage && d1Archive) {
       try {
         const res = await adminFetch(
@@ -1149,20 +1159,24 @@ export function IngestionWizard({
           slug?: string;
         };
         if (!res.ok || data.ok === false) {
+          setSlugValidation("invalid");
           throw new Error(
             data.errors?.join("; ") || data.error || "Slug validation failed",
           );
         }
         if (data.slug) setSlug(data.slug);
         setSlugLocked(true);
+        setSlugValidation("locked");
         await saveDraft();
       } catch (e) {
+        setSlugValidation("invalid");
         setError(e instanceof Error ? e.message : "Slug validation failed");
       }
       return;
     }
     if (durableStorage) {
       setSlugLocked(true);
+      setSlugValidation("locked");
       await saveDraft();
       return;
     }
@@ -1172,15 +1186,19 @@ export function IngestionWizard({
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ slug, lock: slugLocked }),
+          body: JSON.stringify({ slug, lock: true }),
         },
       );
       const data = (await res.json()) as DraftResponse;
       if (!res.ok || !data.draft) {
+        setSlugValidation("invalid");
         throw new Error(data.error ?? "Slug update failed");
       }
       applyDraft(data.draft);
+      setSlugLocked(true);
+      setSlugValidation("locked");
     } catch (e) {
+      setSlugValidation("invalid");
       setError(e instanceof Error ? e.message : "Slug update failed");
     }
   };
@@ -1291,9 +1309,24 @@ export function IngestionWizard({
             <input
               value={slug}
               title="Public path segment for this accession. Auto-generated from date and title unless locked."
-              onChange={(e) => setSlug(normalizeArchiveSlug(e.target.value))}
-              className="w-full border-b border-[var(--border)] bg-transparent py-1 text-[0.85rem] outline-none"
+              disabled={slugLocked || slugValidation === "validating"}
+              onChange={(e) => {
+                setSlug(normalizeArchiveSlug(e.target.value));
+                setSlugValidation(slugLocked ? "locked" : "idle");
+              }}
+              className="w-full border-b border-[var(--border)] bg-transparent py-1 text-[0.85rem] outline-none disabled:opacity-60"
             />
+            <span className="text-[0.62rem] text-[var(--muted)]">
+              {slugLocked || slugValidation === "locked"
+                ? "Locked"
+                : slugValidation === "validating"
+                  ? "Validating..."
+                  : slugValidation === "valid"
+                    ? "Valid"
+                    : slugValidation === "invalid"
+                      ? "Invalid"
+                      : "Not validated"}
+            </span>
           </label>
           <label
             title="Freeze the slug so changes to title or date no longer rewrite it automatically."
@@ -1302,17 +1335,22 @@ export function IngestionWizard({
             <input
               type="checkbox"
               checked={slugLocked}
-              onChange={(e) => setSlugLocked(e.target.checked)}
+              disabled={slugValidation === "validating"}
+              onChange={(e) => {
+                setSlugLocked(e.target.checked);
+                setSlugValidation(e.target.checked ? "locked" : "idle");
+              }}
             />
             Lock
           </label>
           <button
             type="button"
-            title="Check the slug is allowed and not already used, then save it to this draft."
+            title="Check the slug is allowed and not already used, then lock it on this draft."
+            disabled={slugValidation === "validating" || slugLocked}
             onClick={handleSlugSave}
-            className="border border-[var(--border)] px-3 py-2 text-[0.62rem] tracking-[0.14em] uppercase"
+            className="border border-[var(--border)] px-3 py-2 text-[0.62rem] tracking-[0.14em] uppercase disabled:opacity-40"
           >
-            Validate
+            {slugValidation === "validating" ? "Validating..." : "Validate"}
           </button>
         </div>
       )}
@@ -1632,12 +1670,18 @@ export function IngestionWizard({
                   : "Updates the local archive bundle from your edits. The deposited original source is preserved. Use Publish on the next step to promote lifecycle on GitHub."
                 : "Local fallback deposits the browser source then runs server generate. Durable Preview should Commit from Prepare instead."}
           </p>
-          {durableStorage && (
-            <p className="border border-amber-900/40 bg-amber-950/20 px-3 py-2 text-[0.72rem] text-amber-100/90">
-              Browser MVP: Commit writes metadata, states, notes, five public
-              derivatives, draft source, and prepared master. Omits perception.html
-              and manifest.json (mint-package excluded until full regenerate). Public
-              View may 404 until redeploy.
+          {durableStorage && !(r2Archive || d1Archive) && (
+            <p className="border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[0.72rem] text-[var(--muted)]">
+              Browser Generate writes metadata and derivatives. Standalone
+              perception.html is available via Export mint package after a full
+              local regenerate.
+            </p>
+          )}
+          {durableStorage && (r2Archive || d1Archive) && (
+            <p className="border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[0.72rem] text-[var(--muted)]">
+              Prefer Commit from Prepare, then Publish on Review. After publish,
+              Download HTML Package from the artwork detail page builds a portable
+              mint-package ZIP from the published revision.
             </p>
           )}
           <button
@@ -1676,12 +1720,12 @@ export function IngestionWizard({
               <ul className="max-h-48 overflow-y-auto font-mono text-[0.7rem] opacity-80">
                 {result.files.map((f) => (
                   <li key={f.path}>
-                    {f.path} ({f.bytes} B)
+                    {f.path} ({formatByteSize(f.bytes)})
                   </li>
                 ))}
               </ul>
               {result.warnings.map((w) => (
-                <p key={w} className="text-amber-200/80">
+                <p key={w} className="text-[var(--muted)]">
                   {w}
                 </p>
               ))}
@@ -1937,11 +1981,22 @@ export function IngestionWizard({
                       <ul className="max-h-40 overflow-y-auto font-mono text-[0.7rem] opacity-80">
                         {result.files.map((f) => (
                           <li key={f.path}>
-                            {f.path} ({f.bytes} B)
+                            {f.path} ({formatByteSize(f.bytes)})
                           </li>
                         ))}
                       </ul>
                     )}
+                    {intendedStatus === "published" &&
+                      (r2Archive || d1Archive) &&
+                      lastCommittedArtworkId && (
+                        <a
+                          href={`/api/admin/archive/artworks/${encodeURIComponent(lastCommittedArtworkId)}/html-package`}
+                          title="Download a portable mint-package ZIP from the published revision."
+                          className="inline-block border border-[var(--border)] px-3 py-2 text-[0.62rem] tracking-[0.12em] uppercase"
+                        >
+                          Download HTML Package
+                        </a>
+                      )}
                   </div>
                 ) : (
                   <>
@@ -2055,15 +2110,25 @@ export function IngestionWizard({
               </div>
             );
           })()}
-          {result?.warnings?.map((w) => (
-            <p key={w} className="text-[0.72rem] text-amber-200/80">
-              {w}
-            </p>
-          ))}
+          {result?.warnings && result.warnings.length > 0 && (
+            <div
+              className="space-y-2 border border-[var(--border)] p-3"
+              role="status"
+            >
+              <p className="text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]">
+                Notes
+              </p>
+              {result.warnings.map((w) => (
+                <p key={w} className="text-[0.78rem] text-[var(--muted)]">
+                  {w}
+                </p>
+              ))}
+            </div>
+          )}
         </section>
       )}
 
-      <footer className="mt-12 flex justify-between border-t border-[var(--border)] pt-8">
+      <footer className="sticky bottom-0 z-20 mt-12 flex justify-between border-t border-[var(--border)] bg-[var(--background)]/95 px-0 py-4 backdrop-blur-sm pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
         <button
           type="button"
           onClick={goBack}

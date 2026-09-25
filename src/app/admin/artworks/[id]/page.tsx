@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminArtworkActions } from "@/components/admin/AdminArtworkActions";
+import { formatByteSize } from "@/lib/archive/commit-bundle-limits";
 import { preferArchiveWorker } from "@/lib/archive/worker-config";
 import {
   workerGetArtwork,
@@ -64,6 +65,7 @@ export default async function AdminArtworkDetailPage({
         <div className="flex flex-wrap gap-2">
           <Link
             href={`/admin/new?draft=${encodeURIComponent(artwork.draftId)}`}
+            title="Open the working revision in the ingestion wizard. Does not change the published freeze."
             className="border border-[var(--border)] px-3 py-1.5 text-[0.62rem] tracking-[0.12em] uppercase"
           >
             Edit working revision
@@ -71,6 +73,7 @@ export default async function AdminArtworkDetailPage({
           {artwork.status === "published" && (
             <Link
               href={`/archive/${encodeURIComponent(artwork.slug)}`}
+              title="Open the public archive viewer for the published revision."
               className="border border-[var(--border)] px-3 py-1.5 text-[0.62rem] tracking-[0.12em] uppercase"
             >
               Public view
@@ -136,7 +139,7 @@ export default async function AdminArtworkDetailPage({
                 {" · "}
                 {asset.verified_at ? "verified" : "unverified"}
                 {" · "}
-                {asset.byte_size} bytes
+                {formatByteSize(asset.byte_size)}
                 <p className="mt-1 break-all text-[var(--muted)]">{asset.object_key}</p>
               </li>
             ))}
