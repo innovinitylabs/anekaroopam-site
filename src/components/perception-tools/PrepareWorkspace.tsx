@@ -1,40 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { PerceptionArtwork } from "@/lib/perception/types";
-import { createDefaultMetadata, mergeArtworkMetadata } from "@/lib/perception/metadata";
+import { useCallback, useEffect, useState } from "react";
 import type {
   ConversionOptions,
-  ConversionResult,
   ExportPresetId,
-  ImageAnalysis,
   ImageFormat,
 } from "@/lib/image-processing/types";
-import {
-  analyzeImage,
-  convertImage,
-  defaultConversionOptions,
-  formatBytes,
-} from "@/lib/image-processing";
-import { decodeImageSource, isHeicLike } from "@/lib/image-processing/decode-source";
+import { analyzeImage, formatBytes } from "@/lib/image-processing";
 import { EXPORT_PRESETS, getPreset } from "@/lib/image-processing/presets";
-import {
-  estimateHtmlExport,
-  formatExportSpecs,
-} from "@/lib/html-export/estimate";
-import { conversionToEmbedded } from "@/lib/export-engine/pipeline";
-import {
-  downloadConvertedImage,
-  downloadStandaloneArtifact,
-} from "@/lib/export-engine/pipeline";
-import { loadPrepareSession } from "@/lib/export-engine/session";
-import { hydrateArtworkPreview } from "@/lib/export-engine/session-artwork";
-import {
-  installUploadRegistryBridge,
-  resolveFileFromAnyTab,
-  resolveObjectUrlFromAnyTab,
-} from "@/lib/archive/transient-upload-registry";
+import { downloadConvertedImage } from "@/lib/export-engine/pipeline";
+import { usePerceiveWorkspace } from "@/lib/perception/workspace";
+import { ExportHtmlSection } from "@/components/perception/ExportHtmlSection";
 import { PanelSection } from "./PanelSection";
 import { SpecTable } from "./SpecTable";
 import { ImageDropZone } from "./ImageDropZone";
@@ -43,209 +20,113 @@ import { ImageCompareSlider } from "./ImageCompareSlider";
 const FORMATS: ImageFormat[] = ["avif", "webp", "png", "jpeg"];
 
 export function PrepareWorkspace() {
-  const [sourceFile, setSourceFile] = useState<File | null>(null);
-  const [sourceUrl, setSourceUrl] = useState<string | null>(null);
-  const [analysis, setAnalysis] = useState<ImageAnalysis | null>(null);
-  const [options, setOptions] = useState<ConversionOptions>(
-    defaultConversionOptions(),
-  );
-  const [presetId, setPresetId] = useState<ExportPresetId>("perceptual");
-  const [converted, setConverted] = useState<ConversionResult | null>(null);
-  const [fallbackWebp, setFallbackWebp] = useState<ConversionResult | null>(null);
-  const [converting, setConverting] = useState(false);
+  const {
+    state,
+    dispatch,
+    resolved,
+    importFile,
+    clearSource,
+    ensurePreparedBundle,
+  } = usePerceiveWorkspace();
+
   const [dragOver, setDragOver] = useState(false);
-  const [artwork, setArtwork] = useState<PerceptionArtwork | null>(null);
-  const [enableFallback, setEnableFallback] = useState(true);
   const [compareView, setCompareView] = useState<
     "split" | "slider" | "original" | "converted"
   >("split");
   const [analysisError, setAnalysisError] = useState<string | null>(null);
-  const [conversionError, setConversionError] = useState<string | null>(null);
+
+  const sourceUrl = state.source?.objectUrl ?? null;
+  const needsReimport = Boolean(state.source && !state.source.objectUrl);
+  const options = state.preparation.options;
+  const presetId = state.preparation.presetId;
+  const analysis = state.preparation.analysis;
+  const converted = state.preparation.preparedAvif;
+  const converting = state.preparation.status === "converting";
+  const conversionError =
+    state.preparation.status === "error" ? state.preparation.error : null;
 
   useEffect(() => {
-    installUploadRegistryBridge();
-
-    const session = loadPrepareSession();
-    if (!session) return;
-
-    const uploadId = session.uploadDraftId;
-    const file = resolveFileFromAnyTab(uploadId);
-    const objectUrl = resolveObjectUrlFromAnyTab(uploadId);
-
-    const timeout = window.setTimeout(() => {
-      if (session.artwork) {
-        setArtwork({
-          ...(objectUrl
-            ? hydrateArtworkPreview(session.artwork, objectUrl)
-            : session.artwork),
-          metadata: mergeArtworkMetadata(session.artwork.metadata),
-        });
-      }
-
-      if (file) {
-        setSourceFile(file);
-        setOptions((o) => ({
-          ...o,
-          filename:
-            session.sourceFileName?.replace(/\.[^.]+$/, "") ||
-            session.artwork.metadata.title ||
-            file.name.replace(/\.[^.]+$/, ""),
-        }));
-      }
-
-      if (objectUrl) {
-        setSourceUrl(objectUrl);
-      }
-    }, 0);
-    return () => window.clearTimeout(timeout);
-  }, []);
-
-  useEffect(() => {
-    if (!sourceFile && !sourceUrl) return;
+    if (!sourceUrl) return;
     let cancelled = false;
     const run = async () => {
       try {
         setAnalysisError(null);
         const result = await analyzeImage(
-          sourceFile ?? sourceUrl!,
-          sourceFile?.size,
+          sourceUrl,
+          state.source?.byteSize,
         );
-        if (!cancelled) setAnalysis(result);
+        if (!cancelled) {
+          dispatch({ type: "SET_ANALYSIS", analysis: result });
+        }
       } catch (err) {
         if (!cancelled) {
-          setAnalysis(null);
+          dispatch({ type: "SET_ANALYSIS", analysis: null });
           setAnalysisError(
             err instanceof Error ? err.message : "Could not analyze image",
           );
         }
       }
     };
-    run();
+    void run();
     return () => {
       cancelled = true;
     };
-  }, [sourceFile, sourceUrl]);
+  }, [sourceUrl, state.source?.byteSize, dispatch]);
 
-  const handleImport = useCallback(async (file: File) => {
-    setAnalysisError(null);
-    setConversionError(null);
-    setConverted(null);
-    setFallbackWebp(null);
-    setSourceFile(file);
-    setOptions((o) => ({
-      ...o,
-      filename: file.name.replace(/\.[^.]+$/, ""),
-    }));
-
-    if (sourceUrl?.startsWith("blob:")) {
-      URL.revokeObjectURL(sourceUrl);
-    }
-
-    if (isHeicLike(file)) {
-      try {
-        const decoded = await decodeImageSource(file);
-        setSourceUrl(decoded.dataUrl);
-      } catch (err) {
-        setSourceUrl(null);
-        setAnalysisError(
-          err instanceof Error ? err.message : "HEIC decode failed",
-        );
-      }
-      return;
-    }
-
-    setSourceUrl(URL.createObjectURL(file));
-  }, [sourceUrl]);
+  const handleImport = useCallback(
+    (file: File) => {
+      setAnalysisError(null);
+      importFile(file);
+    },
+    [importFile],
+  );
 
   const applyPreset = (id: ExportPresetId) => {
-    setPresetId(id);
     const preset = getPreset(id);
-    setOptions((o) => ({
-      ...o,
-      ...preset.options,
-      filename: o.filename,
-    }));
+    dispatch({
+      type: "SET_PRESET",
+      presetId: id,
+      options: {
+        ...options,
+        ...preset.options,
+        filename: options.filename,
+        format: "avif",
+      },
+    });
+  };
+
+  const patchOptions = (patch: Partial<ConversionOptions>) => {
+    dispatch({
+      type: "SET_OPTIONS",
+      options: {
+        ...options,
+        ...patch,
+        // Prepared master stays AVIF-focused for shared workspace fingerprints.
+        format: "avif",
+      },
+    });
   };
 
   const runConversion = useCallback(async () => {
-    if (!sourceFile && !sourceUrl) return;
-    setConverting(true);
-    setConversionError(null);
-    try {
-      const result = await convertImage(
-        sourceFile ?? sourceUrl!,
-        options,
-        analysis?.stats.byteSize,
-      );
-      setConverted(result);
-
-      if (
-        enableFallback &&
-        options.format === "avif" &&
-        result.format === "avif"
-      ) {
-        const webp = await convertImage(
-          sourceFile ?? sourceUrl!,
-          { ...options, format: "webp", quality: options.quality },
-          analysis?.stats.byteSize,
-        );
-        setFallbackWebp(webp);
-      } else {
-        setFallbackWebp(null);
-      }
-    } catch (err) {
-      setConverted(null);
-      setFallbackWebp(null);
-      setConversionError(
-        err instanceof Error ? err.message : "Conversion failed",
-      );
-    } finally {
-      setConverting(false);
-    }
-  }, [
-    sourceFile,
-    sourceUrl,
-    options,
-    analysis,
-    enableFallback,
-  ]);
-
-  const htmlEstimate = useMemo(() => {
-    if (!converted || !analysis) return null;
-    const embedded = conversionToEmbedded(converted);
-    const fallbacks = fallbackWebp ? [conversionToEmbedded(fallbackWebp)] : [];
-    return estimateHtmlExport(embedded, analysis.stats.byteSize, fallbacks);
-  }, [converted, fallbackWebp, analysis]);
-
-  const exportHtml = () => {
-    if (!converted) return;
-    const effectiveArtwork: PerceptionArtwork = artwork ?? {
-      id: "prepare-export",
-      metadata: createDefaultMetadata({
-        title: options.filename || "Artwork",
-      }),
-      imageSrc: converted.dataUrl,
-      states: [],
-      background: "paper",
-      showMetadataOverlay: true,
-    };
-    downloadStandaloneArtifact({
-      payload: {
-        version: 1,
-        artwork: effectiveArtwork,
-        exportedAt: new Date().toISOString(),
-      },
-      conversion: converted,
-      fallbacks: fallbackWebp ? [fallbackWebp] : undefined,
-      filename: options.filename,
-    });
-  };
+    if (!sourceUrl) return;
+    await ensurePreparedBundle();
+  }, [sourceUrl, ensurePreparedBundle]);
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col lg:flex-row">
       {!sourceUrl ? (
         <div className="flex flex-1 items-center justify-center p-5 sm:p-8">
-          <div className="w-full max-w-md">
+          <div className="w-full max-w-md space-y-4">
+            {needsReimport && (
+              <p className="border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-[0.78rem] leading-relaxed text-[var(--muted)]">
+                Source metadata was restored after reload — re-import the image
+                file to continue. Workspace is shared with{" "}
+                <Link href="/perceive" className="underline">
+                  Orient
+                </Link>
+                ; no session save is needed.
+              </p>
+            )}
             <ImageDropZone
               dragOver={dragOver}
               onDragOver={setDragOver}
@@ -254,9 +135,9 @@ export function PrepareWorkspace() {
           </div>
         </div>
       ) : (
-          <>
-            <div className="min-h-0 flex-[1_1_58%] overflow-y-auto overscroll-contain p-5 sm:p-6 md:p-8">
-              <div className="mx-auto max-w-3xl space-y-6 md:space-y-8">
+        <>
+          <div className="min-h-0 flex-[1_1_58%] overflow-y-auto overscroll-contain p-5 sm:p-6 md:p-8">
+            <div className="mx-auto max-w-3xl space-y-6 md:space-y-8">
               {analysisError && (
                 <p className="border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-[0.78rem] leading-relaxed text-red-700/90">
                   {analysisError}
@@ -294,7 +175,7 @@ export function PrepareWorkspace() {
                     originalSrc={sourceUrl}
                     convertedSrc={converted?.dataUrl ?? null}
                     converting={converting}
-                    onRequestConvert={runConversion}
+                    onRequestConvert={() => void runConversion()}
                   />
                 ) : (
                   <div
@@ -315,7 +196,8 @@ export function PrepareWorkspace() {
                         />
                       </figure>
                     )}
-                    {(compareView === "split" || compareView === "converted") && (
+                    {(compareView === "split" ||
+                      compareView === "converted") && (
                       <figure className="border border-[var(--border)] bg-[var(--paper)] p-3 sm:p-4">
                         <figcaption className="mb-3 text-[0.62rem] tracking-[0.16em] uppercase text-[var(--muted)]">
                           Converted
@@ -332,7 +214,7 @@ export function PrepareWorkspace() {
                           <button
                             type="button"
                             disabled={converting}
-                            onClick={runConversion}
+                            onClick={() => void runConversion()}
                             className="flex min-h-[200px] w-full flex-col items-center justify-center gap-2 py-12 text-center text-[0.75rem] text-[var(--muted)] transition-opacity hover:opacity-90 disabled:opacity-40"
                           >
                             <span>
@@ -456,27 +338,26 @@ export function PrepareWorkspace() {
                     </span>
                     <select
                       className="mt-1 w-full border-b border-[var(--border)] bg-transparent py-1"
-                      value={options.format}
-                      onChange={(e) =>
-                        setOptions((o) => ({
-                          ...o,
-                          format: e.target.value as ImageFormat,
-                        }))
-                      }
+                      value="avif"
+                      disabled
+                      title="Prepared master is always AVIF"
                     >
                       {FORMATS.map((f) => (
                         <option
                           key={f}
                           value={f}
-                          disabled={Boolean(analysis && !analysis.formatSupport[f])}
+                          disabled={
+                            f !== "avif" ||
+                            Boolean(analysis && !analysis.formatSupport[f])
+                          }
                         >
                           {f.toUpperCase()}
                         </option>
                       ))}
                     </select>
                     <p className="mt-2 text-[0.65rem] leading-relaxed text-[var(--muted)]">
-                      AVIF uses libavif (WebAssembly) and works across Safari,
-                      Firefox, and Chromium. Large images may take longer to encode.
+                      Prepared master is AVIF (libavif / WebAssembly) for the
+                      shared workspace. Large images may take longer to encode.
                     </p>
                   </label>
                   <label className="block">
@@ -492,10 +373,7 @@ export function PrepareWorkspace() {
                       value={options.quality}
                       disabled={options.lossless && options.format === "png"}
                       onChange={(e) =>
-                        setOptions((o) => ({
-                          ...o,
-                          quality: Number(e.target.value),
-                        }))
+                        patchOptions({ quality: Number(e.target.value) })
                       }
                       className="mt-2 w-full"
                     />
@@ -505,7 +383,7 @@ export function PrepareWorkspace() {
                       type="checkbox"
                       checked={options.lossless}
                       onChange={(e) =>
-                        setOptions((o) => ({ ...o, lossless: e.target.checked }))
+                        patchOptions({ lossless: e.target.checked })
                       }
                     />
                     Lossless (PNG / WebP)
@@ -521,12 +399,11 @@ export function PrepareWorkspace() {
                         placeholder="native"
                         value={options.maxWidth ?? ""}
                         onChange={(e) =>
-                          setOptions((o) => ({
-                            ...o,
+                          patchOptions({
                             maxWidth: e.target.value
                               ? Number(e.target.value)
                               : undefined,
-                          }))
+                          })
                         }
                       />
                     </label>
@@ -540,12 +417,11 @@ export function PrepareWorkspace() {
                         placeholder="native"
                         value={options.maxHeight ?? ""}
                         onChange={(e) =>
-                          setOptions((o) => ({
-                            ...o,
+                          patchOptions({
                             maxHeight: e.target.value
                               ? Number(e.target.value)
                               : undefined,
-                          }))
+                          })
                         }
                       />
                     </label>
@@ -558,11 +434,10 @@ export function PrepareWorkspace() {
                       className="mt-1 min-h-10 w-full border-b border-[var(--border)] bg-transparent py-1 sm:min-h-0"
                       value={options.chromaSubsampling}
                       onChange={(e) =>
-                        setOptions((o) => ({
-                          ...o,
+                        patchOptions({
                           chromaSubsampling: e.target
                             .value as ConversionOptions["chromaSubsampling"],
-                        }))
+                        })
                       }
                     >
                       <option value="4:4:4">4:4:4 (fine lines)</option>
@@ -581,7 +456,7 @@ export function PrepareWorkspace() {
                       className="mt-1 min-h-10 w-full border-b border-[var(--border)] bg-transparent py-1 sm:min-h-0"
                       value={options.filename}
                       onChange={(e) =>
-                        setOptions((o) => ({ ...o, filename: e.target.value }))
+                        patchOptions({ filename: e.target.value })
                       }
                     />
                   </label>
@@ -589,7 +464,7 @@ export function PrepareWorkspace() {
                 <button
                   type="button"
                   disabled={converting || Boolean(analysisError)}
-                  onClick={runConversion}
+                  onClick={() => void runConversion()}
                   className="mt-6 w-full border border-[var(--ink)] py-3 text-[0.68rem] tracking-[0.16em] uppercase disabled:opacity-40 sm:py-2.5"
                 >
                   {converting ? "Processing..." : "Convert"}
@@ -646,7 +521,8 @@ export function PrepareWorkspace() {
                 )}
                 {converted?.transcodedFromHeic && (
                   <p className="mt-2 text-[0.65rem] leading-relaxed text-[var(--muted)]">
-                    HEIC/HEIF was decoded before re-encoding to your chosen format.
+                    HEIC/HEIF was decoded before re-encoding to your chosen
+                    format.
                   </p>
                 )}
                 {converted && (
@@ -662,45 +538,26 @@ export function PrepareWorkspace() {
                 )}
               </PanelSection>
 
-              <PanelSection title="HTML artifact" subtitle="Standalone orientation export">
-                <label className="mb-4 flex min-h-10 items-center gap-2 text-[0.68rem] sm:min-h-0">
-                  <input
-                    type="checkbox"
-                    checked={enableFallback}
-                    onChange={(e) => setEnableFallback(e.target.checked)}
-                  />
-                  WebP fallback when using AVIF
-                </label>
-                {htmlEstimate && (
-                  <SpecTable rows={formatExportSpecs(htmlEstimate)} />
-                )}
-                <button
-                  type="button"
-                  disabled={!converted}
-                  onClick={exportHtml}
-                  className="mt-4 w-full border border-[var(--ink)] py-3 text-[0.68rem] tracking-[0.16em] uppercase disabled:opacity-40 sm:py-2.5"
-                >
-                  Export standalone HTML
-                </button>
-                {!artwork && (
-                  <p className="mt-3 text-[0.68rem] leading-relaxed text-[var(--muted)]">
-                    Open from{" "}
-                    <Link href="/perceive" className="underline">
-                      Orient
-                    </Link>{" "}
-                    to include perceptual states, or import will use image only.
-                  </p>
-                )}
+              <PanelSection
+                title="HTML artifact"
+                subtitle="Standalone orientation export"
+              >
+                <ExportHtmlSection />
+                <p className="mt-3 text-[0.68rem] leading-relaxed text-[var(--muted)]">
+                  Edit perceptual states in{" "}
+                  <Link href="/perceive" className="underline">
+                    Orient
+                  </Link>
+                  . Workspace is shared — no session save needed.
+                  {resolved.metadata.title
+                    ? ` Current title: ${resolved.metadata.title}.`
+                    : ""}
+                </p>
               </PanelSection>
 
               <button
                 type="button"
-                onClick={() => {
-                  setSourceUrl(null);
-                  setSourceFile(null);
-                  setConverted(null);
-                  setAnalysis(null);
-                }}
+                onClick={clearSource}
                 className="w-full py-3 text-[0.62rem] tracking-[0.16em] uppercase opacity-50 hover:opacity-90 sm:py-2"
               >
                 Clear source

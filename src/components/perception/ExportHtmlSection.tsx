@@ -1,14 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { PerceptionArtwork } from "@/lib/perception/types";
-import type { ImageFormat } from "@/lib/image-processing/types";
-import {
-  convertImage,
-  defaultConversionOptions,
-  formatBytes,
-} from "@/lib/image-processing";
-import { getPreset } from "@/lib/image-processing/presets";
 import {
   conversionToEmbedded,
   downloadStandaloneArtifact,
@@ -17,161 +9,155 @@ import {
   estimateHtmlExport,
   formatExportSpecs,
 } from "@/lib/html-export/estimate";
+import type { StandaloneExportProfile } from "@/lib/html-export/standalone-profile";
+import { usePerceiveWorkspace } from "@/lib/perception/workspace";
 import { SpecTable } from "@/components/perception-tools/SpecTable";
 
-const FORMATS: ImageFormat[] = ["avif", "webp", "png", "jpeg"];
-
 interface ExportHtmlSectionProps {
-  artwork: PerceptionArtwork;
-  imageSrc: string;
-  originalByteSize?: number;
-  filename?: string;
   compact?: boolean;
 }
 
-export function ExportHtmlSection({
-  artwork,
-  imageSrc,
-  originalByteSize,
-  filename,
-  compact,
-}: ExportHtmlSectionProps) {
-  const [format, setFormat] = useState<ImageFormat>("avif");
-  const [enableFallback, setEnableFallback] = useState(true);
-  const [exporting, setExporting] = useState(false);
-  const [lastEstimate, setLastEstimate] = useState<ReturnType<
-    typeof estimateHtmlExport
-  > | null>(null);
+/**
+ * Canonical Pattarai export surface — uses shared workspace prepared master.
+ */
+export function ExportHtmlSection({ compact }: ExportHtmlSectionProps) {
+  const {
+    state,
+    dispatch,
+    resolved,
+    isPreparedValid,
+    ensurePreparedBundle,
+  } = usePerceiveWorkspace();
+  const [busy, setBusy] = useState(false);
 
   const estimatePreview = useMemo(() => {
-    if (!originalByteSize) return null;
-    const ratio =
-      format === "avif" ? 0.22 : format === "webp" ? 0.35 : format === "png" ? 0.85 : 0.5;
-    const embedded = Math.round(originalByteSize * ratio);
-    const embeddedAsset = {
-      format,
-      dataUrl: "",
-      width: 0,
-      height: 0,
-      byteSize: embedded,
-    };
-    return estimateHtmlExport(embeddedAsset, originalByteSize);
-  }, [format, originalByteSize]);
+    const avif = state.preparation.preparedAvif;
+    if (!avif) return null;
+    const embedded = conversionToEmbedded(avif);
+    const fallbacks = state.preparation.preparedWebp
+      ? [conversionToEmbedded(state.preparation.preparedWebp)]
+      : [];
+    return estimateHtmlExport(
+      embedded,
+      state.preparation.analysis?.stats.byteSize ??
+        state.source?.byteSize ??
+        avif.stats.byteSize * 4,
+      fallbacks,
+    );
+  }, [state.preparation, state.source]);
 
-  const handleExport = async () => {
-    if (!imageSrc) return;
-    setExporting(true);
+  const displayEstimate = state.export.lastEstimate ?? estimatePreview;
+  const specs = displayEstimate ? formatExportSpecs(displayEstimate) : null;
+
+  const onExport = async () => {
+    if (!state.artwork.imageSrc && !state.source?.objectUrl) return;
+    setBusy(true);
+    dispatch({ type: "SET_EXPORT_STATUS", status: "exporting", error: null });
     try {
-      const preset = getPreset("perceptual");
-      const options = {
-        ...defaultConversionOptions(filename),
-        ...preset.options,
-        format,
-        quality: preset.options.quality ?? 0.82,
-        lossless: format === "png" && Boolean(preset.options.lossless),
-        filename: filename ?? "orientation",
-      };
-
-      const converted = await convertImage(imageSrc, options, originalByteSize);
-      let fallbacks;
-      if (enableFallback && format === "avif") {
-        const webp = await convertImage(
-          imageSrc,
-          { ...options, format: "webp" },
-          originalByteSize,
-        );
-        fallbacks = [webp];
+      const prepared = await ensurePreparedBundle();
+      if (!prepared) {
+        dispatch({
+          type: "SET_EXPORT_STATUS",
+          status: "error",
+          error: "Preparation failed",
+        });
+        return;
       }
 
-      const embedded = conversionToEmbedded(converted);
-      const fallbackEmbedded = fallbacks?.map(conversionToEmbedded);
-      setLastEstimate(
-        estimateHtmlExport(
-          embedded,
-          originalByteSize ?? converted.stats.byteSize * 4,
-          fallbackEmbedded,
-        ),
+      const estimate = estimateHtmlExport(
+        conversionToEmbedded(prepared.avif),
+        prepared.sourceBytes ?? prepared.avif.stats.byteSize * 4,
+        prepared.webp ? [conversionToEmbedded(prepared.webp)] : [],
       );
 
       downloadStandaloneArtifact({
         payload: {
           version: 1,
-          artwork: { ...artwork, imageSrc: converted.dataUrl },
+          artwork: { ...resolved, imageSrc: prepared.avif.dataUrl },
           exportedAt: new Date().toISOString(),
         },
-        conversion: converted,
-        fallbacks,
-        filename,
-        profile:
-          enableFallback && format === "avif" ? "compatible" : "onchain",
+        conversion: prepared.avif,
+        fallbacks: prepared.webp ? [prepared.webp] : undefined,
+        filename: prepared.filename,
+        profile: prepared.profile,
+      });
+
+      dispatch({
+        type: "SET_EXPORT_RESULT",
+        estimate,
+        htmlByteSize: estimate.finalHtmlSize,
+      });
+    } catch (err) {
+      dispatch({
+        type: "SET_EXPORT_STATUS",
+        status: "error",
+        error: err instanceof Error ? err.message : "Export failed",
       });
     } finally {
-      setExporting(false);
+      setBusy(false);
     }
   };
-
-  const specs = lastEstimate
-    ? formatExportSpecs(lastEstimate)
-    : estimatePreview
-      ? formatExportSpecs(estimatePreview)
-      : null;
 
   return (
     <div className={compact ? "space-y-3" : "space-y-4"}>
       <label className="block">
         <span className="text-[0.62rem] tracking-[0.16em] uppercase text-[var(--muted)]">
-          Embedded format
+          Export profile
         </span>
         <select
-          title="Image format embedded inside the standalone HTML file."
+          title="On-chain: AVIF only. Compatible: AVIF with WebP fallback."
           className="mt-1 min-h-10 w-full border-b border-[var(--border)] bg-transparent py-1 text-sm sm:min-h-0"
-          value={format}
-          onChange={(e) => setFormat(e.target.value as ImageFormat)}
+          value={state.export.profile}
+          onChange={(e) =>
+            dispatch({
+              type: "SET_EXPORT_PROFILE",
+              profile: e.target.value as StandaloneExportProfile,
+            })
+          }
         >
-          {FORMATS.map((f) => (
-            <option key={f} value={f}>
-              {f.toUpperCase()}
-            </option>
-          ))}
+          <option value="compatible">Compatible (AVIF + WebP)</option>
+          <option value="onchain">On-chain (AVIF only)</option>
         </select>
       </label>
-      <label
-        title="Include a WebP source only when needed for browsers without AVIF (compatible profile). Off for on-chain-sized AVIF-only exports."
-        className="flex min-h-10 items-center gap-2 text-[0.68rem] sm:min-h-0"
-      >
-        <input
-          type="checkbox"
-          checked={enableFallback}
-          onChange={(e) => setEnableFallback(e.target.checked)}
-        />
-        Compatible WebP fallback (AVIF only when checked)
-      </label>
       {specs && <SpecTable rows={specs} />}
-      {originalByteSize && !specs && (
+      {state.source?.byteSize && !specs && (
         <p className="text-[0.68rem] text-[var(--muted)]">
-          Source {formatBytes(originalByteSize)} — convert before export to reduce
-          artifact size.
+          Source ready — export will prepare AVIF
+          {state.export.profile === "compatible" ? " + WebP" : ""} once if needed.
         </p>
       )}
+      {state.preparation.error && (
+        <p className="text-[0.68rem] text-red-700/90">
+          {state.preparation.error}
+        </p>
+      )}
+      {state.export.error && (
+        <p className="text-[0.68rem] text-red-700/90">{state.export.error}</p>
+      )}
       <p className="text-[0.62rem] leading-relaxed text-[var(--muted)]">
-        {enableFallback && format === "avif"
-          ? "Profile: Compatible — AVIF primary with WebP fallback, fully offline."
-          : "Profile: On-chain oriented — AVIF-first, no unused WebP unless fallback is enabled."}
+        {isPreparedValid
+          ? "Using prepared master from workspace (no reconvert)."
+          : state.preparation.status === "stale"
+            ? "Prepared output is stale — export will reconvert."
+            : "Export prepares AVIF into the shared workspace, then builds standalone HTML."}
       </p>
       <button
         type="button"
-        disabled={!imageSrc || exporting}
-        title="Build a self-contained HTML file with embedded image data and the shared Perception runtime."
-        onClick={handleExport}
+        disabled={
+          busy ||
+          state.export.status === "exporting" ||
+          (!state.artwork.imageSrc && !state.source?.objectUrl)
+        }
+        title="Build a self-contained HTML file with the shared Perception runtime."
+        onClick={() => void onExport()}
         className="w-full border border-[var(--border)] py-3 text-[0.68rem] tracking-[0.14em] uppercase transition-colors hover:border-[var(--foreground)] disabled:opacity-30 sm:py-2"
       >
-        {exporting
+        {busy || state.export.status === "exporting"
           ? "Preparing export..."
-          : enableFallback && format === "avif"
+          : state.export.profile === "compatible"
             ? "Export compatible HTML"
             : "Export standalone HTML"}
       </button>
     </div>
   );
 }
-

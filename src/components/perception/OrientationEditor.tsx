@@ -1,12 +1,11 @@
 "use client";
 
-import { savePrepareSession } from "@/lib/export-engine/session";
-import type { ExportPayload } from "@/lib/perception/types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import type { ExportPayload, PerceptionArtwork } from "@/lib/perception/types";
 import { downloadJson } from "@/lib/perception/export-html";
-import {
-  useOrientationArtwork,
-  type UseOrientationArtworkOptions,
-} from "@/lib/perception/use-orientation-artwork";
+import { usePerceiveWorkspace } from "@/lib/perception/workspace";
+import type { OrientationArtworkController } from "@/lib/perception/use-orientation-artwork";
 import { ExportHtmlSection } from "./ExportHtmlSection";
 import { PerceptionCanvas } from "./PerceptionCanvas";
 import {
@@ -15,30 +14,90 @@ import {
   MetadataPanelSection,
   PerceptualStatesPanel,
 } from "./OrientationPanels";
-import Link from "next/link";
 
-export type OrientationEditorProps = UseOrientationArtworkOptions;
-
-export function OrientationEditor(props: OrientationEditorProps = {}) {
-  const controller = useOrientationArtwork({
-    ...props,
-    uploadDraftId: props.uploadDraftId ?? props.initial?.id ?? props.value?.id,
-  });
+/**
+ * Orient stage for Pattarai — consumes shared PerceiveWorkspace.
+ * Admin ingestion continues to use useOrientationArtwork separately.
+ */
+export function OrientationEditor() {
   const {
-    artwork,
-    customBg,
-    panelVisible,
-    setPanelVisible,
-    dragOver,
-    setDragOver,
-    handleImport,
-    resolvedArtwork,
-  } = controller;
+    state,
+    dispatch,
+    resolved,
+    importFile,
+    clearSource,
+  } = usePerceiveWorkspace();
+  const [panelVisible, setPanelVisible] = useState(true);
+  const [dragOver, setDragOver] = useState(false);
+
+  const artworkRef = useRef(state.artwork);
+  const customBgRef = useRef(state.customBackground);
+  useEffect(() => {
+    artworkRef.current = state.artwork;
+    customBgRef.current = state.customBackground;
+  }, [state.artwork, state.customBackground]);
+
+  const setArtwork = useCallback(
+    (
+      next:
+        | PerceptionArtwork
+        | ((prev: PerceptionArtwork) => PerceptionArtwork),
+    ) => {
+      const resolvedArtwork =
+        typeof next === "function" ? next(artworkRef.current) : next;
+      dispatch({ type: "SET_ARTWORK", artwork: resolvedArtwork });
+    },
+    [dispatch],
+  );
+
+  const setCustomBg = useCallback(
+    (hex: string | ((prev: string) => string)) => {
+      const next =
+        typeof hex === "function" ? hex(customBgRef.current) : hex;
+      dispatch({ type: "SET_CUSTOM_BACKGROUND", hex: next });
+    },
+    [dispatch],
+  );
+
+  const controller: OrientationArtworkController = useMemo(
+    () => ({
+      artwork: state.artwork,
+      setArtwork,
+      customBg: state.customBackground,
+      setCustomBg,
+      panelVisible,
+      setPanelVisible,
+      dragOver,
+      setDragOver,
+      updateState: (id, patch) =>
+        dispatch({ type: "UPDATE_STATE", id, patch }),
+      addState: () => dispatch({ type: "ADD_STATE" }),
+      removeState: (id) => dispatch({ type: "REMOVE_STATE", id }),
+      handleImport: async (file) => importFile(file),
+      clearImport: () => clearSource(),
+      resolvedArtwork: resolved,
+      setBackground: (key) => dispatch({ type: "SET_BACKGROUND", key }),
+      uploadDraftId: state.workspaceId,
+    }),
+    [
+      state.artwork,
+      state.customBackground,
+      state.workspaceId,
+      setArtwork,
+      setCustomBg,
+      panelVisible,
+      dragOver,
+      dispatch,
+      importFile,
+      clearSource,
+      resolved,
+    ],
+  );
 
   const handleExportJson = () => {
     const payload: ExportPayload = {
       version: 1,
-      artwork: controller.artwork,
+      artwork: resolved,
       exportedAt: new Date().toISOString(),
     };
     downloadJson("orientation-config.json", payload);
@@ -47,9 +106,9 @@ export function OrientationEditor(props: OrientationEditorProps = {}) {
   return (
     <div className="flex h-full min-h-0 w-full flex-col lg:flex-row">
       <div className="relative min-h-[46svh] flex-[0_0_52svh] lg:min-h-0 lg:flex-1">
-        {artwork.imageSrc ? (
+        {state.artwork.imageSrc ? (
           <PerceptionCanvas
-            artwork={resolvedArtwork}
+            artwork={resolved}
             mode="editor-preview"
             onInteraction={() => setPanelVisible(true)}
           />
@@ -57,10 +116,16 @@ export function OrientationEditor(props: OrientationEditorProps = {}) {
           <ImportZone
             dragOver={dragOver}
             onDragOver={setDragOver}
-            onImport={handleImport}
+            onImport={(file) => void importFile(file)}
           />
         )}
-        {artwork.imageSrc && (
+        {state.source && !state.artwork.imageSrc && (
+          <p className="absolute inset-x-4 bottom-4 z-10 border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[0.68rem] text-[var(--muted)]">
+            Source metadata restored after reload — re-import the image file to
+            continue.
+          </p>
+        )}
+        {state.artwork.imageSrc && (
           <button
             type="button"
             onClick={() => setPanelVisible((v) => !v)}
@@ -84,13 +149,13 @@ export function OrientationEditor(props: OrientationEditorProps = {}) {
         }`}
       >
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] text-sm sm:p-6">
-          {!artwork.imageSrc && (
+          {!state.artwork.imageSrc && (
             <div className="hidden lg:block">
               <ImportZone
                 compact
                 dragOver={dragOver}
                 onDragOver={setDragOver}
-                onImport={handleImport}
+                onImport={(file) => void importFile(file)}
               />
             </div>
           )}
@@ -105,42 +170,36 @@ export function OrientationEditor(props: OrientationEditorProps = {}) {
             </h2>
             <Link
               href="/perceive/tools/prepare"
-              title="Open Prepare with this artwork for encoding, sizing, and standalone HTML export."
-              onClick={() => {
-                if (!artwork.imageSrc) return;
-                savePrepareSession({
-                  artwork: resolvedArtwork,
-                  customBackground: customBg,
-                  uploadDraftId: controller.uploadDraftId,
-                });
-              }}
+              title="Open Prepare for advanced encoding, comparison, and sizing. Workspace state is shared."
               className={`block w-full border border-[var(--border)] py-3 text-center text-[0.68rem] tracking-[0.14em] uppercase sm:py-2 ${
-                artwork.imageSrc
+                state.artwork.imageSrc || state.source
                   ? "hover:border-[var(--foreground)]"
                   : "pointer-events-none opacity-30"
               }`}
             >
-              Open in Prepare
+              Open Prepare
             </Link>
-            {artwork.imageSrc && (
-              <ExportHtmlSection
-                artwork={resolvedArtwork}
-                imageSrc={artwork.imageSrc}
-                filename={
-                  artwork.metadata.title.trim() || "orientation"
-                }
-                compact
-              />
+            {(state.artwork.imageSrc || state.source) && (
+              <ExportHtmlSection compact />
             )}
             <button
               type="button"
-              disabled={!artwork.imageSrc}
+              disabled={!state.artwork.imageSrc}
               title="Download orientation settings as JSON without the embedded image."
               onClick={handleExportJson}
               className="block w-full border border-[var(--border)] py-3 text-[0.68rem] tracking-[0.14em] uppercase disabled:opacity-30 sm:py-2"
             >
               Configuration JSON
             </button>
+            {state.artwork.imageSrc && (
+              <button
+                type="button"
+                onClick={clearSource}
+                className="block w-full py-2 text-[0.62rem] tracking-[0.14em] uppercase opacity-50 hover:opacity-90"
+              >
+                Clear source
+              </button>
+            )}
           </section>
         </div>
       </aside>
