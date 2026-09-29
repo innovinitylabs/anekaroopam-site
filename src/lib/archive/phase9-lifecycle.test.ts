@@ -1,30 +1,34 @@
 /**
  * Regression notes for Phase 9 lifecycle (search, admin, validate, SEO).
- * Legacy GitHub content under content/archive/2026-05-*-devil-may-cry-* is
- * intentionally retained until explicit cleanup approval (plan phase 14).
  */
 
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
-import { filterArtworks } from "@/lib/content/artworks";
+import { archiveArtworks, filterArtworks } from "@/lib/content/artworks";
 import { DURABLE_WIZARD_STEPS, WIZARD_DONE_HREF } from "./wizard-steps";
 import { matchesArchiveSearch } from "./archive-search";
 
 const repoRoot = path.resolve(import.meta.dirname, "../../..");
 
-test("legacy devil-may-cry archive trees are still present (cleanup gated)", () => {
-  const a = path.join(
-    repoRoot,
+test("legacy devil-may-cry archive trees are removed from the repository", () => {
+  for (const rel of [
     "content/archive/2026-05-19-02-devil-may-cry-or-block-you",
-  );
-  const b = path.join(
-    repoRoot,
     "content/archive/2026-05-21-02-devil-may-cry-or-block-you",
-  );
-  assert.equal(existsSync(a), true);
-  assert.equal(existsSync(b), true);
+    "public/archive/2026-05-19-02-devil-may-cry-or-block-you",
+    "public/archive/2026-05-21-02-devil-may-cry-or-block-you",
+  ]) {
+    assert.equal(existsSync(path.join(repoRoot, rel)), false, rel);
+  }
+});
+
+test("curated original images remain in public/", () => {
+  assert.equal(archiveArtworks.length, 3);
+  for (const artwork of archiveArtworks) {
+    const rel = decodeURIComponent(artwork.imageSrc);
+    assert.equal(existsSync(path.join(repoRoot, "public", rel)), true, rel);
+  }
 });
 
 test("durable wizard includes SEO before Review and Done goes to /admin", () => {
