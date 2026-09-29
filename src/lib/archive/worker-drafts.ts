@@ -1,0 +1,300 @@
+/**
+ * Bridge Worker D1 artworks to AccessionDraft shapes used by admin UI.
+ */
+
+import {
+  ARCHIVE_VERSION,
+  emptyProvenance,
+  type AccessionDraft,
+  type CreateAccessionDraftInput,
+} from "./schema";
+import {
+  mapProcessingFromWorkerAssets,
+  mapSourceFromWorkerAssets,
+  previewImageSrcFromWorkerAssets,
+} from "./source-from-worker-assets";
+import {
+  ArchiveWorkerError,
+  workerCreateArtwork,
+  workerGetArtwork,
+  workerGetArtworkByDraftId,
+  workerListArtworks,
+  workerPatchArtwork,
+  type WorkerArtwork,
+  type WorkerArtworkDetail,
+} from "./worker-client";
+
+function draftIdForCreate(): string {
+  const year = new Date().getUTCFullYear();
+  const rand = crypto.randomUUID().replace(/-/g, "").slice(0, 8);
+  return `draft-${year}-${rand}`;
+}
+
+function mapStatus(status: string): AccessionDraft["status"] {
+  switch (status) {
+    case "ready":
+      return "generated";
+    case "published":
+      return "published";
+    case "hidden":
+      return "hidden";
+    case "withdrawn":
+      return "withdrawn";
+    default:
+      return "draft";
+  }
+}
+
+function publicBaseUrl(): string | null {
+  return process.env.R2_PUBLIC_BASE_URL?.trim().replace(/\/$/, "") || null;
+}
+
+export function artworkToDraft(
+  artwork: WorkerArtwork,
+  detail?: WorkerArtworkDetail | null,
+): AccessionDraft {
+  const working = detail?.workingRevision;
+  const assets = detail?.assets ?? [];
+  const meta = {
+    title: artwork.title,
+    year: artwork.year ?? undefined,
+    process: artwork.process ?? undefined,
+    accessionId: artwork.accessionId,
+    ...(working?.metadata ?? {}),
+  } as AccessionDraft["artwork"]["metadata"];
+  meta.accessionId = artwork.accessionId;
+  if (!meta.title) meta.title = artwork.title;
+
+  const perception = working?.perception ?? {};
+  const states = Array.isArray(perception.states) ? perception.states : [];
+  const provenance =
+    (working?.provenance as AccessionDraft["provenance"] | undefined) ??
+    emptyProvenance();
+
+  const source = mapSourceFromWorkerAssets(assets);
+  const processing = mapProcessingFromWorkerAssets(assets);
+  const imageSrc = previewImageSrcFromWorkerAssets(assets, publicBaseUrl());
+
+  return {
+    version: ARCHIVE_VERSION,
+    draftId: artwork.draftId,
+    accessionId: artwork.accessionId,
+    status: mapStatus(artwork.status),
+    slug: artwork.slug,
+    slugLocked: true,
+    slugHistory: [],
+    source,
+    processing,
+    artwork: {
+      id: artwork.draftId,
+      metadata: meta,
+      imageSrc,
+      states: states as AccessionDraft["artwork"]["states"],
+      background: (perception.background as string) || "paper",
+      initialAngle: Number(perception.initialAngle ?? 0),
+      snapToState: perception.snapToState !== false,
+      showMetadataOverlay: perception.showMetadataOverlay !== false,
+      overlayFields: perception.overlayFields as AccessionDraft["artwork"]["overlayFields"],
+    },
+    provenance,
+    export: {
+      standaloneHtml: "perception.html",
+      includeWebpFallback: true,
+      preset: "archival",
+      ...((working?.export as Record<string, unknown> | undefined) ?? {}),
+    } as AccessionDraft["export"],
+    createdAt: artwork.createdAt,
+    updatedAt: artwork.updatedAt,
+    publishedAt: artwork.publishedAt ?? undefined,
+    hiddenAt: artwork.hiddenAt ?? undefined,
+    withdrawnAt: artwork.withdrawnAt ?? undefined,
+    preparedAt: processing.preparedAt,
+  };
+}
+
+export async function createDraftViaWorker(
+  input: CreateAccessionDraftInput,
+): Promise<AccessionDraft> {
+  const draftId = draftIdForCreate();
+  const { artwork } = await workerCreateArtwork({
+    draftId,
+    title: input.title,
+    slug: input.slug,
+    idempotencyKey: `create:${draftId}`,
+  });
+  const detail = await workerGetArtwork(artwork.id);
+  return artworkToDraft(artwork, detail);
+}
+
+export async function listDraftsViaWorker(): Promise<AccessionDraft[]> {
+  const { artworks } = await workerListArtworks({ limit: 100 });
+  return artworks.map((a) => artworkToDraft(a));
+}
+
+export async function findWorkerArtworkByDraftOrSlug(input: {
+  draftId?: string;
+  slug?: string;
+  accessionId?: string;
+}): Promise<WorkerArtwork | null> {
+  if (input.draftId) {
+    try {
+      const detail = await workerGetArtworkByDraftId(input.draftId);
+      return detail.artwork;
+    } catch (e) {
+      if (!(e instanceof ArchiveWorkerError && e.status === 404)) throw e;
+    }
+  }
+  if (input.accessionId || input.slug) {
+    try {
+      const detail = await workerGetArtwork(
+        input.accessionId || input.slug!,
+      );
+      return detail.artwork;
+    } catch (e) {
+      if (!(e instanceof ArchiveWorkerError && e.status === 404)) throw e;
+    }
+  }
+  const { artworks } = await workerListArtworks({ limit: 200 });
+  return (
+    artworks.find(
+      (a) =>
+        (input.draftId && a.draftId === input.draftId) ||
+        (input.slug && a.slug === input.slug) ||
+        (input.accessionId && a.accessionId === input.accessionId),
+    ) ?? null
+  );
+}
+
+/**
+ * Resolve a write target by immutable identifiers only (artwork UUID or draft id).
+ * Never falls back to slug, accession, or list scans. Every supplied identifier
+ * must refer to the same artwork; accessionId, when given, must be owned by it.
+ */
+export async function resolveWorkerArtworkForWrite(input: {
+  artworkId?: string | null;
+  draftId?: string | null;
+  accessionId?: string | null;
+}): Promise<WorkerArtwork> {
+  const artworkId = input.artworkId?.trim() || null;
+  const draftId = input.draftId?.trim() || null;
+  const accessionId = input.accessionId?.trim() || null;
+  if (!artworkId && !draftId) {
+    throw new ArchiveWorkerError(
+      400,
+      "artworkId or draftId is required for archive writes",
+    );
+  }
+
+  let artwork: WorkerArtwork;
+  if (artworkId) {
+    const detail = await workerGetArtwork(artworkId);
+    // The Worker GET also resolves slugs/accessions; writes accept only an exact id.
+    if (detail.artwork.id !== artworkId) {
+      throw new ArchiveWorkerError(404, "Artwork not found");
+    }
+    artwork = detail.artwork;
+    if (draftId && artwork.draftId !== draftId) {
+      throw new ArchiveWorkerError(
+        409,
+        `draftId ${draftId} does not belong to artwork ${artworkId}`,
+      );
+    }
+  } else {
+    artwork = (await workerGetArtworkByDraftId(draftId!)).artwork;
+  }
+
+  if (accessionId && artwork.accessionId !== accessionId) {
+    throw new ArchiveWorkerError(
+      409,
+      `Accession ${accessionId} does not belong to artwork ${artwork.id}`,
+    );
+  }
+  return artwork;
+}
+
+export async function loadDraftViaWorker(
+  draftIdOrArtworkId: string,
+): Promise<AccessionDraft | null> {
+  try {
+    try {
+      const detail = await workerGetArtworkByDraftId(draftIdOrArtworkId);
+      return artworkToDraft(detail.artwork, detail);
+    } catch (e) {
+      if (!(e instanceof ArchiveWorkerError && e.status === 404)) throw e;
+    }
+    try {
+      const detail = await workerGetArtwork(draftIdOrArtworkId);
+      return artworkToDraft(detail.artwork, detail);
+    } catch (e) {
+      if (e instanceof ArchiveWorkerError && e.status === 404) return null;
+      throw e;
+    }
+  } catch (e) {
+    if (e instanceof ArchiveWorkerError && e.status === 404) return null;
+    throw e;
+  }
+}
+
+export async function ensureWorkerArtworkForDraft(input: {
+  draftId: string;
+  title?: string;
+  slug?: string;
+  idempotencyKey?: string;
+}): Promise<WorkerArtwork> {
+  try {
+    return (await workerGetArtworkByDraftId(input.draftId)).artwork;
+  } catch (e) {
+    if (!(e instanceof ArchiveWorkerError && e.status === 404)) throw e;
+  }
+  const { artwork } = await workerCreateArtwork({
+    draftId: input.draftId,
+    title: input.title,
+    slug: input.slug,
+    idempotencyKey: input.idempotencyKey ?? `ensure:${input.draftId}`,
+  });
+  return artwork;
+}
+
+export async function updateDraftViaWorker(
+  draftId: string,
+  patch: {
+    slug?: string;
+    artwork?: AccessionDraft["artwork"];
+    provenance?: AccessionDraft["provenance"];
+    export?: AccessionDraft["export"];
+  },
+): Promise<AccessionDraft> {
+  const row = await findWorkerArtworkByDraftOrSlug({ draftId });
+  if (!row) {
+    throw new ArchiveWorkerError(404, "Draft not found in archive Worker");
+  }
+
+  const metadata = patch.artwork?.metadata
+    ? {
+        ...patch.artwork.metadata,
+        accessionId: row.accessionId,
+        title: patch.artwork.metadata.title ?? row.title,
+      }
+    : undefined;
+
+  const perception = patch.artwork
+    ? {
+        states: patch.artwork.states,
+        background: patch.artwork.background,
+        initialAngle: patch.artwork.initialAngle,
+        snapToState: patch.artwork.snapToState,
+        showMetadataOverlay: patch.artwork.showMetadataOverlay,
+        overlayFields: patch.artwork.overlayFields,
+      }
+    : undefined;
+
+  const { artwork } = await workerPatchArtwork(row.id, {
+    metadata,
+    perception,
+    export: patch.export,
+    provenance: patch.provenance,
+    slug: patch.slug,
+  });
+  const detail = await workerGetArtwork(artwork.id);
+  return artworkToDraft(artwork, detail);
+}

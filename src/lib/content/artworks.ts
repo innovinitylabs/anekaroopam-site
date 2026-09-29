@@ -4,6 +4,8 @@ export type ArchiveFilter = {
   year?: number;
   process?: string;
   state?: string;
+  /** Case-insensitive partial match on title, accession, or slug (id). */
+  q?: string;
 };
 
 function artworkSrc(filename: string): string {
@@ -14,6 +16,8 @@ function titleFromFilename(filename: string): string {
   return filename.replace(/\.[^.]+$/, "");
 }
 
+// Legacy public placeholders. Keep this list until filesystem archive listings
+// are canonical. Do not migrate these works into content/archive.
 const ARCHIVE_FILES = [
   {
     id: "the-one-who-is-crown-among-the-kings",
@@ -57,8 +61,11 @@ export function getArtworkById(id: string): PerceptionArtwork | undefined {
   return archiveArtworks.find((a) => a.id === id);
 }
 
-export function filterArtworks(filters: ArchiveFilter): PerceptionArtwork[] {
-  return archiveArtworks.filter((artwork) => {
+export function filterArtworks(
+  filters: ArchiveFilter,
+  source: PerceptionArtwork[] = archiveArtworks,
+): PerceptionArtwork[] {
+  return source.filter((artwork) => {
     if (filters.year && artwork.metadata.year !== filters.year) return false;
     if (filters.process && artwork.metadata.process !== filters.process)
       return false;
@@ -69,6 +76,23 @@ export function filterArtworks(filters: ArchiveFilter): PerceptionArtwork[] {
       )
     ) {
       return false;
+    }
+    const q = filters.q?.trim().toLowerCase();
+    if (q) {
+      const title = artwork.metadata.title.toLowerCase();
+      const accession = (artwork.metadata.accessionId || "").toLowerCase();
+      const slug = artwork.id.toLowerCase();
+      const stateHit = artwork.states.some((s) =>
+        s.name.toLowerCase().includes(q),
+      );
+      if (
+        !title.includes(q) &&
+        !accession.includes(q) &&
+        !slug.includes(q) &&
+        !stateHit
+      ) {
+        return false;
+      }
     }
     return true;
   });

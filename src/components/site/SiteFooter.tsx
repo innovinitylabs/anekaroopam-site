@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { BrandLogo } from "@/components/site/BrandLogo";
 
 export function SiteFooter() {

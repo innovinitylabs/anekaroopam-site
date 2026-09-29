@@ -1,0 +1,22 @@
+{
+  "name": "anekaroopam-archive-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --experimental-sqlite --import tsx --test src/**/*.test.ts",
+    "dev": "wrangler dev --env dev",
+    "deploy": "echo 'Use npm run deploy:dev or npm run deploy:prod' && exit 1",
+    "deploy:dev": "node scripts/assert-deploy-target.mjs dev && wrangler deploy --env dev",
+    "deploy:prod": "node scripts/assert-deploy-target.mjs prod && wrangler deploy --env prod",
+    "d1:local": "wrangler d1 migrations apply anekaroopam-archive-dev --env dev --local",
+    "d1:migrate:dev": "node scripts/assert-deploy-target.mjs dev && wrangler d1 migrations apply anekaroopam-archive-dev --env dev --remote",
+    "d1:migrate:prod": "node scripts/assert-deploy-target.mjs prod && wrangler d1 migrations apply anekaroopam-archive-prod --env prod --remote"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260921.1",
+    "tsx": "^4.23.12",
+    "typescript": "^5",
+    "wrangler": "^4.137.0"
+  }
+}

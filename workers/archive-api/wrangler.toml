@@ -1,0 +1,33 @@
+name = "anekaroopam-archive-api"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Always deploy with --env dev or --env prod (npm run deploy:dev / deploy:prod).
+# The top level has no D1 binding and no R2_KEY_PREFIX on purpose, so an
+# accidental bare deploy cannot serve data or register assets in any namespace.
+[vars]
+REQUIRED_ROLES = "original,artwork,preview,thumb"
+R2_PUBLIC_BASE_URL = "https://media.anekaroopam.art"
+
+[[env.dev.d1_databases]]
+binding = "DB"
+database_name = "anekaroopam-archive-dev"
+database_id = "00cb9e8c-275a-4f22-b24c-39c671ebfd6c"
+migrations_dir = "migrations"
+
+[env.dev.vars]
+REQUIRED_ROLES = "original,artwork,preview,thumb"
+R2_PUBLIC_BASE_URL = "https://media.anekaroopam.art"
+R2_KEY_PREFIX = "dev/"
+
+[[env.prod.d1_databases]]
+binding = "DB"
+database_name = "anekaroopam-archive-prod"
+database_id = "bf5c277b-05a3-4705-a6ad-43cef58ddeb4"
+migrations_dir = "migrations"
+
+[env.prod.vars]
+REQUIRED_ROLES = "original,artwork,preview,thumb"
+R2_PUBLIC_BASE_URL = "https://media.anekaroopam.art"
+R2_KEY_PREFIX = "prod/"

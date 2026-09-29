@@ -1,0 +1,75 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+import path from "path";
+
+const repoRootStore = new AsyncLocalStorage<string>();
+
+export function getRepoRoot(): string {
+  return repoRootStore.getStore() ?? process.cwd();
+}
+
+export function runWithRepoRoot<T>(
+  root: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return repoRootStore.run(root, fn);
+}
+
+function repoRoot(): string {
+  return getRepoRoot();
+}
+
+export function contentArchiveDir(slug: string): string {
+  return path.join(repoRoot(), "content", "archive", slug);
+}
+
+export function contentArchiveSourceDir(slug: string): string {
+  return path.join(contentArchiveDir(slug), "source");
+}
+
+export function contentArchivePreparedDir(slug: string): string {
+  return path.join(contentArchiveDir(slug), "prepared");
+}
+
+export function contentArchiveExportsDir(slug: string): string {
+  return path.join(contentArchiveDir(slug), "exports");
+}
+
+export function contentArchiveMintPackageDir(slug: string): string {
+  return path.join(contentArchiveExportsDir(slug), "mint-package");
+}
+
+export function contentArchiveRedirectsPath(): string {
+  return path.join(repoRoot(), "content", "archive", "redirects.json");
+}
+
+export function contentDraftsDir(): string {
+  return path.join(repoRoot(), "content", "drafts");
+}
+
+export function contentDraftDir(draftId: string): string {
+  return path.join(contentDraftsDir(), draftId);
+}
+
+export function contentDraftSourceDir(draftId: string): string {
+  return path.join(contentDraftDir(draftId), "source");
+}
+
+export function contentDraftWorkingDir(draftId: string): string {
+  return path.join(contentDraftDir(draftId), "working");
+}
+
+export function publicArchiveDir(slug: string): string {
+  return path.join(repoRoot(), "public", "archive", slug);
+}
+
+export function publicArchiveUrl(slug: string, filename: string): string {
+  return `/archive/${slug}/${filename}`;
+}
+
+export function repoRelativePath(filePath: string): string {
+  const root = repoRoot();
+  const absolute = path.isAbsolute(filePath)
+    ? filePath
+    : path.resolve(root, filePath);
+  return path.relative(root, absolute).split(path.sep).join("/");
+}

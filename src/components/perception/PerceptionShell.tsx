@@ -4,15 +4,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnekaroopamWordmark } from "@/components/site/AnekaroopamWordmark";
 import { BRAND } from "@/lib/brand";
-import { cn } from "@/lib/utils";
+import { PattaraiNavLabel } from "@/components/site/PattaraiNavLabel";
+import { PATTARAI_ARIA_LABEL } from "@/lib/site/pattarai-nav";
 import { PerceptionSubnav } from "./PerceptionSubnav";
 import { CreatorCredit } from "./CreatorCredit";
 
 const siteLinks = [
-  { href: "/archive", label: "Archive" },
-  { href: "/manifesto", label: "Manifesto" },
-  { href: "/about", label: "About" },
-];
+  { href: "/archive", label: "Archive", tip: "Browse published perceptual artworks." },
+  { href: "/manifesto", label: "Manifesto", tip: "Read the visual philosophy behind Anekaroopam." },
+  { href: "/about", label: "About", tip: "Artist and project context." },
+] as const;
 
 export function PerceptionShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -25,18 +26,34 @@ export function PerceptionShell({ children }: { children: React.ReactNode }) {
           <Link
             href="/"
             aria-label={BRAND.name}
+            title="Return to the Anekaroopam site home."
             className="min-w-0 shrink font-display text-xs tracking-[0.06em] uppercase opacity-70 transition-opacity hover:opacity-100 sm:text-sm sm:tracking-[0.08em]"
           >
             <AnekaroopamWordmark />
           </Link>
           <span className="hidden h-3 w-px bg-[var(--border)] sm:block" aria-hidden />
-          <PerceptionSubnav />
+          <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-4">
+            <p
+              className="group/pattarai shrink-0 text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]"
+              title={PATTARAI_ARIA_LABEL}
+              aria-label={PATTARAI_ARIA_LABEL}
+            >
+              <span className="hidden text-[var(--ink)] sm:inline">
+                <PattaraiNavLabel variant="desktop" />
+              </span>
+              <span className="text-[var(--ink)] sm:hidden">
+                <PattaraiNavLabel variant="mobile" />
+              </span>
+            </p>
+            <PerceptionSubnav />
+          </div>
         </div>
-        <nav className="hidden items-center gap-6 md:flex">
+        <nav className="hidden items-center gap-6 md:flex" aria-label="Site">
           {siteLinks.map((link) => (
             <Link
               key={link.href}
               href={link.href}
+              title={link.tip}
               className="text-[0.62rem] tracking-[0.18em] uppercase text-[var(--muted)] transition-opacity hover:opacity-90"
             >
               {link.label}
@@ -45,9 +62,13 @@ export function PerceptionShell({ children }: { children: React.ReactNode }) {
         </nav>
       </header>
 
-      {onPrepare && (
+      {onPrepare ? (
         <p className="shrink-0 border-b border-[var(--border)] px-4 py-2 text-[0.64rem] leading-relaxed tracking-[0.1em] text-[var(--muted)] sm:px-6 sm:text-[0.68rem] sm:tracking-[0.12em]">
-          Archival conversion and export preparation
+          Pattarai prepare — archival conversion and standalone viewer export
+        </p>
+      ) : (
+        <p className="shrink-0 border-b border-[var(--border)] px-4 py-2 text-[0.64rem] leading-relaxed tracking-[0.1em] text-[var(--muted)] sm:px-6 sm:text-[0.68rem] sm:tracking-[0.12em]">
+          Pattarai orient — perceptual states, metadata, and rotational preview
         </p>
       )}
 

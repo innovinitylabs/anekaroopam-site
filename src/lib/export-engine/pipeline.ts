@@ -20,11 +20,16 @@ export interface StandaloneExportInput {
   conversion: ConversionResult;
   fallbacks?: ConversionResult[];
   filename?: string;
+  /** Defaults: compatible when fallbacks present, else onchain-oriented (no WebP). */
+  profile?: "onchain" | "compatible";
 }
 
 export function runStandaloneHtmlExport(input: StandaloneExportInput): string {
   const embedded = conversionToEmbedded(input.conversion);
   const fallbacks = input.fallbacks?.map(conversionToEmbedded);
+  const profile =
+    input.profile ??
+    (fallbacks && fallbacks.length > 0 ? "compatible" : "onchain");
 
   const artwork = {
     ...input.payload.artwork,
@@ -35,6 +40,8 @@ export function runStandaloneHtmlExport(input: StandaloneExportInput): string {
     payload: { ...input.payload, artwork },
     embedded,
     fallbacks,
+    profile,
+    minify: profile === "onchain",
   });
 }
 
