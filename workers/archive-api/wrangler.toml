@@ -3,10 +3,12 @@ main = "src/index.ts"
 compatibility_date = "2025-09-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Always deploy with --env dev or --env prod (npm run deploy:dev / deploy:prod).
+# The top level has no D1 binding and no R2_KEY_PREFIX on purpose, so an
+# accidental bare deploy cannot serve data or register assets in any namespace.
 [vars]
 REQUIRED_ROLES = "original,artwork,preview,thumb"
 R2_PUBLIC_BASE_URL = "https://media.anekaroopam.art"
-R2_KEY_PREFIX = "dev/"
 
 [[env.dev.d1_databases]]
 binding = "DB"
