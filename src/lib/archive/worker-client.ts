@@ -403,6 +403,30 @@ export async function workerGetPublicArtwork(
   });
 }
 
+export type WorkerCuratedVisibility = {
+  slug: string;
+  visible: boolean;
+  updatedAt: string | null;
+  updatedBy: string | null;
+};
+
+export async function workerListCuratedVisibility(): Promise<{
+  entries: WorkerCuratedVisibility[];
+}> {
+  return archiveWorkerFetch("/admin/curated-visibility");
+}
+
+export async function workerSetCuratedVisibility(
+  slug: string,
+  visible: boolean,
+  updatedBy?: string,
+): Promise<{ entry: WorkerCuratedVisibility }> {
+  return archiveWorkerFetch(
+    `/admin/curated-visibility/${encodeURIComponent(slug)}`,
+    { method: "PUT", body: { visible, updatedBy } },
+  );
+}
+
 /** Map browser/R2 role names to Worker asset roles. */
 export function toWorkerAssetRole(role: string): string {
   if (role === "previewWebp") return "preview_webp";

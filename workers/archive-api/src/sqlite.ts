@@ -1,18 +1,29 @@
 import { DatabaseSync } from "node:sqlite";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SqlExecutor } from "./db";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
+const migrationsDir = join(here, "..", "migrations");
+
 export function migrationSqlPath(): string {
-  return join(here, "..", "migrations", "0001_init.sql");
+  return join(migrationsDir, "0001_init.sql");
+}
+
+/** Every migration file, in the order wrangler applies them. */
+export function migrationSqlPaths(): string[] {
+  return readdirSync(migrationsDir)
+    .filter((name) => name.endsWith(".sql"))
+    .sort()
+    .map((name) => join(migrationsDir, name));
 }
 
 export function applyMigration(db: DatabaseSync): void {
-  const sql = readFileSync(migrationSqlPath(), "utf8");
-  db.exec(sql);
+  for (const file of migrationSqlPaths()) {
+    db.exec(readFileSync(file, "utf8"));
+  }
 }
 
 /** Adapt node:sqlite DatabaseSync to the async SqlExecutor used by db.ts */

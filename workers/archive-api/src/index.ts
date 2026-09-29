@@ -25,6 +25,11 @@ import {
   type ListArtworksOpts,
   type ListArtworksSort,
 } from "./db";
+import {
+  isCuratedSlug,
+  listCuratedVisibility,
+  setCuratedVisibility,
+} from "./curated";
 import { errorJson, json, readJson, requireAdmin } from "./http";
 import type { SqlExecutor } from "./db";
 import { normalizeKeyPrefix, validateAssetObjectKey } from "./object-keys";
@@ -57,7 +62,7 @@ function corsHeaders(request: Request): HeadersInit {
     "access-control-allow-origin": origin,
     "access-control-allow-headers":
       "authorization, content-type, idempotency-key",
-    "access-control-allow-methods": "GET, POST, PATCH, DELETE, OPTIONS",
+    "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
   };
 }
 
@@ -241,6 +246,19 @@ async function handle(request: Request, env: Env): Promise<Response> {
     return createArtwork(request, env);
   }
 
+  if (path === "/admin/curated-visibility" && request.method === "GET") {
+    return json({ entries: await listCuratedVisibility(db(env)) });
+  }
+
+  const curatedMatch = /^\/admin\/curated-visibility\/([^/]+)$/.exec(path);
+  if (curatedMatch && request.method === "PUT") {
+    return putCuratedVisibility(
+      request,
+      env,
+      decodeURIComponent(curatedMatch[1]),
+    );
+  }
+
   const byDraftMatch = /^\/admin\/artworks\/by-draft\/([^/]+)$/.exec(path);
   if (byDraftMatch && request.method === "GET") {
     const draftId = decodeURIComponent(byDraftMatch[1]);
@@ -383,6 +401,33 @@ async function handle(request: Request, env: Env): Promise<Response> {
   }
 
   return errorJson(404, `Not found: ${path}`);
+}
+
+async function putCuratedVisibility(
+  request: Request,
+  env: Env,
+  slug: string,
+): Promise<Response> {
+  if (!isCuratedSlug(slug)) {
+    return errorJson(404, `Not a curated work: ${slug}`);
+  }
+  const body = await readJson<{ visible?: unknown; updatedBy?: unknown }>(
+    request,
+  ).catch(() => ({}) as { visible?: unknown; updatedBy?: unknown });
+  if (typeof body.visible !== "boolean") {
+    return errorJson(400, "visible (boolean) required");
+  }
+  const updatedBy =
+    typeof body.updatedBy === "string" && body.updatedBy.trim()
+      ? body.updatedBy.trim().slice(0, 120)
+      : null;
+  const entry = await setCuratedVisibility(
+    db(env),
+    slug,
+    body.visible,
+    updatedBy,
+  );
+  return json({ entry });
 }
 
 async function createArtwork(request: Request, env: Env): Promise<Response> {

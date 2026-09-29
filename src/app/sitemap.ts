@@ -1,6 +1,9 @@
 import type { MetadataRoute } from "next";
 import { listAllArchiveSlugs } from "@/lib/content/resolve-artwork";
 
+// Visibility changes made in Admin must reach the sitemap without a rebuild.
+export const dynamic = "force-dynamic";
+
 const SITE_URL = "https://anekaroopam.art";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {

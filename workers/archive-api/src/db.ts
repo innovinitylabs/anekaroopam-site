@@ -12,6 +12,7 @@ import {
   type AssetRole,
   type RevisionRow,
 } from "./types";
+import { CURATED_SLUGS } from "./curated";
 
 /** Minimal statement interface shared by D1 and node:sqlite adapters. */
 export type SqlBatchStatement = {
@@ -168,7 +169,7 @@ export async function createDraft(
   const revisionId = newId();
   const title = input.title?.trim() || "Untitled";
   const slug = input.slug?.trim()
-    ? normalizeSlug(input.slug)
+    ? assertSlugFormat(input.slug)
     : slugFromTitle(title, accessionId);
   const now = nowIso();
   const metadataJson = metadataFromTitle(title);
@@ -937,6 +938,7 @@ const RESERVED_SLUGS = new Set([
   "edit",
   "drafts",
   "unauthorized",
+  ...CURATED_SLUGS,
 ]);
 
 export function assertSlugFormat(slug: string): string {

@@ -12,6 +12,12 @@ import {
 } from "@/lib/archive/runtime";
 import type { ArchiveSearchParams } from "@/lib/archive/archive-search";
 import { matchesArchiveSearch } from "@/lib/archive/archive-search";
+import {
+  isCuratedSlug,
+  isCuratedVisible,
+  loadCuratedVisibility,
+  visibleCuratedArtworks,
+} from "@/lib/archive/curated";
 import { isPublicArchiveEntry } from "@/lib/archive/visibility";
 import { preferArchiveWorker } from "@/lib/archive/worker-config";
 import {
@@ -25,7 +31,9 @@ import {
 } from "./artworks";
 
 // When ARCHIVE_WORKER_* is configured, Worker public API is canonical.
-// Fallback to FS/legacy only on Worker infrastructure failure (never on 404).
+// Fallback to FS only on Worker infrastructure failure (never on 404).
+// Curated repository works are resolved separately and shown only when their
+// stored visibility is known and visible (see @/lib/archive/curated).
 
 export type ArtworkResolveResult = {
   artwork: PerceptionArtwork | undefined;
@@ -68,11 +76,18 @@ async function resolveDetailFallback(
       fallbackReason: reason,
     };
   }
-  const legacy = getLegacyArtworkById(slug);
+  return { artwork: undefined, fallbackActive: false };
+}
+
+async function resolveCuratedDetail(
+  slug: string,
+): Promise<ArtworkResolveResult> {
+  const visibility = await loadCuratedVisibility();
   return {
-    artwork: legacy,
-    fallbackActive: Boolean(legacy),
-    fallbackReason: legacy ? reason : undefined,
+    artwork: isCuratedVisible(visibility, slug)
+      ? getLegacyArtworkById(slug)
+      : undefined,
+    fallbackActive: false,
   };
 }
 
@@ -87,6 +102,7 @@ export async function getArtworkBySlugDetailed(
   slug: string,
 ): Promise<ArtworkResolveResult> {
   if (preferArchiveWorker()) {
+    if (isCuratedSlug(slug)) return resolveCuratedDetail(slug);
     const fromWorker = await tryGetPublicArtworkFromWorker(slug);
     if (fromWorker.ok) {
       return { artwork: fromWorker.value ?? undefined, fallbackActive: false };
@@ -113,6 +129,7 @@ export async function getArchiveEntryBySlug(
   slug: string,
 ): Promise<ArchiveEntry | null> {
   if (preferArchiveWorker()) {
+    if (isCuratedSlug(slug)) return null;
     const result = await tryGetPublicEntryFromWorker(slug);
     if (result.ok) return result.value;
     logFallback(slug, result.reason ?? "worker unavailable");
@@ -125,6 +142,7 @@ export async function getAccessionRuntimeBySlug(
   slug: string,
 ): Promise<AccessionRuntime | null> {
   if (preferArchiveWorker()) {
+    if (isCuratedSlug(slug)) return null;
     const result = await tryGetPublicEntryFromWorker(slug);
     if (result.ok) {
       if (!result.value) return null;
@@ -139,9 +157,17 @@ export async function getAccessionRuntimeBySlug(
 
 export async function listAllArchiveSlugs(): Promise<string[]> {
   if (preferArchiveWorker()) {
-    const listed = await tryListPublicArtworksFromWorker({ limit: 200 });
+    const [listed, curated] = await Promise.all([
+      tryListPublicArtworksFromWorker({ limit: 200 }),
+      loadCuratedVisibility(),
+    ]);
     if (listed.ok) {
-      return listed.value.artworks.map((w) => w.id);
+      return [
+        ...listed.value.artworks
+          .map((w) => w.id)
+          .filter((slug) => !isCuratedSlug(slug)),
+        ...visibleCuratedArtworks(curated).map((a) => a.id),
+      ];
     }
     console.warn(
       JSON.stringify({
@@ -186,7 +212,10 @@ export async function listAllArtworks(
   filters: ArchiveSearchParams = {},
 ): Promise<ArchiveListResult> {
   if (preferArchiveWorker()) {
-    const facetSource = await tryListPublicArtworksFromWorker({ limit: 200 });
+    const [facetSource, curatedVisibility] = await Promise.all([
+      tryListPublicArtworksFromWorker({ limit: 200 }),
+      loadCuratedVisibility(),
+    ]);
     if (!facetSource.ok) {
       console.warn(
         JSON.stringify({
@@ -202,16 +231,30 @@ export async function listAllArtworks(
         fallbackActive: true,
       };
     }
-    const facets = deriveFacets(facetSource.value.artworks);
+    const curated = visibleCuratedArtworks(curatedVisibility);
+    const withoutCurated = (works: PerceptionArtwork[]) =>
+      works.filter((w) => !isCuratedSlug(w.id));
+    // Curated works are appended to the first page only.
+    const curatedPage = filters.offset
+      ? []
+      : curated.filter((a) => matchesArchiveSearch(a, filters));
+    const facets = deriveFacets([
+      ...withoutCurated(facetSource.value.artworks),
+      ...curated,
+    ]);
     const hasFilters = Boolean(
       filters.q?.trim() ||
         filters.year != null ||
         filters.process?.trim(),
     );
     if (!hasFilters && !filters.offset) {
+      const works = withoutCurated(facetSource.value.artworks);
       return {
-        artworks: facetSource.value.artworks,
-        total: facetSource.value.total,
+        artworks: [...works, ...curatedPage],
+        total:
+          facetSource.value.total -
+          (facetSource.value.artworks.length - works.length) +
+          curated.length,
         facets,
         serverFiltered: true,
       };
@@ -226,9 +269,16 @@ export async function listAllArtworks(
         fallbackActive: true,
       };
     }
+    const works = withoutCurated(filtered.value.artworks);
+    const curatedMatches = curated.filter((a) =>
+      matchesArchiveSearch(a, filters),
+    );
     return {
-      artworks: filtered.value.artworks,
-      total: filtered.value.total,
+      artworks: [...works, ...curatedPage],
+      total:
+        filtered.value.total -
+        (filtered.value.artworks.length - works.length) +
+        curatedMatches.length,
       facets,
       serverFiltered: true,
     };

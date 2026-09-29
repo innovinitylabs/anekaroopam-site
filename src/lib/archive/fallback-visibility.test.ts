@@ -151,15 +151,15 @@ describe("Worker unavailable: local fallback visibility", () => {
     assert.equal(detail.fallbackActive, false);
   });
 
-  it("a legacy placeholder with no local copy is still served", async () => {
+  it("a curated work is not served while its visibility is unknown", async () => {
     mode = "unavailable";
     const emptyRoot = await fs.mkdtemp(path.join(os.tmpdir(), "anek-fallback-empty-"));
     try {
       const detail = await runWithRepoRoot(emptyRoot, () =>
         getArtworkBySlugDetailed(LEGACY_ID),
       );
-      assert.equal(detail.artwork?.id, LEGACY_ID);
-      assert.equal(detail.fallbackActive, true);
+      assert.equal(detail.artwork, undefined);
+      assert.equal(detail.fallbackActive, false);
     } finally {
       await fs.rm(emptyRoot, { recursive: true, force: true });
     }
