@@ -162,6 +162,150 @@ test("curated visibility never touches the artworks lifecycle", async () => {
   raw.close();
 });
 
+type StoredRow = {
+  slug: string;
+  visible: number;
+  updated_at: string;
+  updated_by: string | null;
+};
+
+function storedRows(raw: ReturnType<typeof memoryEnv>["raw"]): StoredRow[] {
+  return raw
+    .prepare(
+      "SELECT slug, visible, updated_at, updated_by FROM curated_visibility ORDER BY slug",
+    )
+    .all() as StoredRow[];
+}
+
+function putVisibility(env: Env, slug: string, body: unknown, auth = true) {
+  return call(
+    env,
+    `/admin/curated-visibility/${encodeURIComponent(slug)}`,
+    { method: "PUT", body: JSON.stringify(body) },
+    auth,
+  );
+}
+
+test("no rows are stored until a visibility change is made", async () => {
+  const { raw, env } = memoryEnv();
+  await listEntries(env);
+  assert.deepEqual(storedRows(raw), []);
+  raw.close();
+});
+
+test("each change persists as one D1 row per work; other rows are untouched", async () => {
+  const { raw, env } = memoryEnv();
+  const [crown, vali, aazh] = CURATED_SLUGS;
+
+  assert.equal((await putVisibility(env, crown, { visible: false, updatedBy: "a" })).status, 200);
+  assert.equal((await putVisibility(env, aazh, { visible: false, updatedBy: "b" })).status, 200);
+  assert.equal((await putVisibility(env, vali, { visible: true, updatedBy: "c" })).status, 200);
+
+  let rows = storedRows(raw);
+  assert.deepEqual(
+    rows.map((r) => [r.slug, r.visible, r.updated_by]),
+    [
+      [aazh, 0, "b"],
+      [crown, 0, "a"],
+      [vali, 1, "c"],
+    ],
+  );
+  assert.ok(rows.every((r) => !Number.isNaN(Date.parse(r.updated_at))));
+  const aazhBefore = rows.find((r) => r.slug === aazh)!;
+  const valiBefore = rows.find((r) => r.slug === vali)!;
+
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal((await putVisibility(env, crown, { visible: true, updatedBy: "d" })).status, 200);
+
+  rows = storedRows(raw);
+  assert.equal(rows.length, 3, "upsert must not add a second row for the same work");
+  const crownAfter = rows.find((r) => r.slug === crown)!;
+  assert.equal(crownAfter.visible, 1);
+  assert.equal(crownAfter.updated_by, "d");
+  assert.deepEqual(rows.find((r) => r.slug === aazh), aazhBefore);
+  assert.deepEqual(rows.find((r) => r.slug === vali), valiBefore);
+
+  const entries = new Map((await listEntries(env)).map((e) => [e.slug, e]));
+  assert.equal(entries.get(crown)?.visible, true);
+  assert.equal(entries.get(vali)?.visible, true);
+  assert.equal(entries.get(aazh)?.visible, false);
+  assert.equal(entries.get(aazh)?.updatedBy, "b");
+  raw.close();
+});
+
+test("the PUT response echoes the persisted row", async () => {
+  const { raw, env } = memoryEnv();
+  const res = await putVisibility(env, "valiroopam", { visible: false, updatedBy: "curator" });
+  const { entry } = (await res.json()) as { entry: Entry };
+  const [row] = storedRows(raw);
+  assert.deepEqual(entry, {
+    slug: row.slug,
+    visible: row.visible === 1,
+    updatedAt: row.updated_at,
+    updatedBy: row.updated_by,
+  });
+  raw.close();
+});
+
+test("a wrong admin token is rejected and changes nothing", async () => {
+  const { raw, env } = memoryEnv();
+  const wrong = await worker.fetch(
+    new Request("https://worker.test/admin/curated-visibility/valiroopam", {
+      method: "PUT",
+      headers: { authorization: "Bearer not-the-token" },
+      body: JSON.stringify({ visible: false }),
+    }),
+    env,
+  );
+  assert.equal(wrong.status, 401);
+  const list = await worker.fetch(
+    new Request("https://worker.test/admin/curated-visibility", {
+      headers: { authorization: "Bearer not-the-token" },
+    }),
+    env,
+  );
+  assert.equal(list.status, 401);
+  assert.deepEqual(storedRows(raw), []);
+  raw.close();
+});
+
+test("invalid bodies are rejected without writing", async () => {
+  const { raw, env } = memoryEnv();
+  for (const body of ["not json", "{}", JSON.stringify({ visible: 0 }), JSON.stringify({ visible: null })]) {
+    const res = await call(env, "/admin/curated-visibility/valiroopam", {
+      method: "PUT",
+      body,
+    });
+    assert.equal(res.status, 400, body);
+  }
+  assert.deepEqual(storedRows(raw), []);
+  raw.close();
+});
+
+test("updatedBy is trimmed, capped at 120 characters, and optional", async () => {
+  const { raw, env } = memoryEnv();
+  await putVisibility(env, "valiroopam", { visible: false, updatedBy: `  ${"x".repeat(200)}  ` });
+  await putVisibility(env, "aazhmaarrattam", { visible: false, updatedBy: 42 });
+  await putVisibility(env, "the-one-who-is-crown-among-the-kings", { visible: false, updatedBy: "   " });
+  const rows = new Map(storedRows(raw).map((r) => [r.slug, r]));
+  assert.equal(rows.get("valiroopam")?.updated_by, "x".repeat(120));
+  assert.equal(rows.get("aazhmaarrattam")?.updated_by, null);
+  assert.equal(rows.get("the-one-who-is-crown-among-the-kings")?.updated_by, null);
+  raw.close();
+});
+
+test("D1 only accepts 0 or 1 for visible", () => {
+  const { raw } = memoryEnv();
+  assert.throws(() =>
+    raw
+      .prepare(
+        "INSERT INTO curated_visibility (slug, visible, updated_at) VALUES (?, ?, ?)",
+      )
+      .run("valiroopam", 2, new Date().toISOString()),
+  );
+  raw.close();
+});
+
 test("curated slugs are reserved for D1 artworks", async () => {
   const { raw, db } = memoryEnv();
   await assert.rejects(

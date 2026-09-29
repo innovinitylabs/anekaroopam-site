@@ -108,6 +108,7 @@ const PRIVATE_DATA_CALLS = [
   "getAllArchiveEntries(",
   "loadWorkerDashboard(",
   "loadLegacyDashboard(",
+  "loadCuratedVisibility(",
 ];
 
 describe("admin pages gate private data server-side", () => {
