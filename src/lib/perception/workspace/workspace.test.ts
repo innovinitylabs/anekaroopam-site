@@ -205,6 +205,29 @@ test("snapshot strips imageSrc and omits conversion blobs", () => {
   assert.doesNotMatch(JSON.stringify(snap), /SECRET|blob:secret/);
 });
 
+test("HYDRATE_FROM_PERSISTENCE replaces runtime with the resolved state", () => {
+  const initial = createInitialWorkspaceState();
+  let restored = createInitialWorkspaceState();
+  restored = workspaceReducer(restored, {
+    type: "IMPORT_SOURCE",
+    source: {
+      registryKey: restored.workspaceId,
+      fileName: "r.png",
+      byteSize: 5,
+      lastModified: 3,
+      objectUrl: "blob:restored",
+    },
+    fileNameForTitle: "r.png",
+  });
+  const next = workspaceReducer(initial, {
+    type: "HYDRATE_FROM_PERSISTENCE",
+    state: restored,
+  });
+  assert.equal(next, restored);
+  assert.equal(next.workspaceId, restored.workspaceId);
+  assert.equal(next.artwork.imageSrc, "blob:restored");
+});
+
 test("journey A/B same-tab: artwork survives option-independent edits", () => {
   let state = createInitialWorkspaceState();
   state = workspaceReducer(state, {

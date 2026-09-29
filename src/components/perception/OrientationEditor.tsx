@@ -24,6 +24,7 @@ export function OrientationEditor() {
     state,
     dispatch,
     resolved,
+    persistence,
     importFile,
     clearSource,
   } = usePerceiveWorkspace();
@@ -121,8 +122,9 @@ export function OrientationEditor() {
         )}
         {state.source && !state.artwork.imageSrc && (
           <p className="absolute inset-x-4 bottom-4 z-10 border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[0.68rem] text-[var(--muted)]">
-            Source metadata restored after reload — re-import the image file to
-            continue.
+            {persistence.status === "restoring"
+              ? "Restoring the source image from this browser..."
+              : "Source details were kept, but the image file is not stored in this browser. Re-import it to continue."}
           </p>
         )}
         {state.artwork.imageSrc && (
@@ -168,16 +170,28 @@ export function OrientationEditor() {
             <h2 className="text-[0.62rem] tracking-[0.18em] uppercase text-[var(--muted)]">
               Export
             </h2>
+            {persistence.restoredSource && state.artwork.imageSrc && (
+              <p className="text-[0.62rem] leading-relaxed text-[var(--muted)]">
+                Restored from this browser.
+              </p>
+            )}
+            {(persistence.status === "unavailable" ||
+              persistence.status === "degraded") &&
+              persistence.message && (
+                <p className="text-[0.62rem] leading-relaxed text-[var(--muted)]">
+                  {persistence.message}
+                </p>
+              )}
             <Link
               href="/perceive/tools/prepare"
-              title="Open Prepare for advanced encoding, comparison, and sizing. Workspace state is shared."
+              title="Advanced encoding, comparison, and sizing. Workspace state is shared with Orient."
               className={`block w-full border border-[var(--border)] py-3 text-center text-[0.68rem] tracking-[0.14em] uppercase sm:py-2 ${
                 state.artwork.imageSrc || state.source
                   ? "hover:border-[var(--foreground)]"
                   : "pointer-events-none opacity-30"
               }`}
             >
-              Open Prepare
+              Advanced preparation
             </Link>
             {(state.artwork.imageSrc || state.source) && (
               <ExportHtmlSection compact />

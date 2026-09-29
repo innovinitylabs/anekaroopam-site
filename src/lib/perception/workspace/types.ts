@@ -3,6 +3,8 @@ import type {
   ConversionResult,
   ExportPresetId,
   ImageAnalysis,
+  ImageFormat,
+  ImageStats,
 } from "@/lib/image-processing/types";
 import type { StandaloneExportProfile } from "@/lib/html-export/standalone-profile";
 import type { estimateHtmlExport } from "@/lib/html-export/estimate";
@@ -87,3 +89,54 @@ export type PattaraiWorkspaceSnapshot = {
 
 export const PATTARAI_WORKSPACE_SNAPSHOT_KEY =
   "anekaroopam-pattarai-workspace-v1" as const;
+
+export const PATTARAI_RECORD_SCHEMA_VERSION = 1 as const;
+
+export type PersistedBlobKind = "source" | "avif" | "webp";
+
+/** ConversionResult without blob or dataUrl (those are rebuilt on restore). */
+export type PreparedBlobMeta = {
+  stats: ImageStats;
+  format: ImageFormat;
+  compressionRatio: number;
+  processingMs: number;
+  requestedFormat?: ImageFormat;
+  encodedWithWasm?: boolean;
+};
+
+/** IndexedDB `workspace` store record (key "current"). No binaries, no URLs. */
+export type PersistedWorkspaceRecord = {
+  schemaVersion: typeof PATTARAI_RECORD_SCHEMA_VERSION;
+  workspaceId: string;
+  updatedAt: string;
+  snapshot: PattaraiWorkspaceSnapshot;
+  blobs: Record<PersistedBlobKind, boolean>;
+  prepared: {
+    fingerprint: string;
+    avif: PreparedBlobMeta;
+    webp: PreparedBlobMeta | null;
+  } | null;
+};
+
+/** IndexedDB `blobs` store entry (key = kind). */
+export type PersistedBlob = {
+  workspaceId: string;
+  kind: PersistedBlobKind;
+  blob: Blob;
+  fileName?: string;
+  mimeType: string;
+  lastModified?: number;
+};
+
+export type WorkspacePersistenceStatus =
+  | "restoring"
+  | "ready"
+  | "unavailable"
+  | "degraded";
+
+export type WorkspacePersistenceState = {
+  status: WorkspacePersistenceStatus;
+  /** True when the source image was restored from browser storage on this load. */
+  restoredSource: boolean;
+  message?: string;
+};

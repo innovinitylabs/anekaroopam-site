@@ -11,7 +11,6 @@ import { analyzeImage, formatBytes } from "@/lib/image-processing";
 import { EXPORT_PRESETS, getPreset } from "@/lib/image-processing/presets";
 import { downloadConvertedImage } from "@/lib/export-engine/pipeline";
 import { usePerceiveWorkspace } from "@/lib/perception/workspace";
-import { ExportHtmlSection } from "@/components/perception/ExportHtmlSection";
 import { PanelSection } from "./PanelSection";
 import { SpecTable } from "./SpecTable";
 import { ImageDropZone } from "./ImageDropZone";
@@ -23,7 +22,8 @@ export function PrepareWorkspace() {
   const {
     state,
     dispatch,
-    resolved,
+    isPreparedValid,
+    persistence,
     importFile,
     clearSource,
     ensurePreparedBundle,
@@ -119,12 +119,19 @@ export function PrepareWorkspace() {
           <div className="w-full max-w-md space-y-4">
             {needsReimport && (
               <p className="border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-[0.78rem] leading-relaxed text-[var(--muted)]">
-                Source metadata was restored after reload — re-import the image
-                file to continue. Workspace is shared with{" "}
-                <Link href="/perceive" className="underline">
-                  Orient
-                </Link>
-                ; no session save is needed.
+                {persistence.status === "restoring" ? (
+                  "Restoring the source image from this browser..."
+                ) : (
+                  <>
+                    Source details were kept, but the image file is not stored
+                    in this browser. Re-import it to continue. The workspace is
+                    shared with{" "}
+                    <Link href="/perceive" className="underline">
+                      Orient
+                    </Link>
+                    .
+                  </>
+                )}
               </p>
             )}
             <ImageDropZone
@@ -356,8 +363,10 @@ export function PrepareWorkspace() {
                       ))}
                     </select>
                     <p className="mt-2 text-[0.65rem] leading-relaxed text-[var(--muted)]">
-                      Prepared master is AVIF (libavif / WebAssembly) for the
-                      shared workspace. Large images may take longer to encode.
+                      AVIF is the default prepared and export format (libavif /
+                      WebAssembly). WebP is only added when the Compatible
+                      export profile is selected. Large images may take longer
+                      to encode.
                     </p>
                   </label>
                   <label className="block">
@@ -386,7 +395,7 @@ export function PrepareWorkspace() {
                         patchOptions({ lossless: e.target.checked })
                       }
                     />
-                    Lossless (PNG / WebP)
+                    Lossless AVIF
                   </label>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="block">
@@ -540,19 +549,51 @@ export function PrepareWorkspace() {
 
               <PanelSection
                 title="HTML artifact"
-                subtitle="Standalone orientation export"
+                subtitle="Standalone export happens in Orient"
               >
-                <ExportHtmlSection />
-                <p className="mt-3 text-[0.68rem] leading-relaxed text-[var(--muted)]">
-                  Edit perceptual states in{" "}
-                  <Link href="/perceive" className="underline">
-                    Orient
-                  </Link>
-                  . Workspace is shared — no session save needed.
-                  {resolved.metadata.title
-                    ? ` Current title: ${resolved.metadata.title}.`
-                    : ""}
-                </p>
+                <SpecTable
+                  rows={[
+                    {
+                      label: "Prepared AVIF",
+                      value: state.preparation.preparedAvif
+                        ? formatBytes(state.preparation.preparedAvif.stats.byteSize)
+                        : "Not prepared",
+                    },
+                    ...(state.export.profile === "compatible"
+                      ? [
+                          {
+                            label: "WebP fallback",
+                            value: state.preparation.preparedWebp
+                              ? formatBytes(
+                                  state.preparation.preparedWebp.stats.byteSize,
+                                )
+                              : "Not prepared",
+                          },
+                        ]
+                      : []),
+                    {
+                      label: "Profile",
+                      value:
+                        state.export.profile === "compatible"
+                          ? "Compatible: AVIF + WebP fallback"
+                          : "AVIF only",
+                    },
+                    {
+                      label: "Status",
+                      value: isPreparedValid
+                        ? "Ready for export"
+                        : state.preparation.status === "stale"
+                          ? "Stale, reconverts on export"
+                          : "Prepares on export",
+                    },
+                  ]}
+                />
+                <Link
+                  href="/perceive"
+                  className="mt-3 block w-full border border-[var(--border)] py-3 text-center text-[0.68rem] tracking-[0.14em] uppercase transition-colors hover:border-[var(--foreground)] sm:py-2"
+                >
+                  Export from Orient
+                </Link>
               </PanelSection>
 
               <button

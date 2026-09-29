@@ -130,6 +130,7 @@ export function preparedIsValid(state: PattaraiWorkspaceRuntime): boolean {
 
 export type WorkspaceAction =
   | { type: "HYDRATE_SOURCE_URL"; objectUrl: string }
+  | { type: "HYDRATE_FROM_PERSISTENCE"; state: PattaraiWorkspaceRuntime }
   | {
       type: "IMPORT_SOURCE";
       source: WorkspaceSource;
@@ -196,6 +197,8 @@ export function workspaceReducer(
         artwork: { ...state.artwork, imageSrc: action.objectUrl },
       };
     }
+    case "HYDRATE_FROM_PERSISTENCE":
+      return action.state;
     case "IMPORT_SOURCE": {
       const title =
         state.artwork.metadata.title ||

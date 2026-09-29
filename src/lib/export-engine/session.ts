@@ -17,29 +17,6 @@ export interface PrepareSessionStored {
   ingestDraftId?: string;
 }
 
-export function savePrepareSession(input: {
-  artwork: PerceptionArtwork;
-  customBackground?: string;
-  uploadDraftId: string;
-  sourceFileName?: string;
-  ingestDraftId?: string;
-}): void {
-  if (typeof window === "undefined") return;
-  const stored: PrepareSessionStored = {
-    uploadDraftId: input.uploadDraftId,
-    artwork: stripArtworkForStorage(input.artwork),
-    customBackground: input.customBackground,
-    sourceFileName: input.sourceFileName,
-    savedAt: new Date().toISOString(),
-    ingestDraftId: input.ingestDraftId,
-  };
-  try {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(stored));
-  } catch {
-    console.warn("Prepare session could not be saved (quota). Metadata only.");
-  }
-}
-
 export function loadPrepareSession(): PrepareSessionStored | null {
   if (typeof window === "undefined") return null;
   const raw = sessionStorage.getItem(SESSION_KEY);

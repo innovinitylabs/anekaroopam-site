@@ -105,7 +105,7 @@ export function ExportHtmlSection({ compact }: ExportHtmlSectionProps) {
           Export profile
         </span>
         <select
-          title="On-chain: AVIF only. Compatible: AVIF with WebP fallback."
+          title="AVIF is the default image format. Compatible adds a WebP fallback for browsers without AVIF support, which increases file size."
           className="mt-1 min-h-10 w-full border-b border-[var(--border)] bg-transparent py-1 text-sm sm:min-h-0"
           value={state.export.profile}
           onChange={(e) =>
@@ -115,8 +115,8 @@ export function ExportHtmlSection({ compact }: ExportHtmlSectionProps) {
             })
           }
         >
-          <option value="compatible">Compatible (AVIF + WebP)</option>
-          <option value="onchain">On-chain (AVIF only)</option>
+          <option value="compatible">Compatible: AVIF + WebP fallback</option>
+          <option value="onchain">AVIF only (default size)</option>
         </select>
       </label>
       {specs && <SpecTable rows={specs} />}
