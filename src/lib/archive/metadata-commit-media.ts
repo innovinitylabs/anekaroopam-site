@@ -16,11 +16,14 @@ export interface ValidatedMetadataCommitMedia {
   objects: MetadataCommitMediaObjectInput[];
 }
 
-export function validateMetadataCommitMedia(input: {
-  accessionId?: string;
-  revision?: number;
-  objects?: MetadataCommitMediaObjectInput[];
-}):
+export function validateMetadataCommitMedia(
+  input: {
+    accessionId?: string;
+    revision?: number;
+    objects?: MetadataCommitMediaObjectInput[];
+  },
+  keyPrefix?: string | null,
+):
   | { ok: true; media: ValidatedMetadataCommitMedia }
   | { ok: false; error: string } {
   const accessionId = String(input.accessionId ?? "").trim();
@@ -56,7 +59,7 @@ export function validateMetadataCommitMedia(input: {
         error: `Invalid contentLength for ${obj.key}`,
       };
     }
-    if (!isAllowedArchiveObjectKey(obj.key, accessionId, revision)) {
+    if (!isAllowedArchiveObjectKey(obj.key, accessionId, revision, keyPrefix)) {
       return {
         ok: false,
         error: `Unauthorized object key for metadata-commit: ${obj.key}`,

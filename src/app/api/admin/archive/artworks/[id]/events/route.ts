@@ -6,7 +6,10 @@ import {
   workerListEvents,
   workerAppendEvent,
 } from "@/lib/archive/worker-client";
-import { findWorkerArtworkByDraftOrSlug } from "@/lib/archive/worker-drafts";
+import {
+  findWorkerArtworkByDraftOrSlug,
+  resolveWorkerArtworkForWrite,
+} from "@/lib/archive/worker-drafts";
 
 export const runtime = "nodejs";
 
@@ -63,10 +66,8 @@ export async function POST(request: Request, { params }: Context) {
 
   try {
     const { id } = await params;
-    const artworkId = await resolveArtworkId(id);
-    if (!artworkId) {
-      return NextResponse.json({ error: "Artwork not found" }, { status: 404 });
-    }
+    const artworkId = (await resolveWorkerArtworkForWrite({ artworkId: id }))
+      .id;
     const body = (await request.json()) as {
       eventType?: string;
       payload?: unknown;

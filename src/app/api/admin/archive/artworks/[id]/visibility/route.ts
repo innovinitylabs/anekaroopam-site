@@ -6,7 +6,7 @@ import {
   workerSetVisibility,
   workerUnpublish,
 } from "@/lib/archive/worker-client";
-import { findWorkerArtworkByDraftOrSlug } from "@/lib/archive/worker-drafts";
+import { resolveWorkerArtworkForWrite } from "@/lib/archive/worker-drafts";
 
 export const runtime = "nodejs";
 
@@ -24,15 +24,8 @@ export async function POST(request: Request, { params }: Context) {
 
   try {
     const { id } = await params;
-    const row = await findWorkerArtworkByDraftOrSlug({
-      draftId: id,
-      slug: id,
-      accessionId: id,
-    });
-    const artworkId = row?.id ?? (/^[0-9a-f-]{36}$/i.test(id) ? id : null);
-    if (!artworkId) {
-      return NextResponse.json({ error: "Artwork not found" }, { status: 404 });
-    }
+    const artworkId = (await resolveWorkerArtworkForWrite({ artworkId: id }))
+      .id;
 
     const body = (await request.json()) as {
       action?: "unpublish" | "hide" | "withdraw" | "restore";

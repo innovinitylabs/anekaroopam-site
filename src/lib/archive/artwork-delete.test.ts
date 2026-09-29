@@ -148,16 +148,83 @@ test("assertOwnedAssetKeys rejects unparseable archive/ keys", () => {
   );
 });
 
-test("assertOwnedAssetKeys allows non-archive dig keys from D1 join", () => {
-  const keys = assertOwnedAssetKeys("AR-2026-0001", [
-    {
-      asset_id: "dig1",
-      role: "artwork",
-      object_key: "dig/test-only/object.bin",
-      revision: 1,
-    },
-  ]);
-  assert.deepEqual(keys, ["dig/test-only/object.bin"]);
+test("assertOwnedAssetKeys rejects non-archive keys even when joined in D1", () => {
+  assert.throws(
+    () =>
+      assertOwnedAssetKeys("AR-2026-0001", [
+        {
+          asset_id: "dig1",
+          role: "artwork",
+          object_key: "dig/test-only/object.bin",
+          revision: 1,
+        },
+      ]),
+    /does not match accession/,
+  );
+});
+
+test("assertOwnedAssetKeys requires the environment namespace prefix", () => {
+  assert.deepEqual(
+    assertOwnedAssetKeys(
+      "AR-2026-0001",
+      [
+        {
+          asset_id: "a1",
+          role: "thumb",
+          object_key: "dev/archive/AR-2026-0001/r1/derivatives/thumb.jpg",
+          revision: 1,
+        },
+      ],
+      "dev/",
+    ),
+    ["dev/archive/AR-2026-0001/r1/derivatives/thumb.jpg"],
+  );
+  for (const foreign of [
+    "archive/AR-2026-0001/r1/derivatives/thumb.jpg",
+    "prod/archive/AR-2026-0001/r1/derivatives/thumb.jpg",
+  ]) {
+    assert.throws(
+      () =>
+        assertOwnedAssetKeys(
+          "AR-2026-0001",
+          [{ asset_id: "a1", role: "thumb", object_key: foreign, revision: 1 }],
+          "dev/",
+        ),
+      /outside the "dev\/" namespace/,
+    );
+  }
+});
+
+test("cross-environment owned key aborts delete before R2 or D1", async () => {
+  let r2 = false;
+  let d1 = false;
+  const result = await performPermanentArtworkDelete(
+    "art-1",
+    "permanent",
+    baseDeps({
+      keyPrefix: "prod/",
+      listOwnedAssets: async () => [
+        {
+          asset_id: "a1",
+          role: "artwork",
+          object_key: "dev/archive/AR-2026-0001/r1/derivatives/artwork.avif",
+          revision: 1,
+        },
+      ],
+      deleteR2Objects: async (keys) => {
+        r2 = true;
+        return { deleted: keys, failed: [] };
+      },
+      deleteD1Artwork: async (id) => {
+        d1 = true;
+        return { deleted: true as const, id };
+      },
+    }),
+  );
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.status, 409);
+  assert.equal(r2, false);
+  assert.equal(d1, false);
 });
 
 function baseDeps(

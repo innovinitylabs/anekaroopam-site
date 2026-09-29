@@ -4,8 +4,8 @@
  */
 
 import {
+  normalizeR2KeyPrefix,
   parseAccessionRevisionFromKey,
-  withoutR2KeyPrefix,
 } from "@/lib/r2/object-keys";
 
 export type OwnedAssetForDelete = {
@@ -60,33 +60,34 @@ export function assertNeverPublishedDeletable(
 }
 
 /**
- * Keep only assets whose object_key accession matches the artwork accession.
- * Throws if any foreign key is present (do not silently drop — abort delete).
+ * Every owned key must live inside the environment namespace and parse as
+ * archive/{accessionId}/r{n}/... for this artwork's accession.
+ * Throws if any key fails (do not silently drop — abort delete).
  */
 export function assertOwnedAssetKeys(
   accessionId: string,
   assets: OwnedAssetForDelete[],
   keyPrefix?: string | null,
 ): string[] {
+  const prefix = normalizeR2KeyPrefix(keyPrefix);
   const keys: string[] = [];
   for (const asset of assets) {
-    const parsed = parseAccessionRevisionFromKey(asset.object_key, keyPrefix);
+    if (prefix && !asset.object_key.startsWith(prefix)) {
+      throw Object.assign(
+        new Error(
+          `Owned asset key is outside the "${prefix}" namespace: ${asset.object_key}`,
+        ),
+        { status: 409 },
+      );
+    }
+    const parsed = parseAccessionRevisionFromKey(asset.object_key, prefix);
     if (!parsed) {
-      // Dig/test keys may not match production shape; still require prefix ownership
-      // via revision_assets join. Non-archive keys are allowed only when they cannot
-      // be parsed as another accession — reject if they look like archive/* for a
-      // different accession.
-      const logical = withoutR2KeyPrefix(asset.object_key, keyPrefix);
-      if (logical.startsWith("archive/")) {
-        throw Object.assign(
-          new Error(
-            `Owned asset key does not match accession ${accessionId}: ${asset.object_key}`,
-          ),
-          { status: 409 },
-        );
-      }
-      keys.push(asset.object_key);
-      continue;
+      throw Object.assign(
+        new Error(
+          `Owned asset key does not match accession ${accessionId}: ${asset.object_key}`,
+        ),
+        { status: 409 },
+      );
     }
     if (parsed.accessionId !== accessionId) {
       throw Object.assign(

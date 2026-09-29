@@ -15,11 +15,12 @@ import {
   workerPublish,
 } from "@/lib/archive/worker-client";
 import {
-  findWorkerArtworkByDraftOrSlug,
+  resolveWorkerArtworkForWrite,
   updateDraftViaWorker,
 } from "@/lib/archive/worker-drafts";
 import { commitFiles } from "@/lib/github/git-commit";
 import { r2ArchiveReady } from "@/lib/r2/config";
+import { resolveR2Namespace } from "@/lib/r2/namespace";
 import { verifyR2Objects } from "@/lib/r2/verify";
 import type { AccessionDraft } from "@/lib/archive/schema";
 
@@ -68,6 +69,10 @@ export async function POST(request: Request) {
       { status: 503 },
     );
   }
+  const namespace = resolveR2Namespace();
+  if (!namespace.ok) {
+    return NextResponse.json({ error: namespace.error }, { status: 503 });
+  }
 
   try {
     const body = (await request.json()) as MetadataCommitBody;
@@ -86,12 +91,31 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "slug is required" }, { status: 400 });
     }
 
-    const mediaCheck = validateMetadataCommitMedia(body.media ?? {});
+    const mediaCheck = validateMetadataCommitMedia(
+      body.media ?? {},
+      namespace.prefix,
+    );
     if (!mediaCheck.ok) {
       return NextResponse.json({ error: mediaCheck.error }, { status: 400 });
     }
 
     const { accessionId, revision, objects: mediaObjects } = mediaCheck.media;
+
+    const row = useWorker
+      ? await resolveWorkerArtworkForWrite({
+          artworkId: body.artworkId,
+          draftId,
+          accessionId,
+        })
+      : null;
+    if (row && revision > row.workingRevision) {
+      return NextResponse.json(
+        {
+          error: `Media revision r${revision} is ahead of the working revision (r${row.workingRevision}) of ${row.accessionId}`,
+        },
+        { status: 409 },
+      );
+    }
 
     const verified = await verifyR2Objects(
       mediaObjects.map((obj) => ({
@@ -114,32 +138,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (useWorker) {
-      const row =
-        (body.artworkId
-          ? await findWorkerArtworkByDraftOrSlug({
-              accessionId,
-              draftId,
-              slug,
-            })
-          : await findWorkerArtworkByDraftOrSlug({
-              draftId,
-              slug,
-              accessionId,
-            })) ??
-        (await findWorkerArtworkByDraftOrSlug({
-          draftId,
-          slug,
-          accessionId,
-        }));
-
-      if (!row) {
-        return NextResponse.json(
-          { error: "Worker artwork not found for metadata commit" },
-          { status: 404 },
-        );
-      }
-
+    if (row) {
       if (body.artwork || body.provenance || body.export) {
         await updateDraftViaWorker(row.draftId, {
           slug,
@@ -159,11 +158,15 @@ export async function POST(request: Request) {
         await workerPatchArtwork(row.id, { slug });
       }
 
-      try {
-        await workerMarkReady(row.id);
-      } catch (e) {
-        if (!(e instanceof ArchiveWorkerError && e.status === 409)) {
-          throw e;
+      // Only never-published drafts enter the ready lifecycle; published,
+      // hidden, and withdrawn artworks keep their public state while edited.
+      if (row.status === "draft" || row.status === "uploading") {
+        try {
+          await workerMarkReady(row.id);
+        } catch (e) {
+          if (!(e instanceof ArchiveWorkerError && e.status === 409)) {
+            throw e;
+          }
         }
       }
 

@@ -2,8 +2,9 @@
  * Deterministic R2 object key builders and validators.
  * Keys never include browser-local draft ids.
  *
- * Optional R2_KEY_PREFIX (e.g. "dev/") isolates dig objects in a shared bucket.
- * Logical keys remain archive/{accessionId}/r{n}/...; stored keys may be prefixed.
+ * R2_KEY_PREFIX ("dev/" or "prod/", see ./namespace.ts) isolates environments in
+ * a shared bucket. Logical keys remain archive/{accessionId}/r{n}/...; write
+ * routes require stored keys to carry the environment prefix.
  */
 
 import { ARCHIVE_IMAGE_OUTPUTS } from "@/lib/archive/image-specs";
@@ -212,7 +213,10 @@ export function buildAllRevisionKeys(input: {
   };
 }
 
-/** True when key is a valid archive media object for the given accession + revision. */
+/**
+ * True when key is a valid archive media object for the given accession + revision.
+ * A non-empty prefix is mandatory: unprefixed or foreign-prefixed keys are rejected.
+ */
 export function isAllowedArchiveObjectKey(
   key: string,
   accessionId: string,
@@ -230,9 +234,13 @@ export function isAllowedArchiveObjectKey(
     return false;
   }
 
-  const prefix =
-    keyPrefix !== undefined ? keyPrefix : getR2KeyPrefixFromEnv();
-  const logical = withoutR2KeyPrefix(key, prefix);
+  const prefix = normalizeR2KeyPrefix(
+    keyPrefix !== undefined ? keyPrefix : getR2KeyPrefixFromEnv(),
+  );
+  if (prefix && !key.startsWith(prefix)) {
+    return false;
+  }
+  const logical = prefix ? key.slice(prefix.length) : key;
   const expected = `archive/${accessionId}/r${revision}/`;
   if (!logical.startsWith(expected)) {
     return false;

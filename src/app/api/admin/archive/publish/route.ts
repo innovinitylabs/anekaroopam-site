@@ -16,7 +16,7 @@ import {
   ArchiveWorkerError,
   workerPublish,
 } from "@/lib/archive/worker-client";
-import { findWorkerArtworkByDraftOrSlug } from "@/lib/archive/worker-drafts";
+import { resolveWorkerArtworkForWrite } from "@/lib/archive/worker-drafts";
 import {
   ArchiveSyncIncompleteError,
   ArchiveSyncNotFoundError,
@@ -49,25 +49,16 @@ export async function POST(request: Request) {
         artworkId?: string;
         revision?: number;
       };
-      const slug = body.slug?.trim();
-      if (!slug && !body.draftId && !body.artworkId) {
+      if (!body.draftId?.trim() && !body.artworkId?.trim()) {
         return NextResponse.json(
-          { error: "slug, draftId, or artworkId required" },
+          { error: "artworkId or draftId required" },
           { status: 400 },
         );
       }
-      const row = body.artworkId
-        ? { id: body.artworkId }
-        : await findWorkerArtworkByDraftOrSlug({
-            draftId: body.draftId?.trim(),
-            slug,
-          });
-      if (!row) {
-        return NextResponse.json(
-          { error: "Artwork not found in Worker" },
-          { status: 404 },
-        );
-      }
+      const row = await resolveWorkerArtworkForWrite({
+        artworkId: body.artworkId,
+        draftId: body.draftId,
+      });
       const result = await workerPublish(row.id, body.revision);
       return NextResponse.json({
         ok: true,

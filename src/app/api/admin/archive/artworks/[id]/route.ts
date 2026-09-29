@@ -3,11 +3,11 @@ import { requireAdminIngest } from "@/lib/archive/admin-ingest-response";
 import { performPermanentArtworkDelete } from "@/lib/archive/artwork-delete";
 import {
   workerDeleteArtwork,
-  workerGetArtwork,
   workerListOwnedAssets,
 } from "@/lib/archive/worker-client";
 import { preferArchiveWorker } from "@/lib/archive/worker-config";
-import { getR2KeyPrefixFromEnv } from "@/lib/r2/object-keys";
+import { resolveWorkerArtworkForWrite } from "@/lib/archive/worker-drafts";
+import { resolveR2Namespace } from "@/lib/r2/namespace";
 import { deleteR2Objects } from "@/lib/r2/delete-objects";
 import { getR2Config } from "@/lib/r2/config";
 
@@ -39,15 +39,19 @@ export async function DELETE(
     );
   }
 
+  const namespace = resolveR2Namespace();
+  if (!namespace.ok) {
+    return NextResponse.json({ error: namespace.error }, { status: 503 });
+  }
+
   const { id } = await context.params;
   const confirm = await readConfirm(request);
 
   const outcome = await performPermanentArtworkDelete(id, confirm, {
-    keyPrefix: getR2KeyPrefixFromEnv(),
+    keyPrefix: namespace.prefix,
     hasR2Config: () => Boolean(getR2Config()),
     async getArtwork(artworkId) {
-      const detail = await workerGetArtwork(artworkId);
-      const artwork = detail.artwork;
+      const artwork = await resolveWorkerArtworkForWrite({ artworkId });
       return {
         id: artwork.id,
         status: artwork.status,

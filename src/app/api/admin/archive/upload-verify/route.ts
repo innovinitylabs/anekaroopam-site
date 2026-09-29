@@ -7,12 +7,10 @@ import {
   toWorkerAssetRole,
   workerRegisterAsset,
 } from "@/lib/archive/worker-client";
-import { findWorkerArtworkByDraftOrSlug } from "@/lib/archive/worker-drafts";
+import { resolveWorkerArtworkForWrite } from "@/lib/archive/worker-drafts";
 import { r2ArchiveReady } from "@/lib/r2/config";
-import {
-  getR2KeyPrefixFromEnv,
-  isAllowedArchiveObjectKey,
-} from "@/lib/r2/object-keys";
+import { resolveR2Namespace } from "@/lib/r2/namespace";
+import { isAllowedArchiveObjectKey } from "@/lib/r2/object-keys";
 import { verifyR2Objects } from "@/lib/r2/verify";
 
 export const runtime = "nodejs";
@@ -42,6 +40,10 @@ export async function POST(request: Request) {
       { status: 503 },
     );
   }
+  const namespace = resolveR2Namespace();
+  if (!namespace.ok) {
+    return NextResponse.json({ error: namespace.error }, { status: 503 });
+  }
 
   try {
     const body = (await request.json()) as VerifyBody;
@@ -68,7 +70,7 @@ export async function POST(request: Request) {
           obj.key,
           accessionId,
           revision,
-          getR2KeyPrefixFromEnv(),
+          namespace.prefix,
         )
       ) {
         return NextResponse.json(
@@ -76,6 +78,30 @@ export async function POST(request: Request) {
           { status: 400 },
         );
       }
+    }
+
+    let artworkId: string | null = null;
+    if (preferArchiveWorker()) {
+      if (!body.artworkId?.trim() && !body.draftId?.trim()) {
+        return NextResponse.json(
+          { error: "artworkId or draftId is required to register assets" },
+          { status: 400 },
+        );
+      }
+      const artwork = await resolveWorkerArtworkForWrite({
+        artworkId: body.artworkId,
+        draftId: body.draftId,
+        accessionId,
+      });
+      if (artwork.workingRevision !== revision) {
+        return NextResponse.json(
+          {
+            error: `Revision r${revision} is not the working revision (r${artwork.workingRevision}) of ${artwork.accessionId}`,
+          },
+          { status: 409 },
+        );
+      }
+      artworkId = artwork.id;
     }
 
     const result = await verifyR2Objects(objects);
@@ -91,27 +117,7 @@ export async function POST(request: Request) {
     }
 
     const registered: Array<{ role: string; objectKey: string }> = [];
-    if (preferArchiveWorker()) {
-      let artworkId = body.artworkId?.trim() || null;
-      if (!artworkId) {
-        const row = await findWorkerArtworkByDraftOrSlug({
-          draftId: body.draftId?.trim(),
-          accessionId,
-        });
-        artworkId = row?.id ?? null;
-      }
-      if (!artworkId) {
-        return NextResponse.json(
-          {
-            ok: false,
-            error:
-              "Verified in R2 but no Worker artworkId/draftId to register assets",
-            results: result.results,
-          },
-          { status: 409 },
-        );
-      }
-
+    if (artworkId) {
       for (const obj of objects) {
         const roleRaw =
           obj.role || roleFromObjectKey(obj.key) || "prepared";

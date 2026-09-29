@@ -28,4 +28,4 @@ migrations_dir = "migrations"
 [env.prod.vars]
 REQUIRED_ROLES = "original,artwork,preview,thumb"
 R2_PUBLIC_BASE_URL = "https://media.anekaroopam.art"
-R2_KEY_PREFIX = ""
+R2_KEY_PREFIX = "prod/"

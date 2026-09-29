@@ -20,7 +20,7 @@ npm test
 | `WORKER_ADMIN_TOKEN` | Bearer token for `/admin/*` |
 | `REQUIRED_ROLES` | Comma list; default `original,artwork,preview,thumb` |
 | `R2_PUBLIC_BASE_URL` | Public CDN base for URL derivation |
-| `R2_KEY_PREFIX` | `dev/` in dig; empty in prod |
+| `R2_KEY_PREFIX` | Required. `dev/` in dig, `prod/` in prod. Asset registration returns 503 when unset and rejects keys outside the prefix or the artwork's accession/working revision. |
 
 ## Vercel
 

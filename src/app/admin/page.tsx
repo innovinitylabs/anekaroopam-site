@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getAdminPageAuthFailure } from "@/lib/archive/admin-page-guard";
 import { preferArchiveWorker } from "@/lib/archive/worker-config";
 import { workerListArtworks, type WorkerArtwork } from "@/lib/archive/worker-client";
 import {
@@ -100,6 +101,8 @@ export default async function AdminDashboardPage({
 }: {
   searchParams: Promise<{ tab?: string; q?: string }>;
 }) {
+  if (await getAdminPageAuthFailure()) return null;
+
   const params = await searchParams;
   const tab = parseTab(params.tab);
   const q = params.q?.trim() || undefined;

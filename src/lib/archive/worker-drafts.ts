@@ -165,6 +165,53 @@ export async function findWorkerArtworkByDraftOrSlug(input: {
   );
 }
 
+/**
+ * Resolve a write target by immutable identifiers only (artwork UUID or draft id).
+ * Never falls back to slug, accession, or list scans. Every supplied identifier
+ * must refer to the same artwork; accessionId, when given, must be owned by it.
+ */
+export async function resolveWorkerArtworkForWrite(input: {
+  artworkId?: string | null;
+  draftId?: string | null;
+  accessionId?: string | null;
+}): Promise<WorkerArtwork> {
+  const artworkId = input.artworkId?.trim() || null;
+  const draftId = input.draftId?.trim() || null;
+  const accessionId = input.accessionId?.trim() || null;
+  if (!artworkId && !draftId) {
+    throw new ArchiveWorkerError(
+      400,
+      "artworkId or draftId is required for archive writes",
+    );
+  }
+
+  let artwork: WorkerArtwork;
+  if (artworkId) {
+    const detail = await workerGetArtwork(artworkId);
+    // The Worker GET also resolves slugs/accessions; writes accept only an exact id.
+    if (detail.artwork.id !== artworkId) {
+      throw new ArchiveWorkerError(404, "Artwork not found");
+    }
+    artwork = detail.artwork;
+    if (draftId && artwork.draftId !== draftId) {
+      throw new ArchiveWorkerError(
+        409,
+        `draftId ${draftId} does not belong to artwork ${artworkId}`,
+      );
+    }
+  } else {
+    artwork = (await workerGetArtworkByDraftId(draftId!)).artwork;
+  }
+
+  if (accessionId && artwork.accessionId !== accessionId) {
+    throw new ArchiveWorkerError(
+      409,
+      `Accession ${accessionId} does not belong to artwork ${artwork.id}`,
+    );
+  }
+  return artwork;
+}
+
 export async function loadDraftViaWorker(
   draftIdOrArtworkId: string,
 ): Promise<AccessionDraft | null> {
@@ -194,11 +241,11 @@ export async function ensureWorkerArtworkForDraft(input: {
   slug?: string;
   idempotencyKey?: string;
 }): Promise<WorkerArtwork> {
-  const existing = await findWorkerArtworkByDraftOrSlug({
-    draftId: input.draftId,
-    slug: input.slug,
-  });
-  if (existing) return existing;
+  try {
+    return (await workerGetArtworkByDraftId(input.draftId)).artwork;
+  } catch (e) {
+    if (!(e instanceof ArchiveWorkerError && e.status === 404)) throw e;
+  }
   const { artwork } = await workerCreateArtwork({
     draftId: input.draftId,
     title: input.title,

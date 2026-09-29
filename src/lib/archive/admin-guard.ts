@@ -87,13 +87,23 @@ export function readAdminSession(
  * ADMIN_SESSION_SECRET must be configured to verify sessions.
  */
 export function checkAdminIngest(request: Request): AdminAuthFailure | null {
+  return checkAdminSessionToken(readAdminSessionToken(request));
+}
+
+/**
+ * Same fail-closed rules as checkAdminIngest, for callers that already hold the
+ * raw session token (server components reading the session cookie).
+ */
+export function checkAdminSessionToken(
+  token: string | null | undefined,
+): AdminAuthFailure | null {
   if (!isAdminIngestEnabled()) {
     return { status: 403, error: "Admin ingestion disabled" };
   }
   if (!getAdminSessionSecret()) {
     return { status: 403, error: "Admin session secret not configured" };
   }
-  const session = readAdminSession(request);
+  const session = token ? verifyAdminSessionToken(token) : null;
   if (!session) {
     return { status: 401, error: "Admin authentication required" };
   }

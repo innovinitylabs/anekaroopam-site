@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { startTransition, useEffect, useState } from "react";
 
 type Status = "checking" | "locked" | "unlocked" | "error";
 
 export function AdminUnlock({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [status, setStatus] = useState<Status>("checking");
   const [secret, setSecret] = useState("");
   const [message, setMessage] = useState("");
@@ -88,6 +89,7 @@ export function AdminUnlock({ children }: { children: React.ReactNode }) {
       setSecret("");
       setLogin("secret-fallback");
       setStatus("unlocked");
+      router.refresh();
     } catch {
       setMessage("Unlock request failed");
       setStatus("locked");

@@ -368,6 +368,12 @@ export async function patchWorkingRevision(
   let slug = artwork.slug;
   if (patch.slug) {
     const nextSlug = assertSlugFormat(patch.slug);
+    if (nextSlug !== artwork.slug && artwork.published_at != null) {
+      throw new HttpError(
+        409,
+        `Slug is locked after publication (current "${artwork.slug}")`,
+      );
+    }
     const conflict = await getArtworkBySlug(db, nextSlug);
     if (conflict && conflict.id !== artworkId) {
       throw new HttpError(409, `Slug "${nextSlug}" is already in use`);
@@ -384,21 +390,30 @@ export async function patchWorkingRevision(
     .bind(metadataJson, perceptionJson, exportJson, provenanceJson, revision.id)
     .run();
 
-  await db
-    .prepare(
-      `UPDATE artworks SET
-        title = ?, year = ?, process = ?, slug = ?, updated_at = ?
-       WHERE id = ?`,
-    )
-    .bind(
-      projections.title,
-      projections.year,
-      projections.process,
-      slug,
-      now,
-      artworkId,
-    )
-    .run();
+  // Listing projections mirror the published revision while one exists;
+  // working-revision edits only reach them on the next successful publish.
+  if (artwork.published_revision != null) {
+    await db
+      .prepare(`UPDATE artworks SET updated_at = ? WHERE id = ?`)
+      .bind(now, artworkId)
+      .run();
+  } else {
+    await db
+      .prepare(
+        `UPDATE artworks SET
+          title = ?, year = ?, process = ?, slug = ?, updated_at = ?
+         WHERE id = ?`,
+      )
+      .bind(
+        projections.title,
+        projections.year,
+        projections.process,
+        slug,
+        now,
+        artworkId,
+      )
+      .run();
+  }
 
   const nextArtwork = await getArtwork(db, artworkId);
   const nextRevision = await getWorkingRevision(db, artworkId);
@@ -719,6 +734,22 @@ export async function registerAsset(
     .bind(input.objectKey)
     .first<{ id: string; verified_at: string | null }>();
 
+  if (existingAsset) {
+    const foreign = await db
+      .prepare(
+        `SELECT artwork_id FROM revision_assets
+         WHERE asset_id = ? AND artwork_id != ? LIMIT 1`,
+      )
+      .bind(existingAsset.id, input.artworkId)
+      .first<{ artwork_id: string }>();
+    if (foreign) {
+      throw new HttpError(
+        409,
+        `Object key is already registered to another artwork: ${input.objectKey}`,
+      );
+    }
+  }
+
   let assetId = existingAsset?.id;
   if (!assetId) {
     assetId = newId();
@@ -792,7 +823,7 @@ export async function registerAsset(
       .run();
   }
 
-  if (input.role === "thumb") {
+  if (input.role === "thumb" && artwork.published_revision == null) {
     await db
       .prepare(`UPDATE artworks SET thumb_object_key = ?, updated_at = ? WHERE id = ?`)
       .bind(input.objectKey, now, input.artworkId)

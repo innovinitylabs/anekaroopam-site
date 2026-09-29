@@ -27,8 +27,10 @@ import {
 } from "./db";
 import { errorJson, json, readJson, requireAdmin } from "./http";
 import type { SqlExecutor } from "./db";
+import { normalizeKeyPrefix, validateAssetObjectKey } from "./object-keys";
 import {
   parseRequiredRoles,
+  projectionsFromMetadata,
   publicUrlForKey,
   type Env,
 } from "./types";
@@ -298,7 +300,8 @@ async function handle(request: Request, env: Env): Promise<Response> {
           "Delete requires confirm=permanent query or body field",
         );
       }
-      const artwork = await resolveArtworkId(db(env), id);
+      // Destructive writes resolve by immutable id only (no slug/draft/accession).
+      const artwork = await getArtwork(db(env), id);
       if (!artwork) return errorJson(404, "Artwork not found");
       const result = await deleteArtwork(db(env), artwork.id);
       return json(result);
@@ -313,10 +316,15 @@ async function handle(request: Request, env: Env): Promise<Response> {
   const verifyAssetMatch =
     /^\/admin\/artworks\/([^/]+)\/assets\/verify$/.exec(path);
   if (verifyAssetMatch && request.method === "POST") {
+    const artworkId = decodeURIComponent(verifyAssetMatch[1]);
     const body = await readJson<{ objectKey: string; verified?: boolean }>(
       request,
     );
     if (!body.objectKey) return errorJson(400, "objectKey required");
+    const owned = await listAllArtworkAssets(db(env), artworkId);
+    if (!owned.some((asset) => asset.object_key === body.objectKey)) {
+      return errorJson(404, "Asset not found for this artwork");
+    }
     await markAssetVerified(db(env), body.objectKey);
     return json({ ok: true, objectKey: body.objectKey });
   }
@@ -339,6 +347,9 @@ async function handle(request: Request, env: Env): Promise<Response> {
       request,
     );
     if (!body.eventType) return errorJson(400, "eventType required");
+    if (!(await getArtwork(db(env), artworkId))) {
+      return errorJson(404, "Artwork not found");
+    }
     await appendEvent(db(env), artworkId, body.eventType, body.payload ?? null);
     return json({ ok: true }, 201);
   }
@@ -527,6 +538,23 @@ async function postAsset(
     return errorJson(400, "role, objectKey, mimeType, byteSize required");
   }
 
+  if (!normalizeKeyPrefix(env.R2_KEY_PREFIX)) {
+    return errorJson(
+      503,
+      "R2_KEY_PREFIX is not configured; refusing asset registration",
+    );
+  }
+  const artwork = await getArtwork(db(env), artworkId);
+  if (!artwork) return errorJson(404, "Artwork not found");
+  const keyCheck = validateAssetObjectKey({
+    objectKey: body.objectKey,
+    role: body.role,
+    keyPrefix: env.R2_KEY_PREFIX,
+    accessionId: artwork.accession_id,
+    workingRevision: artwork.working_revision,
+  });
+  if (!keyCheck.ok) return errorJson(400, keyCheck.error);
+
   const result = await registerAsset(db(env), {
     artworkId,
     role: body.role,
@@ -545,6 +573,14 @@ async function postAsset(
 async function markReady(env: Env, artworkId: string): Promise<Response> {
   const artwork = await getArtwork(db(env), artworkId);
   if (!artwork) return errorJson(404, "Artwork not found");
+  if (artwork.status === "withdrawn") {
+    return errorJson(409, "Withdrawn artworks cannot be marked ready");
+  }
+  // Only never-published drafts enter the initial ready lifecycle. Published
+  // and hidden artworks keep their public state while the working tip is edited.
+  if (artwork.status !== "draft" && artwork.status !== "uploading") {
+    return json({ artwork: artworkDto(artwork), unchanged: true });
+  }
   const required = parseRequiredRoles(env.REQUIRED_ROLES);
   const check = await revisionHasRequiredAssets(
     db(env),
@@ -559,7 +595,8 @@ async function markReady(env: Env, artworkId: string): Promise<Response> {
   }
   const now = new Date().toISOString();
   await db(env).prepare(
-    `UPDATE artworks SET status = 'ready', updated_at = ? WHERE id = ?`,
+    `UPDATE artworks SET status = 'ready', updated_at = ?
+     WHERE id = ? AND status IN ('draft', 'uploading')`,
   )
     .bind(now, artworkId)
     .run();
@@ -609,14 +646,28 @@ async function publish(
     return errorJson(409, identity.errors.join("; "), { identity });
   }
 
+  const required = parseRequiredRoles(env.REQUIRED_ROLES);
   let revision = body.revision;
   if (revision == null) {
-    // Freeze current working tip, then publish the frozen revision.
+    // Check before freezing so a rejected publish leaves the working tip and
+    // the current published revision untouched.
+    const check = await revisionHasRequiredAssets(
+      db(env),
+      artworkId,
+      artwork.working_revision,
+      required,
+    );
+    if (!check.ok) {
+      return errorJson(
+        409,
+        `Missing verified required assets: ${check.missing.join(", ")}`,
+        { missing: check.missing },
+      );
+    }
     const { frozen } = await freezeWorkingRevision(db(env), artworkId);
     revision = frozen.revision;
   }
 
-  const required = parseRequiredRoles(env.REQUIRED_ROLES);
   const published = await publishRevision(db(env), artworkId, revision, required);
   return json({ artwork: artworkDto(published) });
 }
@@ -669,15 +720,18 @@ async function getPublic(env: Env, slugOrId: string): Promise<Response> {
         base ? publicUrlForKey(a.object_key, base) : a.object_key,
       ]),
   );
+  const publishedProjection = projectionsFromMetadata(rev.metadata_json);
+  const publishedThumbKey =
+    assets.find((a) => a.role === "thumb")?.object_key ?? null;
 
   return json({
     artwork: {
       id: artwork.id,
       accessionId: artwork.accession_id,
       slug: artwork.slug,
-      title: artwork.title,
-      year: artwork.year,
-      process: artwork.process,
+      title: publishedProjection.title,
+      year: publishedProjection.year,
+      process: publishedProjection.process,
       publishedRevision: artwork.published_revision,
       publishedAt: artwork.published_at,
       metadata: JSON.parse(rev.metadata_json),
@@ -686,8 +740,8 @@ async function getPublic(env: Env, slugOrId: string): Promise<Response> {
       provenance: JSON.parse(rev.provenance_json),
       assets: assetUrls,
       thumbUrl:
-        artwork.thumb_object_key && base
-          ? publicUrlForKey(artwork.thumb_object_key, base)
+        publishedThumbKey && base
+          ? publicUrlForKey(publishedThumbKey, base)
           : null,
     },
   });

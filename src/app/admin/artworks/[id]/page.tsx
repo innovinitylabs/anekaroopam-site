@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminArtworkActions } from "@/components/admin/AdminArtworkActions";
+import { getAdminPageAuthFailure } from "@/lib/archive/admin-page-guard";
 import { formatByteSize } from "@/lib/archive/commit-bundle-limits";
 import { preferArchiveWorker } from "@/lib/archive/worker-config";
 import {
@@ -15,6 +16,8 @@ export default async function AdminArtworkDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  if (await getAdminPageAuthFailure()) return null;
+
   if (!preferArchiveWorker()) {
     notFound();
   }
@@ -133,6 +136,7 @@ export default async function AdminArtworkDetailPage({
             {assets.map((asset) => (
               <li
                 key={`${asset.role}-${asset.object_key}`}
+                title={`${asset.byte_size} bytes`}
                 className="border border-[var(--border)] px-4 py-3 text-[0.75rem]"
               >
                 <span className="tracking-[0.12em] uppercase">{asset.role}</span>
@@ -140,6 +144,7 @@ export default async function AdminArtworkDetailPage({
                 {asset.verified_at ? "verified" : "unverified"}
                 {" · "}
                 {formatByteSize(asset.byte_size)}
+                <span className="sr-only">{asset.byte_size} bytes</span>
                 <p className="mt-1 break-all text-[var(--muted)]">{asset.object_key}</p>
               </li>
             ))}

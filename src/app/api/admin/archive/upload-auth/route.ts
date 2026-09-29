@@ -13,13 +13,20 @@ import {
 import { preferArchiveWorker } from "@/lib/archive/worker-config";
 import {
   ensureWorkerArtworkForDraft,
-  findWorkerArtworkByDraftOrSlug,
+  resolveWorkerArtworkForWrite,
 } from "@/lib/archive/worker-drafts";
-import { ArchiveWorkerError } from "@/lib/archive/worker-client";
+import {
+  ArchiveWorkerError,
+  workerListOwnedAssets,
+} from "@/lib/archive/worker-client";
+import {
+  decideExistingObjectOverwrite,
+  type OwnedAssetRef,
+} from "@/lib/archive/upload-overwrite";
 import { r2ArchiveReady, requireR2Config } from "@/lib/r2/config";
+import { resolveR2Namespace } from "@/lib/r2/namespace";
 import {
   buildAllRevisionKeys,
-  getR2KeyPrefixFromEnv,
   isAllowedArchiveObjectKey,
 } from "@/lib/r2/object-keys";
 import { createPresignedPut } from "@/lib/r2/presign";
@@ -30,6 +37,7 @@ export const runtime = "nodejs";
 interface UploadAuthBody {
   slug?: string;
   draftId?: string;
+  artworkId?: string;
   isExistingArchive?: boolean;
   storedFilename?: string;
   objects?: Array<{
@@ -64,6 +72,10 @@ export async function POST(request: Request) {
       { status: 503 },
     );
   }
+  const namespace = resolveR2Namespace();
+  if (!namespace.ok) {
+    return NextResponse.json({ error: namespace.error }, { status: 503 });
+  }
 
   try {
     const body = (await request.json()) as UploadAuthBody;
@@ -90,19 +102,25 @@ export async function POST(request: Request) {
     let existingEntry: unknown = null;
 
     if (useWorker) {
-      const draftIdInput = body.draftId?.trim() || `draft-for-${slug}`;
-      let artwork = await findWorkerArtworkByDraftOrSlug({
-        draftId: body.draftId?.trim(),
-        slug,
-      });
-      if (!artwork) {
-        artwork = await ensureWorkerArtworkForDraft({
-          draftId: draftIdInput,
-          slug,
-          title: slug,
-          idempotencyKey: `upload-auth:${draftIdInput}`,
-        });
+      const draftIdInput = body.draftId?.trim();
+      const artworkIdInput = body.artworkId?.trim();
+      if (!draftIdInput && !artworkIdInput) {
+        return NextResponse.json(
+          { error: "draftId or artworkId is required" },
+          { status: 400 },
+        );
       }
+      const artwork = artworkIdInput
+        ? await resolveWorkerArtworkForWrite({
+            artworkId: artworkIdInput,
+            draftId: draftIdInput,
+          })
+        : await ensureWorkerArtworkForDraft({
+            draftId: draftIdInput!,
+            slug,
+            title: slug,
+            idempotencyKey: `upload-auth:${draftIdInput}`,
+          });
       accessionId = artwork.accessionId;
       draftId = artwork.draftId;
       revision = artwork.workingRevision;
@@ -119,7 +137,7 @@ export async function POST(request: Request) {
       existingEntry = identity.existingEntry;
     }
 
-    const keyPrefix = getR2KeyPrefixFromEnv();
+    const keyPrefix = namespace.prefix;
     const keys = buildAllRevisionKeys({
       accessionId,
       revision,
@@ -139,6 +157,9 @@ export async function POST(request: Request) {
 
     const config = requireR2Config();
     const uploads = [];
+    let ownedAssets: OwnedAssetRef[] | null | undefined = useWorker
+      ? undefined
+      : null;
 
     for (const obj of objects) {
       if (
@@ -191,14 +212,19 @@ export async function POST(request: Request) {
 
       const existing = await headR2Object(key);
       if (existing.exists) {
-        const sameSize = existing.contentLength === obj.contentLength;
-        if (!sameSize && !body.retrySameRevision) {
-          return NextResponse.json(
-            {
-              error: `Object already exists and size differs: ${key}. Use a new revision or retrySameRevision after a partial failure.`,
-            },
-            { status: 409 },
-          );
+        if (ownedAssets === undefined) {
+          ownedAssets = (await workerListOwnedAssets(artworkId!)).assets;
+        }
+        const decision = decideExistingObjectOverwrite({
+          key,
+          existingSize: existing.contentLength,
+          incomingSize: obj.contentLength,
+          workingRevision: revision,
+          ownedAssets,
+          retrySameRevision: Boolean(body.retrySameRevision),
+        });
+        if (!decision.ok) {
+          return NextResponse.json({ error: decision.error }, { status: 409 });
         }
       }
 
