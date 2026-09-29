@@ -52,7 +52,7 @@ export function footerPrimaryLabel(input: {
   if (input.completed) return "Done";
   // Review commit lives in the Review panel only — footer waits for Done.
   if (input.step === "Review") {
-    return input.completed ? "Done" : "Review";
+    return input.completed ? "Done" : "";
   }
   if (isFinalVisibleStep(input.steps, input.step)) {
     return "Done";

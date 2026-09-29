@@ -11,6 +11,7 @@ import {
   usesSyncOnPublishStep,
 } from "@/components/admin/admin-workflow-state";
 import { EmbeddedPreparePanel } from "@/components/admin/EmbeddedPreparePanel";
+import { AdminStatusMessage } from "@/components/admin/AdminStatusMessage";
 import { ImageDropZone } from "@/components/perception-tools/ImageDropZone";
 import { PerceptionCanvas } from "@/components/perception/PerceptionCanvas";
 import {
@@ -1165,6 +1166,7 @@ export function IngestionWizard({
           );
         }
         if (data.slug) setSlug(data.slug);
+        setSlugValidation("valid");
         setSlugLocked(true);
         setSlugValidation("locked");
         await saveDraft();
@@ -1356,9 +1358,9 @@ export function IngestionWizard({
       )}
 
       {error && (
-        <p className="mb-6 border border-red-900/30 bg-red-950/20 px-4 py-3 text-[0.8rem] text-red-200">
+        <AdminStatusMessage tone="error" role="alert" title="Error">
           {error}
-        </p>
+        </AdminStatusMessage>
       )}
 
       {step === "Upload" && (
@@ -1558,6 +1560,8 @@ export function IngestionWizard({
             <button
               type="button"
               disabled={!slug || !isMetadataFinalized(controller.artwork.metadata)}
+              title="Generate page title, description, and structured data from finalized metadata only."
+              aria-label="Generate SEO draft"
               className="border border-[var(--ink)] px-4 py-2 text-[0.68rem] tracking-[0.14em] uppercase disabled:opacity-40"
               onClick={() => {
                 const generated = generateSeoFromMetadata({
@@ -1581,6 +1585,8 @@ export function IngestionWizard({
             {controller.artwork.metadata.seo && (
               <button
                 type="button"
+                title="Mark the SEO draft as reviewed so it is stored with the working revision on publish."
+                aria-label="Mark SEO as reviewed"
                 className="border border-[var(--border)] px-4 py-2 text-[0.68rem] tracking-[0.14em] uppercase"
                 onClick={() => {
                   const current = controller.artwork.metadata.seo as SeoMetadata;
@@ -1671,18 +1677,18 @@ export function IngestionWizard({
                 : "Local fallback deposits the browser source then runs server generate. Durable Preview should Commit from Prepare instead."}
           </p>
           {durableStorage && !(r2Archive || d1Archive) && (
-            <p className="border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[0.72rem] text-[var(--muted)]">
+            <AdminStatusMessage tone="info" title="Local generate">
               Browser Generate writes metadata and derivatives. Standalone
               perception.html is available via Export mint package after a full
               local regenerate.
-            </p>
+            </AdminStatusMessage>
           )}
           {durableStorage && (r2Archive || d1Archive) && (
-            <p className="border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[0.72rem] text-[var(--muted)]">
+            <AdminStatusMessage tone="info" title="Publish path">
               Prefer Commit from Prepare, then Publish on Review. After publish,
               Download HTML Package from the artwork detail page builds a portable
               mint-package ZIP from the published revision.
-            </p>
+            </AdminStatusMessage>
           )}
           <button
             type="button"
@@ -1713,23 +1719,18 @@ export function IngestionWizard({
             <p className="text-[0.78rem] text-[var(--muted)]">{syncStatusMessage}</p>
           )}
           {result && (
-            <div className="mt-6 space-y-2 border border-[var(--border)] p-4 text-[0.78rem]">
-              <p className="tracking-wide uppercase text-[var(--muted)]">
-                Bundle written
-              </p>
-              <ul className="max-h-48 overflow-y-auto font-mono text-[0.7rem] opacity-80">
+            <AdminStatusMessage tone="success" title="Bundle written">
+              <ul className="max-h-48 overflow-y-auto font-mono text-[0.7rem]">
                 {result.files.map((f) => (
-                  <li key={f.path}>
+                  <li key={f.path} title={`${f.bytes} bytes`}>
                     {f.path} ({formatByteSize(f.bytes)})
                   </li>
                 ))}
               </ul>
               {result.warnings.map((w) => (
-                <p key={w} className="text-[var(--muted)]">
-                  {w}
-                </p>
+                <p key={w}>{w}</p>
               ))}
-            </div>
+            </AdminStatusMessage>
           )}
         </section>
       )}
@@ -1955,8 +1956,8 @@ export function IngestionWizard({
                 </div>
 
                 {submitState === "completed" && lastCommittedSha ? (
-                  <div className="space-y-3">
-                    <p className="text-[0.85rem] text-[var(--muted)]">
+                  <AdminStatusMessage tone="success" title="Published">
+                    <p>
                       {r2Archive || d1Archive ? (
                         <>
                           Revision published
@@ -1978,9 +1979,9 @@ export function IngestionWizard({
                       )}
                     </p>
                     {result && (
-                      <ul className="max-h-40 overflow-y-auto font-mono text-[0.7rem] opacity-80">
+                      <ul className="max-h-40 overflow-y-auto font-mono text-[0.7rem]">
                         {result.files.map((f) => (
-                          <li key={f.path}>
+                          <li key={f.path} title={`${f.bytes} bytes`}>
                             {f.path} ({formatByteSize(f.bytes)})
                           </li>
                         ))}
@@ -1989,15 +1990,24 @@ export function IngestionWizard({
                     {intendedStatus === "published" &&
                       (r2Archive || d1Archive) &&
                       lastCommittedArtworkId && (
-                        <a
-                          href={`/api/admin/archive/artworks/${encodeURIComponent(lastCommittedArtworkId)}/html-package`}
-                          title="Download a portable mint-package ZIP from the published revision."
-                          className="inline-block border border-[var(--border)] px-3 py-2 text-[0.62rem] tracking-[0.12em] uppercase"
-                        >
-                          Download HTML Package
-                        </a>
+                        <div className="flex flex-wrap gap-2">
+                          <a
+                            href={`/api/admin/archive/artworks/${encodeURIComponent(lastCommittedArtworkId)}/html-package?profile=onchain`}
+                            title="Download minified single-AVIF perception.html for on-chain / NFT use."
+                            className="inline-block border border-[var(--border)] px-3 py-2 text-[0.62rem] tracking-[0.12em] uppercase"
+                          >
+                            Download On-chain HTML
+                          </a>
+                          <a
+                            href={`/api/admin/archive/artworks/${encodeURIComponent(lastCommittedArtworkId)}/html-package?profile=compatible`}
+                            title="Download mint-package ZIP with AVIF+WebP HTML and derivatives."
+                            className="inline-block border border-[var(--border)] px-3 py-2 text-[0.62rem] tracking-[0.12em] uppercase"
+                          >
+                            Download HTML Package
+                          </a>
+                        </div>
                       )}
-                  </div>
+                  </AdminStatusMessage>
                 ) : (
                   <>
                     <div className="grid gap-4 text-[0.78rem] sm:grid-cols-2">
@@ -2036,7 +2046,7 @@ export function IngestionWizard({
                         <p className="text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]">
                           Sizes
                         </p>
-                        <p>
+                        <p title={sourceFile ? `${sourceFile.size} bytes` : undefined}>
                           Source:{" "}
                           {sourceFile
                             ? formatByteSize(sourceFile.size)
@@ -2045,7 +2055,13 @@ export function IngestionWizard({
                             ? " (over limit)"
                             : ""}
                         </p>
-                        <p>
+                        <p
+                          title={
+                            preparedLocal
+                              ? `${preparedLocal.blob.size} bytes`
+                              : undefined
+                          }
+                        >
                           Prepared:{" "}
                           {preparedLocal
                             ? formatByteSize(preparedLocal.blob.size)
@@ -2074,15 +2090,15 @@ export function IngestionWizard({
                 )}
 
                 {submitState === "failed" && commitError && (
-                  <div className="space-y-2 border border-red-900/30 bg-red-950/20 p-3 text-[0.8rem] text-red-200">
+                  <AdminStatusMessage tone="error" role="alert" title="Publish failed">
                     <p>{commitError}</p>
                     {commitPhase === "failed_metadata" && (
-                      <p className="text-[0.72rem] text-[var(--muted)]">
+                      <p>
                         Media may already be stored in R2. Revision metadata was
                         not written. Retry after fixing the error.
                       </p>
                     )}
-                  </div>
+                  </AdminStatusMessage>
                 )}
 
                 {submitState !== "completed" && (
@@ -2111,60 +2127,61 @@ export function IngestionWizard({
             );
           })()}
           {result?.warnings && result.warnings.length > 0 && (
-            <div
-              className="space-y-2 border border-[var(--border)] p-3"
-              role="status"
-            >
-              <p className="text-[0.58rem] tracking-[0.16em] uppercase text-[var(--muted)]">
-                Notes
-              </p>
+            <AdminStatusMessage tone="warning" title="Notes">
               {result.warnings.map((w) => (
-                <p key={w} className="text-[0.78rem] text-[var(--muted)]">
-                  {w}
-                </p>
+                <p key={w}>{w}</p>
               ))}
-            </div>
+            </AdminStatusMessage>
           )}
         </section>
       )}
 
+      <div className="pb-24">
       <footer className="sticky bottom-0 z-20 mt-12 flex justify-between border-t border-[var(--border)] bg-[var(--background)]/95 px-0 py-4 backdrop-blur-sm pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
         <button
           type="button"
           onClick={goBack}
           disabled={stepIndex <= 0 || commitCompleted}
           title="Return to the previous accession step without discarding draft changes."
-          className="text-[0.68rem] tracking-[0.14em] uppercase opacity-50 disabled:opacity-20"
+          className="text-[0.68rem] tracking-[0.14em] uppercase text-[var(--foreground)]/70 disabled:text-[var(--muted)] disabled:opacity-40"
         >
           Previous
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            if (footerPrimary.action === "done") {
-              router.push(WIZARD_DONE_HREF);
-              return;
-            }
-            if (footerPrimary.action === "next") goNext();
-          }}
-          disabled={footerPrimary.disabled}
-          title={
-            footerPrimary.action === "done"
-              ? "Return to the admin archive list."
-              : footerPrimary.action === "noop"
-                ? "Use the publish action in the Review panel above."
+        {footerPrimary.action === "noop" && !commitCompleted ? (
+          <span
+            className="self-center text-[0.62rem] tracking-[0.14em] uppercase text-[var(--muted)]"
+            title="Use Publish Artwork or Update & Publish in the Review panel above."
+          >
+            Publish in panel
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              if (footerPrimary.action === "done") {
+                router.push(WIZARD_DONE_HREF);
+                return;
+              }
+              if (footerPrimary.action === "next") goNext();
+            }}
+            disabled={footerPrimary.disabled}
+            title={
+              footerPrimary.action === "done"
+                ? "Return to the admin archive list."
                 : "Continue to the next accession step."
-          }
-          className="border border-[var(--ink)] px-5 py-3 text-[0.68rem] tracking-[0.16em] uppercase disabled:opacity-40"
-        >
-          {footerPrimaryLabel({
-            steps: STEPS,
-            step,
-            isRevision: isExistingArchive,
-            completed: commitCompleted,
-          })}
-        </button>
+            }
+            className="border border-[var(--ink)] px-5 py-3 text-[0.68rem] tracking-[0.16em] uppercase disabled:opacity-40"
+          >
+            {footerPrimaryLabel({
+              steps: STEPS,
+              step,
+              isRevision: isExistingArchive,
+              completed: commitCompleted,
+            })}
+          </button>
+        )}
       </footer>
+      </div>
     </div>
   );
 }

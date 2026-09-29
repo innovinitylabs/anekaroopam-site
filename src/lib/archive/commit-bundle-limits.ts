@@ -45,9 +45,13 @@ export const MAX_COMMIT_BUNDLE_BYTES = 4_000_000;
 export const MAX_COMMIT_FILES = 64;
 
 export function formatByteSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "0 B";
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  if (bytes < 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  }
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 /** True when an original is within the shared source master limit. */

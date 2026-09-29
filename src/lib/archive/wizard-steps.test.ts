@@ -35,7 +35,7 @@ describe("wizard final visible step", () => {
         isRevision: false,
         completed: false,
       }),
-      "Review",
+      "",
     );
     assert.equal(
       footerPrimaryLabel({
@@ -44,7 +44,7 @@ describe("wizard final visible step", () => {
         isRevision: true,
         completed: false,
       }),
-      "Review",
+      "",
     );
   });
 

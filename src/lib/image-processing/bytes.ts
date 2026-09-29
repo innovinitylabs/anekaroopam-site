@@ -1,10 +1,14 @@
 export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "0 B";
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  if (bytes < 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  }
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-/** Alias for shared archive admin formatting (same rules as formatBytes). */
+/** Alias kept for call sites that prefer the archive naming. */
 export { formatBytes as formatByteSize };
 
 export function compressionRatio(original: number, converted: number): number {

@@ -187,7 +187,6 @@ export function buildBrowserMetadataPackage(input: {
         "Excluded from this local package: perception.html and manifest.json.",
         "Use Export mint package after a full local regenerate for offline HTML.",
         "Sync/publish validation only requires metadata.json + public derivatives.",
-        "Public Next.js archive pages need a redeploy to pick up GitHub tip content.",
       ].join(" ");
 
   const warnings: string[] = [];

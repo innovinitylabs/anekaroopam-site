@@ -181,7 +181,7 @@ export async function commitBrowserDurableBundle(input: {
     files,
     warnings: [
       ...pack.warnings,
-      `Committed ${committed.commitSha.slice(0, 7)} to GitHub tip. Public View may 404 until redeploy.`,
+      `Committed ${committed.commitSha.slice(0, 7)} to the durable archive tip.`,
     ],
     archiveStatus: pack.draft.status,
     binaryBytes,
