@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { PerceptionCanvas } from "@/components/perception/PerceptionCanvas";
 import { ArchiveProvenance } from "@/components/site/ArchiveProvenance";
 import {
-  getArtworkBySlug,
+  getArtworkBySlugDetailed,
   getArchiveEntryBySlug,
   getAccessionRuntimeBySlug,
   listAllArchiveSlugs,
@@ -27,7 +27,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const artwork = await getArtworkBySlug(slug);
+  const { artwork } = await getArtworkBySlugDetailed(slug);
   if (!artwork) return { title: "Not found" };
 
   const entry = await getArchiveEntryBySlug(slug);
@@ -73,7 +73,8 @@ export default async function ArchiveArtworkPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const artwork = await getArtworkBySlug(slug);
+  const resolved = await getArtworkBySlugDetailed(slug);
+  const artwork = resolved.artwork;
   if (!artwork) {
     const mapped = await resolveArchiveRedirect(slug);
     if (mapped) redirect(`/archive/${mapped.to}`);
@@ -115,6 +116,14 @@ export default async function ArchiveArtworkPage({
       >
         Back to archive
       </Link>
+      {resolved.fallbackActive && (
+        <p
+          role="status"
+          className="fixed top-6 left-1/2 z-[60] -translate-x-1/2 rounded-sm bg-black/35 px-3 py-2 text-[0.58rem] tracking-[0.16em] uppercase text-white/90 backdrop-blur-sm"
+        >
+          Showing local archive copy
+        </p>
+      )}
       {entry && (
         <div className="pointer-events-none fixed bottom-6 left-6 z-[55] max-w-sm text-white/70">
           <p className="text-[0.58rem] tracking-[0.2em] uppercase">Accession</p>

@@ -12,11 +12,12 @@ import {
 } from "@/lib/archive/runtime";
 import type { ArchiveSearchParams } from "@/lib/archive/archive-search";
 import { matchesArchiveSearch } from "@/lib/archive/archive-search";
+import { isPublicArchiveEntry } from "@/lib/archive/visibility";
 import { preferArchiveWorker } from "@/lib/archive/worker-config";
 import {
-  getPublicArtworkFromWorker,
-  getPublicEntryFromWorker,
-  listPublicArtworksFromWorker,
+  tryGetPublicArtworkFromWorker,
+  tryGetPublicEntryFromWorker,
+  tryListPublicArtworksFromWorker,
 } from "@/lib/archive/worker-public";
 import {
   archiveArtworks,
@@ -24,27 +25,98 @@ import {
 } from "./artworks";
 
 // When ARCHIVE_WORKER_* is configured, Worker public API is canonical.
-// Otherwise filesystem archive entries are canonical; artworks.ts placeholders
-// remain until a filesystem slug collides.
+// Fallback to FS/legacy only on Worker infrastructure failure (never on 404).
+
+export type ArtworkResolveResult = {
+  artwork: PerceptionArtwork | undefined;
+  fallbackActive: boolean;
+  fallbackReason?: string;
+};
+
+function logFallback(slug: string, reason: string) {
+  console.warn(
+    JSON.stringify({
+      event: "archive_fallback_active",
+      slug,
+      reason,
+    }),
+  );
+}
+
+/** Hidden and withdrawn local copies are never eligible for outage fallback. */
+async function loadPublicFallbackEntry(
+  slug: string,
+): Promise<ArchiveEntry | null> {
+  const entry = await loadArchiveEntry(slug);
+  return entry && isPublicArchiveEntry(entry) ? entry : null;
+}
+
+async function resolveDetailFallback(
+  slug: string,
+  reason: string,
+): Promise<ArtworkResolveResult> {
+  logFallback(slug, reason);
+  const entry = await loadArchiveEntry(slug);
+  if (entry) {
+    // A non-public local record must not fall through to a same-slug placeholder.
+    if (!isPublicArchiveEntry(entry)) {
+      return { artwork: undefined, fallbackActive: false };
+    }
+    return {
+      artwork: archiveEntryToPerceptionArtwork(entry),
+      fallbackActive: true,
+      fallbackReason: reason,
+    };
+  }
+  const legacy = getLegacyArtworkById(slug);
+  return {
+    artwork: legacy,
+    fallbackActive: Boolean(legacy),
+    fallbackReason: legacy ? reason : undefined,
+  };
+}
 
 export async function getArtworkBySlug(
   slug: string,
 ): Promise<PerceptionArtwork | undefined> {
+  const result = await getArtworkBySlugDetailed(slug);
+  return result.artwork;
+}
+
+export async function getArtworkBySlugDetailed(
+  slug: string,
+): Promise<ArtworkResolveResult> {
   if (preferArchiveWorker()) {
-    const fromWorker = await getPublicArtworkFromWorker(slug);
-    if (fromWorker) return fromWorker;
-    return getLegacyArtworkById(slug);
+    const fromWorker = await tryGetPublicArtworkFromWorker(slug);
+    if (fromWorker.ok) {
+      return { artwork: fromWorker.value ?? undefined, fallbackActive: false };
+    }
+    return resolveDetailFallback(
+      slug,
+      fromWorker.reason ?? "worker unavailable",
+    );
   }
   const entry = await loadArchiveEntry(slug);
-  if (entry) return archiveEntryToPerceptionArtwork(entry);
-  return getLegacyArtworkById(slug);
+  if (entry) {
+    return {
+      artwork: archiveEntryToPerceptionArtwork(entry),
+      fallbackActive: false,
+    };
+  }
+  return {
+    artwork: getLegacyArtworkById(slug),
+    fallbackActive: false,
+  };
 }
 
 export async function getArchiveEntryBySlug(
   slug: string,
 ): Promise<ArchiveEntry | null> {
   if (preferArchiveWorker()) {
-    return getPublicEntryFromWorker(slug);
+    const result = await tryGetPublicEntryFromWorker(slug);
+    if (result.ok) return result.value;
+    logFallback(slug, result.reason ?? "worker unavailable");
+    return loadPublicFallbackEntry(slug);
   }
   return loadArchiveEntry(slug);
 }
@@ -53,20 +125,31 @@ export async function getAccessionRuntimeBySlug(
   slug: string,
 ): Promise<AccessionRuntime | null> {
   if (preferArchiveWorker()) {
-    const entry = await getPublicEntryFromWorker(slug);
-    if (!entry) return null;
-    return buildAccessionRuntime(entry);
+    const result = await tryGetPublicEntryFromWorker(slug);
+    if (result.ok) {
+      if (!result.value) return null;
+      return buildAccessionRuntime(result.value);
+    }
+    logFallback(slug, result.reason ?? "worker unavailable");
+    const entry = await loadPublicFallbackEntry(slug);
+    return entry ? buildAccessionRuntime(entry) : null;
   }
   return hydrateAccessionRuntime(slug);
 }
 
 export async function listAllArchiveSlugs(): Promise<string[]> {
   if (preferArchiveWorker()) {
-    const { artworks: works } = await listPublicArtworksFromWorker({
-      limit: 200,
-    });
-    const legacyIds = archiveArtworks.map((a) => a.id);
-    return [...new Set([...works.map((w) => w.id), ...legacyIds])];
+    const listed = await tryListPublicArtworksFromWorker({ limit: 200 });
+    if (listed.ok) {
+      return listed.value.artworks.map((w) => w.id);
+    }
+    console.warn(
+      JSON.stringify({
+        event: "archive_list_worker_unavailable",
+        reason: listed.reason,
+      }),
+    );
+    return [];
   }
   const fsSlugs = (await getAllArchiveEntries()).map((entry) => entry.slug);
   const legacyIds = archiveArtworks.map((a) => a.id);
@@ -78,6 +161,7 @@ export type ArchiveListResult = {
   total: number;
   facets: { years: number[]; processes: string[] };
   serverFiltered: boolean;
+  fallbackActive?: boolean;
 };
 
 function deriveFacets(artworks: PerceptionArtwork[]) {
@@ -102,29 +186,49 @@ export async function listAllArtworks(
   filters: ArchiveSearchParams = {},
 ): Promise<ArchiveListResult> {
   if (preferArchiveWorker()) {
-    const facetSource = await listPublicArtworksFromWorker({ limit: 200 });
-    const facets = deriveFacets(facetSource.artworks);
+    const facetSource = await tryListPublicArtworksFromWorker({ limit: 200 });
+    if (!facetSource.ok) {
+      console.warn(
+        JSON.stringify({
+          event: "archive_list_worker_unavailable",
+          reason: facetSource.reason,
+        }),
+      );
+      return {
+        artworks: [],
+        total: 0,
+        facets: { years: [], processes: [] },
+        serverFiltered: true,
+        fallbackActive: true,
+      };
+    }
+    const facets = deriveFacets(facetSource.value.artworks);
     const hasFilters = Boolean(
       filters.q?.trim() ||
         filters.year != null ||
         filters.process?.trim(),
     );
     if (!hasFilters && !filters.offset) {
-      const legacy = archiveArtworks.filter(
-        (a) => !new Set(facetSource.artworks.map((w) => w.id)).has(a.id),
-      );
-      const merged = [...facetSource.artworks, ...legacy];
       return {
-        artworks: merged,
-        total: facetSource.total + legacy.length,
-        facets: deriveFacets(merged),
+        artworks: facetSource.value.artworks,
+        total: facetSource.value.total,
+        facets,
         serverFiltered: true,
       };
     }
-    const filtered = await listPublicArtworksFromWorker(filters);
+    const filtered = await tryListPublicArtworksFromWorker(filters);
+    if (!filtered.ok) {
+      return {
+        artworks: [],
+        total: 0,
+        facets,
+        serverFiltered: true,
+        fallbackActive: true,
+      };
+    }
     return {
-      artworks: filtered.artworks,
-      total: filtered.total,
+      artworks: filtered.value.artworks,
+      total: filtered.value.total,
       facets,
       serverFiltered: true,
     };

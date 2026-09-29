@@ -7,10 +7,16 @@ import type { ArchiveEntry } from "./schema";
 import { ARCHIVE_VERSION, emptyProvenance } from "./schema";
 import type { ArchiveSearchParams } from "./archive-search";
 import {
+  ArchiveWorkerError,
   workerGetPublicArtwork,
   workerListPublicArtworks,
   type WorkerPublicDetail,
 } from "./worker-client";
+import { classifyWorkerError } from "./worker-outcome";
+
+export type PublicWorkerResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; outcome: "not_found" | "unavailable"; reason?: string };
 
 function detailToEntry(detail: WorkerPublicDetail["artwork"]): ArchiveEntry {
   const assets = detail.assets;
@@ -86,14 +92,43 @@ export async function listPublicArtworksFromWorker(
   };
 }
 
+export async function tryListPublicArtworksFromWorker(
+  filters: ArchiveSearchParams = {},
+): Promise<PublicWorkerResult<{ artworks: PerceptionArtwork[]; total: number }>> {
+  try {
+    const value = await listPublicArtworksFromWorker(filters);
+    return { ok: true, value };
+  } catch (err) {
+    const outcome = classifyWorkerError(err);
+    if (outcome.kind === "unavailable") {
+      return { ok: false, outcome: "unavailable", reason: outcome.reason };
+    }
+    return { ok: false, outcome: "not_found", reason: outcome.kind };
+  }
+}
+
 export async function getPublicEntryFromWorker(
   slug: string,
 ): Promise<ArchiveEntry | null> {
+  const result = await tryGetPublicEntryFromWorker(slug);
+  return result.ok ? result.value : null;
+}
+
+export async function tryGetPublicEntryFromWorker(
+  slug: string,
+): Promise<PublicWorkerResult<ArchiveEntry | null>> {
   try {
     const { artwork } = await workerGetPublicArtwork(slug);
-    return detailToEntry(artwork);
-  } catch {
-    return null;
+    return { ok: true, value: detailToEntry(artwork) };
+  } catch (err) {
+    if (err instanceof ArchiveWorkerError && err.status === 404) {
+      return { ok: true, value: null };
+    }
+    const outcome = classifyWorkerError(err);
+    if (outcome.kind === "unavailable") {
+      return { ok: false, outcome: "unavailable", reason: outcome.reason };
+    }
+    return { ok: true, value: null };
   }
 }
 
@@ -102,6 +137,19 @@ export async function getPublicArtworkFromWorker(
 ): Promise<PerceptionArtwork | null> {
   const entry = await getPublicEntryFromWorker(slug);
   if (!entry) return null;
+  return entryToPerception(entry);
+}
+
+export async function tryGetPublicArtworkFromWorker(
+  slug: string,
+): Promise<PublicWorkerResult<PerceptionArtwork | null>> {
+  const result = await tryGetPublicEntryFromWorker(slug);
+  if (!result.ok) return result;
+  if (!result.value) return { ok: true, value: null };
+  return { ok: true, value: entryToPerception(result.value) };
+}
+
+function entryToPerception(entry: ArchiveEntry): PerceptionArtwork {
   return {
     id: entry.slug,
     metadata: entry.metadata,

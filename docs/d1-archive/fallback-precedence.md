@@ -1,7 +1,6 @@
-# Archive data fallback precedence (design only)
+# Archive data fallback precedence
 
-Status: **design documented — not implemented for silent public fallback.**
-Do not ship automatic public failover until this doc is approved and a visible banner UX is agreed.
+Status: **implemented for gated public paths** (Worker infrastructure failure only).
 
 ## Goals
 
@@ -9,31 +8,17 @@ Do not ship automatic public failover until this doc is approved and a visible b
 - Avoid silent wrong data (stale FS / legacy content) when Worker returns a definitive miss.
 - Allow bounded recovery only for infrastructure failure (5xx / network), never for not-found.
 
-## Precedence (proposed)
+## Precedence
 
-| Surface | Primary | Fallback | When fallback may run | Banner required |
+| Surface | Primary | Fallback | When fallback may run | Banner |
 |---|---|---|---|---|
-| Public listing | Worker published list | None | Never | N/A |
-| Public detail | Worker published by slug | Local `content/archive` + legacy `artworks.ts` | Only Worker **5xx** or **network/timeout** | Yes — “Showing local archive copy” |
-| Public detail | Worker | None | Worker **404** / unpublished / hidden | No — treat as missing |
-| Admin read (durable) | Worker / GitHub tip | Existing GitHub→FS catch | Already implemented for durable admin | Optional admin notice |
-| Admin write | Worker / R2 / D1 only | **Never** write to FS fallback | N/A | N/A |
-| HTML mint package | Published R2 revision (on-demand ZIP) | Local FS mint-package only for legacy non-D1 | D1 path never writes `content/archive/` | N/A |
+| Public listing | Worker published list | Empty list + log (no legacy merge) | Worker unavailable | Listing may show empty |
+| Public detail | Worker published by slug | Local `content/archive` then legacy `artworks.ts` | Worker **5xx** or **network/timeout** | “Showing local archive copy” |
+| Public detail | Worker | None | Worker **404** / unpublished / hidden | No — missing |
+| Admin write | Worker / R2 / D1 only | Never | N/A | N/A |
 
-## Explicit non-goals
+## Implementation notes
 
-- No broad silent public fallback on 404.
-- No admin commits or lifecycle mutations against fallback trees.
-- No changes to accession allocation, frozen revision immutability, or R2 key identity.
-- Do not delete legacy trees (`content/archive/`, `public/archive/`, `content/drafts/`) as part of fallback work.
-
-## Implementation gate (Phase 3+)
-
-Approve before coding:
-
-1. Exact HTTP statuses that trigger fallback (recommend: network error, 502/503/504 only).
-2. Banner copy and placement on public detail.
-3. Telemetry / log line when fallback activates.
-4. Confirmation that listing stays Worker-only (no FS merge).
-
-Until approved, keep `preferArchiveWorker()` as a hard switch for public data with no automatic FS failover.
+- Classification: [`src/lib/archive/worker-outcome.ts`](../../src/lib/archive/worker-outcome.ts)
+- Resolve: [`src/lib/content/resolve-artwork.ts`](../../src/lib/content/resolve-artwork.ts)
+- Logging: structured `console.warn` with `archive_fallback_active` / `archive_list_worker_unavailable`
