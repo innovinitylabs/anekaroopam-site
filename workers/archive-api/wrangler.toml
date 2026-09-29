@@ -24,7 +24,7 @@ R2_KEY_PREFIX = "dev/"
 [[env.prod.d1_databases]]
 binding = "DB"
 database_name = "anekaroopam-archive-prod"
-database_id = "00000000-0000-0000-0000-000000000002"
+database_id = "bf5c277b-05a3-4705-a6ad-43cef58ddeb4"
 migrations_dir = "migrations"
 
 [env.prod.vars]
